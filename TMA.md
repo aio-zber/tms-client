@@ -17,7 +17,7 @@
 - **Redis** - Caching & message queue
 
 ### Frontend
-- **Next.js 14+** - React framework with App Router
+- **Next.js** - React framework with App Router
 - **TypeScript** - Type safety
 - **TailwindCSS** - Utility-first CSS
 - **shadcn/ui** - UI component library
