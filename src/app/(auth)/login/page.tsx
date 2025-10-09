@@ -168,7 +168,7 @@ export default function LoginPage() {
 
       <CardFooter className="flex flex-col space-y-2 text-center text-sm text-gray-600">
         <p>
-          Don't have an account?{' '}
+          Don&apos;t have an account?{' '}
           <a href="#" className="text-viber-purple hover:underline font-medium">
             Contact your admin
           </a>
