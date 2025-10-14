@@ -7,11 +7,13 @@
 
 import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { MessageCircle, Search } from 'lucide-react';
+import { MessageCircle, Search, Plus } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { formatDistanceToNow } from 'date-fns';
 import { useConversations } from '@/features/conversations';
+import NewConversationDialog from '@/features/conversations/components/NewConversationDialog';
 
 function ConversationListContent() {
   const router = useRouter();
@@ -19,6 +21,7 @@ function ConversationListContent() {
   const selectedId = searchParams.get('id');
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [showNewConversationDialog, setShowNewConversationDialog] = useState(false);
 
   // Use custom hook for conversations
   const {
@@ -29,6 +32,11 @@ function ConversationListContent() {
   } = useConversations();
 
   const error = fetchError ? fetchError.message : null;
+
+  const handleConversationCreated = (conversationId: string) => {
+    refresh();
+    router.push(`/chats?id=${conversationId}`);
+  };
 
   const handleConversationClick = (conversationId: string) => {
     router.push(`/chats?id=${conversationId}`);
@@ -86,20 +94,30 @@ function ConversationListContent() {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Search */}
-      <div className="p-3 border-b border-gray-200">
-        <div className="relative">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-          <Input
-            type="text"
-            placeholder="Search conversations..."
-            className="pl-9"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+    <>
+      <div className="flex flex-col h-full">
+        {/* Header with New Conversation Button */}
+        <div className="p-3 border-b border-gray-200 space-y-3">
+          <Button
+            onClick={() => setShowNewConversationDialog(true)}
+            className="w-full bg-viber-purple hover:bg-viber-purple-dark"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            New Conversation
+          </Button>
+
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+            <Input
+              type="text"
+              placeholder="Search conversations..."
+              className="pl-9"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
         </div>
-      </div>
 
       {/* Conversation List */}
       <div className="flex-1 overflow-y-auto">
@@ -171,6 +189,14 @@ function ConversationListContent() {
         )}
       </div>
     </div>
+
+      {/* New Conversation Dialog */}
+      <NewConversationDialog
+        open={showNewConversationDialog}
+        onOpenChange={setShowNewConversationDialog}
+        onSuccess={handleConversationCreated}
+      />
+    </>
   );
 }
 
