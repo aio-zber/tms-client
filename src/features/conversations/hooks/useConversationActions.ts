@@ -9,7 +9,6 @@ import type {
   Conversation,
   CreateConversationRequest,
   UpdateConversationRequest,
-  AddMembersRequest,
   UpdateConversationSettingsRequest,
 } from '@/types/conversation';
 
