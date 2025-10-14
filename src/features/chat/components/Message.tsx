@@ -34,15 +34,16 @@ interface MessageProps {
   };
   isOwnMessage: boolean;
   showAvatar: boolean;
+  currentUserId?: string;
   onUpdate?: () => void;
 }
 
-export default function Message({ message, isOwnMessage, showAvatar, onUpdate }: MessageProps) {
+export default function Message({ message, isOwnMessage, showAvatar, currentUserId, onUpdate }: MessageProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
-  const { editMessage, deleteMessage, addReaction, loading } = useMessageActions();
+  const { editMessage, deleteMessage, addReaction, removeReaction, loading } = useMessageActions();
 
   const formatTime = (timestamp: string) => {
     try {
@@ -91,13 +92,33 @@ export default function Message({ message, isOwnMessage, showAvatar, onUpdate }:
   };
 
   const handleReaction = async (emoji: string) => {
-    const success = await addReaction(message.id, emoji);
+    // Check if current user already reacted with this emoji
+    const userAlreadyReacted = message.reactions?.some(
+      r => r.emoji === emoji && r.user_id === currentUserId
+    );
+
+    let success = false;
+    if (userAlreadyReacted) {
+      // Remove reaction if user already reacted
+      success = await removeReaction(message.id, emoji);
+      if (success) {
+        toast.success('Reaction removed');
+      } else {
+        toast.error('Failed to remove reaction');
+      }
+    } else {
+      // Add new reaction
+      success = await addReaction(message.id, emoji);
+      if (success) {
+        toast.success('Reaction added');
+      } else {
+        toast.error('Failed to add reaction');
+      }
+    }
+
     if (success) {
-      toast.success('Reaction added');
       setShowEmojiPicker(false);
       onUpdate?.();
-    } else {
-      toast.error('Failed to add reaction');
     }
   };
 

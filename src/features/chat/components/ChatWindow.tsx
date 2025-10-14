@@ -6,16 +6,27 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { Send, MoreVertical, Phone, Video } from 'lucide-react';
+import { Send, MoreVertical, Phone, Video, Search, Settings, Edit2, Users, LogOut } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import Message from './Message';
 import toast from 'react-hot-toast';
 import { wsService, WebSocketMessage } from '../services/websocketService';
 import { useMessages, useSendMessage } from '@/features/messaging';
 import { useConversation, useConversationActions } from '@/features/conversations';
+import MessageSearchDialog from '@/features/messaging/components/MessageSearchDialog';
+import EditConversationDialog from '@/features/conversations/components/EditConversationDialog';
+import ConversationSettingsDialog from '@/features/conversations/components/ConversationSettingsDialog';
+import { useRouter } from 'next/navigation';
 
 interface ChatWindowProps {
   conversationId: string;
@@ -23,15 +34,22 @@ interface ChatWindowProps {
 
 export default function ChatWindow({ conversationId }: ChatWindowProps) {
   const [newMessage, setNewMessage] = useState('');
+  const [showSearchDialog, setShowSearchDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showSettingsDialog, setShowSettingsDialog] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
   // Use custom hooks for API integration
-  const { conversation, loading: conversationLoading } = useConversation(conversationId);
+  const { conversation, loading: conversationLoading, refresh: refreshConversation } = useConversation(conversationId);
   const { messages, loading: messagesLoading, refresh: refreshMessages } = useMessages(conversationId);
   const { sendMessage: sendMsg, sending } = useSendMessage();
-  const { markAsRead } = useConversationActions();
+  const { markAsRead, leaveConversation } = useConversationActions();
 
   const isLoading = conversationLoading || messagesLoading;
+
+  // TODO: Get current user ID from auth context/store
+  const currentUserId = 'current-user-id'; // Placeholder
 
   // Mark conversation as read when opened
   useEffect(() => {
@@ -124,6 +142,16 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
       .slice(0, 2);
   };
 
+  const handleConversationUpdate = () => {
+    refreshConversation();
+    refreshMessages();
+  };
+
+  const handleLeaveConversation = async () => {
+    // Redirect to chats list after leaving
+    router.push('/chats');
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -167,15 +195,76 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
         </div>
 
         <div className="flex items-center space-x-2">
-          <Button variant="ghost" size="icon" className="text-gray-600">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-gray-600"
+            onClick={() => setShowSearchDialog(true)}
+            title="Search messages"
+          >
+            <Search className="h-5 w-5" />
+          </Button>
+          <Button variant="ghost" size="icon" className="text-gray-600" title="Voice call">
             <Phone className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="icon" className="text-gray-600">
+          <Button variant="ghost" size="icon" className="text-gray-600" title="Video call">
             <Video className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="icon" className="text-gray-600">
-            <MoreVertical className="h-5 w-5" />
-          </Button>
+
+          {/* Settings Dropdown Menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="text-gray-600">
+                <MoreVertical className="h-5 w-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              {conversation.type === 'group' && (
+                <>
+                  <DropdownMenuItem onClick={() => setShowEditDialog(true)}>
+                    <Edit2 className="h-4 w-4 mr-2" />
+                    Edit Conversation
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setShowSettingsDialog(true)}>
+                    <Settings className="h-4 w-4 mr-2" />
+                    Conversation Settings
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => setShowSettingsDialog(true)}
+                    className="text-viber-purple"
+                  >
+                    <Users className="h-4 w-4 mr-2" />
+                    Manage Members
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={async () => {
+                      if (confirm('Are you sure you want to leave this conversation?')) {
+                        const success = await leaveConversation(conversationId);
+                        if (success) {
+                          toast.success('Left conversation');
+                          handleLeaveConversation();
+                        } else {
+                          toast.error('Failed to leave conversation');
+                        }
+                      }
+                    }}
+                    className="text-red-600"
+                  >
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Leave Conversation
+                  </DropdownMenuItem>
+                </>
+              )}
+              {conversation.type === 'dm' && (
+                <DropdownMenuItem onClick={() => setShowSettingsDialog(true)}>
+                  <Settings className="h-4 w-4 mr-2" />
+                  View Details
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
@@ -212,11 +301,12 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
                 <Message
                   key={message.id}
                   message={msgProps}
-                  isOwnMessage={false} // Will be determined by comparing with current user
+                  isOwnMessage={message.senderId === currentUserId}
                   showAvatar={
                     index === 0 ||
                     messages[index - 1].senderId !== message.senderId
                   }
+                  currentUserId={currentUserId}
                   onUpdate={refreshMessages}
                 />
               );
@@ -251,6 +341,33 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
           </Button>
         </div>
       </div>
+
+      {/* Dialogs */}
+      <MessageSearchDialog
+        open={showSearchDialog}
+        onOpenChange={setShowSearchDialog}
+        conversationId={conversationId}
+      />
+
+      {conversation && (
+        <>
+          <EditConversationDialog
+            open={showEditDialog}
+            onOpenChange={setShowEditDialog}
+            conversation={conversation}
+            onUpdate={handleConversationUpdate}
+          />
+
+          <ConversationSettingsDialog
+            open={showSettingsDialog}
+            onOpenChange={setShowSettingsDialog}
+            conversation={conversation}
+            currentUserId={currentUserId}
+            onUpdate={handleConversationUpdate}
+            onLeave={handleLeaveConversation}
+          />
+        </>
+      )}
     </div>
   );
 }
