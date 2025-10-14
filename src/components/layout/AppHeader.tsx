@@ -8,7 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { getUserInitials, User } from '@/types';
+import { getUserInitials, User, TMSRole } from '@/types';
 import { useState, useEffect } from 'react';
 import { tmsApi } from '@/lib/tmsApi';
 import {
@@ -40,18 +40,41 @@ export function AppHeader() {
         if (response.ok) {
           const userData = await response.json();
           // Transform GCGC user data to app user format
-          const transformedUser = {
+          const displayName = userData.name || `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.username || 'User';
+          const transformedUser: User = {
+            // Local identifiers
             id: userData.id,
+            tmsUserId: userData.id, // Use same ID for TMS reference
+            
+            // Basic information
             email: userData.email,
-            name: userData.name || `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.username || 'User',
-            role: userData.role || 'member',
-            image: userData.image,
-            // Add other fields as needed
+            username: userData.username,
             firstName: userData.firstName,
             lastName: userData.lastName,
+            middleName: userData.middleName,
+            name: userData.name,
+            displayName: displayName,
+            image: userData.image,
+            
+            // Role and position
+            role: (userData.role || 'MEMBER') as TMSRole,
             positionTitle: userData.positionTitle,
+            
+            // Organizational hierarchy
             division: userData.division,
             department: userData.department,
+            section: userData.section,
+            customTeam: userData.customTeam,
+            hierarchyLevel: userData.hierarchyLevel,
+            reportsToId: userData.reportsToId,
+            
+            // Status flags (required)
+            isActive: userData.isActive ?? true,
+            isLeader: userData.isLeader ?? false,
+            
+            // Timestamps (required)
+            createdAt: userData.createdAt || new Date().toISOString(),
+            lastSyncedAt: new Date().toISOString(),
           };
           setUser(transformedUser);
         } else if (response.status === 401) {
