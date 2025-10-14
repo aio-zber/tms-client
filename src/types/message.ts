@@ -15,6 +15,7 @@ export interface Message {
   status: MessageStatus;
   metadata?: MessageMetadata;
   replyTo?: Message;
+  replyToId?: string;
   reactions?: MessageReaction[];
   isEdited: boolean;
   createdAt: string;
@@ -54,4 +55,47 @@ export interface TypingIndicator {
   conversationId: string;
   userId: string;
   isTyping: boolean;
+}
+
+// API Request/Response Types
+
+export interface SendMessageRequest {
+  conversation_id: string;
+  content: string;
+  type?: MessageType;
+  reply_to_id?: string;
+  metadata?: MessageMetadata;
+}
+
+export interface EditMessageRequest {
+  content: string;
+}
+
+export interface AddReactionRequest {
+  emoji: string;
+}
+
+export interface MarkMessagesReadRequest {
+  message_ids: string[];
+}
+
+export interface SearchMessagesRequest {
+  query: string;
+  conversation_id?: string;
+  type?: MessageType;
+  sender_id?: string;
+  from_date?: string;
+  to_date?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface MessageListResponse {
+  messages: Message[];
+  total?: number;
+  has_more?: boolean;
+}
+
+export interface UnreadCountResponse {
+  unread_count: number;
 }

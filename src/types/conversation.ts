@@ -38,3 +38,34 @@ export interface ConversationSettings {
   isPinned: boolean;
   customNotifications?: boolean;
 }
+
+// API Request/Response Types
+
+export interface CreateConversationRequest {
+  type: ConversationType;
+  member_ids: string[];
+  name?: string; // Required for group conversations
+  avatar_url?: string;
+}
+
+export interface UpdateConversationRequest {
+  name?: string;
+  avatar_url?: string;
+}
+
+export interface AddMembersRequest {
+  member_ids: string[];
+}
+
+export interface UpdateConversationSettingsRequest {
+  is_muted?: boolean;
+  mute_until?: string;
+  is_pinned?: boolean;
+  custom_notifications?: boolean;
+}
+
+export interface ConversationListResponse {
+  conversations: Conversation[];
+  total?: number;
+  has_more?: boolean;
+}
