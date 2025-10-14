@@ -6,7 +6,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { tmsApi } from '@/lib/tmsApi';
+import { userService } from '@/features/users/services/userService';
 import type { Conversation, Message } from '@/types';
 import {
   Phone,
@@ -46,14 +46,22 @@ export default function ChatPage() {
         setLoading(true);
         
         // Get current user ID
-        const currentUser = await tmsApi.getCurrentUser();
+        const currentUser = await userService.getCurrentUser();
         setCurrentUserId(currentUser.id);
         
         // Extract user ID from conversation ID (format: conv-{userId})
         const userId = conversationId.replace('conv-', '');
         
-        // Get user data from TMS to create conversation
-        const user = await tmsApi.getUserById(userId);
+        // For now, we'll create a placeholder user since getUserById is not implemented
+        // In a real implementation, you'd either get this from the conversation list or implement getUserById
+        const user = {
+          id: userId,
+          name: 'Team Member',
+          email: 'team@example.com',
+          firstName: 'Team',
+          lastName: 'Member',
+          image: undefined,
+        };
         
         // Create conversation object from TMS user
         const conv: Conversation = {

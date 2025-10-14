@@ -3,7 +3,7 @@
  * Handles all user-related API calls to the TMS backend.
  */
 
-import { apiClient } from '@/lib/apiClient';
+import { TMS_API_URL } from '@/lib/constants';
 import {
   User,
   UserSearchResult,
@@ -18,10 +18,10 @@ import {
 class UserService {
   /**
    * Get current authenticated user.
-   * Fetches full user profile from /api/v1/users/me.
+   * Fetches full user profile from GCGC Team Management System.
    *
    * @returns Promise<User> Current user data
-   * @throws ApiError if authentication fails
+   * @throws Error if authentication fails
    *
    * @example
    * const currentUser = await userService.getCurrentUser();
@@ -29,7 +29,15 @@ class UserService {
    */
   async getCurrentUser(): Promise<User> {
     try {
-      const user = await apiClient.get<User>('/users/me');
+      const response = await fetch(`${TMS_API_URL}/api/v1/users/me`, {
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch current user: ${response.status}`);
+      }
+
+      const user = await response.json();
 
       // Cache user in localStorage for quick access
       if (typeof window !== 'undefined') {
@@ -62,12 +70,15 @@ class UserService {
    * @example
    * const user = await userService.getUserById('user-123');
    */
-  async getUserById(userId: string): Promise<UserProfile> {
-    return apiClient.get<UserProfile>(`/users/${userId}`);
+  async getUserById(_userId: string): Promise<UserProfile> {
+    // Note: This should be handled by TMS-client backend, not directly from GCGC TMS
+    // For now, throwing an error as this needs backend implementation
+    throw new Error('getUserById not implemented - requires TMS-client backend');
   }
 
   /**
    * Search users by query with optional filters.
+   * Uses GCGC Team Management System API.
    *
    * @param params Search parameters (query, filters, limit)
    * @returns Promise<UserSearchResult[]> List of matching users
@@ -83,21 +94,29 @@ class UserService {
     const { query, filters, limit = 20 } = params;
 
     // Build query parameters
-    const queryParams: Record<string, string | number | boolean> = {
-      q: query,
-      limit,
-    };
+    const url = new URL(`${TMS_API_URL}/api/v1/users/search`);
+    url.searchParams.set('q', query);
+    url.searchParams.set('limit', limit.toString());
 
     // Add filters to query params
     if (filters) {
-      if (filters.division) queryParams.division = filters.division;
-      if (filters.department) queryParams.department = filters.department;
-      if (filters.section) queryParams.section = filters.section;
-      if (filters.role) queryParams.role = filters.role;
-      if (filters.isActive !== undefined) queryParams.is_active = filters.isActive;
+      if (filters.division) url.searchParams.set('division', filters.division);
+      if (filters.department) url.searchParams.set('department', filters.department);
+      if (filters.section) url.searchParams.set('section', filters.section);
+      if (filters.role) url.searchParams.set('role', filters.role);
+      if (filters.isActive !== undefined) url.searchParams.set('is_active', filters.isActive.toString());
     }
 
-    return apiClient.get<UserSearchResult[]>('/users', queryParams);
+    const response = await fetch(url.toString(), {
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to search users: ${response.status}`);
+    }
+
+    const result = await response.json();
+    return result.users || [];
   }
 
   /**
@@ -112,16 +131,15 @@ class UserService {
    * const result = await userService.syncUsers(['tms-123', 'tms-456'], true);
    * console.log(`Synced ${result.synced_count} users`);
    */
-  async syncUsers(userIds?: string[], force: boolean = false): Promise<{
+  async syncUsers(_userIds?: string[], _force: boolean = false): Promise<{
     success: boolean;
     synced_count: number;
     failed_count: number;
     errors: string[];
   }> {
-    return apiClient.post('/users/sync', {
-      tms_user_ids: userIds,
-      force,
-    });
+    // Note: This should be handled by TMS-client backend, not directly from GCGC TMS
+    // For now, throwing an error as this needs backend implementation
+    throw new Error('syncUsers not implemented - requires TMS-client backend');
   }
 
   /**
@@ -134,8 +152,10 @@ class UserService {
    * @example
    * await userService.invalidateUserCache('tms-123');
    */
-  async invalidateUserCache(tmsUserId: string): Promise<void> {
-    await apiClient.delete(`/users/cache/${tmsUserId}`);
+  async invalidateUserCache(_tmsUserId: string): Promise<void> {
+    // Note: This should be handled by TMS-client backend, not directly from GCGC TMS
+    // For now, throwing an error as this needs backend implementation
+    throw new Error('invalidateUserCache not implemented - requires TMS-client backend');
   }
 
   /**
