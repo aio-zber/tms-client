@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { getUserInitials, User } from '@/types';
 import { useState, useEffect } from 'react';
-import { tmsApi } from '@/lib/tmsApi';
+import { authService } from '@/features/auth/services/authService';
 import {
   Settings,
   Sun,
@@ -73,12 +73,14 @@ export function AppHeader() {
 
   const handleLogout = async () => {
     try {
-      await tmsApi.logout();
+      await authService.logout();
       setUser(null);
-      // TODO: Redirect to login page
-      console.log('User logged out');
+      // Redirect to login page
+      window.location.href = '/login';
     } catch (error) {
       console.error('Logout failed:', error);
+      // Even if logout fails, redirect to login for security
+      window.location.href = '/login';
     }
   };
 
