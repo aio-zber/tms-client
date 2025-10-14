@@ -32,21 +32,37 @@ export function AppHeader() {
   useEffect(() => {
     const loadUser = async () => {
       try {
-        // Check if user has an active session
-        const isAuthenticated = tmsApi.isAuthenticated();
-        if (isAuthenticated) {
-          // Get real user data from TMS API
-          const tmsUser = await tmsApi.getCurrentUser();
-          const transformedUser = tmsApi.transformTMSUser(tmsUser);
+        // Get user data from GCGC Team Management System using session
+        const response = await fetch(`${process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL}/api/v1/users/me`, {
+          credentials: 'include', // Include session cookies
+        });
+
+        if (response.ok) {
+          const userData = await response.json();
+          // Transform GCGC user data to app user format
+          const transformedUser = {
+            id: userData.id,
+            email: userData.email,
+            name: userData.name || `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.username || 'User',
+            role: userData.role || 'member',
+            image: userData.image,
+            // Add other fields as needed
+            firstName: userData.firstName,
+            lastName: userData.lastName,
+            positionTitle: userData.positionTitle,
+            division: userData.division,
+            department: userData.department,
+          };
           setUser(transformedUser);
-        } else {
-          // No session, redirect to login
+        } else if (response.status === 401) {
+          // Session expired, redirect to login
           window.location.href = '/login';
+        } else {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
       } catch (error) {
         console.error('Failed to load user data:', error);
-        // Clear invalid session and redirect to login
-        await tmsApi.logout();
+        // Redirect to login on any error
         window.location.href = '/login';
       } finally {
         setLoading(false);
