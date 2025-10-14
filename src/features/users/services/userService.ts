@@ -3,7 +3,7 @@
  * Handles all user-related API calls to the TMS backend.
  */
 
-import { TMS_API_URL } from '@/lib/constants';
+import { tmsApi } from '@/lib/tmsApi';
 import {
   User,
   UserSearchResult,
@@ -29,15 +29,8 @@ class UserService {
    */
   async getCurrentUser(): Promise<User> {
     try {
-      const response = await fetch(`${TMS_API_URL}/api/v1/users/me`, {
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch current user: ${response.status}`);
-      }
-
-      const user = await response.json();
+      const tmsUser = await tmsApi.getCurrentUser();
+      const user = tmsApi.transformTMSUser(tmsUser);
 
       // Cache user in localStorage for quick access
       if (typeof window !== 'undefined') {
@@ -78,7 +71,7 @@ class UserService {
 
   /**
    * Search users by query with optional filters.
-   * Uses GCGC Team Management System API.
+   * Uses GCGC Team Management System API with authentication.
    *
    * @param params Search parameters (query, filters, limit)
    * @returns Promise<UserSearchResult[]> List of matching users
@@ -91,32 +84,33 @@ class UserService {
    * });
    */
   async searchUsers(params: UserSearchParams): Promise<UserSearchResult[]> {
-    const { query, filters, limit = 20 } = params;
+    const { query, limit = 20 } = params;
 
-    // Build query parameters
-    const url = new URL(`${TMS_API_URL}/api/v1/users/search`);
-    url.searchParams.set('q', query);
-    url.searchParams.set('limit', limit.toString());
+    try {
+      // Use tmsApi which includes proper authentication
+      const tmsUsers = await tmsApi.searchUsers(query, limit);
 
-    // Add filters to query params
-    if (filters) {
-      if (filters.division) url.searchParams.set('division', filters.division);
-      if (filters.department) url.searchParams.set('department', filters.department);
-      if (filters.section) url.searchParams.set('section', filters.section);
-      if (filters.role) url.searchParams.set('role', filters.role);
-      if (filters.isActive !== undefined) url.searchParams.set('is_active', filters.isActive.toString());
+      // Transform TMS users to UserSearchResult format
+      return tmsUsers.map(tmsUser => ({
+        id: tmsUser.id,
+        tmsUserId: tmsUser.id,
+        email: tmsUser.email,
+        username: tmsUser.username,
+        name: tmsUser.displayName || tmsUser.name || `${tmsUser.firstName || ''} ${tmsUser.lastName || ''}`.trim(),
+        firstName: tmsUser.firstName,
+        lastName: tmsUser.lastName,
+        image: tmsUser.image,
+        positionTitle: tmsUser.positionTitle,
+        division: tmsUser.division,
+        department: tmsUser.department,
+        section: tmsUser.section,
+        customTeam: tmsUser.customTeam,
+        isActive: tmsUser.isActive,
+      }));
+    } catch (error) {
+      console.error('Failed to search users:', error);
+      throw error;
     }
-
-    const response = await fetch(url.toString(), {
-      credentials: 'include',
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to search users: ${response.status}`);
-    }
-
-    const result = await response.json();
-    return result.users || [];
   }
 
   /**
