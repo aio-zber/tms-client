@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { MessageCircle, Search } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -38,11 +38,7 @@ export default function ConversationList() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => {
-    fetchConversations();
-  }, []);
-
-  const fetchConversations = async () => {
+  const fetchConversations = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
@@ -70,13 +66,17 @@ export default function ConversationList() {
 
       const data = await response.json();
       setConversations(data.data || []);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error fetching conversations:', err);
-      setError(err.message || 'Failed to load conversations');
+      setError((err as Error).message || 'Failed to load conversations');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [router]);
+
+  useEffect(() => {
+    fetchConversations();
+  }, [fetchConversations]);
 
   const handleConversationClick = (conversationId: string) => {
     router.push(`/chats?id=${conversationId}`);

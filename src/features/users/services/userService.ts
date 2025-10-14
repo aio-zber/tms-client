@@ -3,7 +3,7 @@
  * Handles all user-related API calls to the TMS backend.
  */
 
-import { apiClient, ApiError } from '@/lib/apiClient';
+import { apiClient } from '@/lib/apiClient';
 import {
   User,
   UserSearchResult,

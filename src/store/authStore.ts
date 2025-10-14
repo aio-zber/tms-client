@@ -38,7 +38,7 @@ interface AuthState {
  */
 export const useAuthStore = create<AuthState>()(
   devtools(
-    (set, get) => ({
+    (set, _get: () => AuthState) => ({
       // Initial state
       token: null,
       isAuthenticated: false,

@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { Send, MoreVertical, Phone, Video } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -26,7 +26,7 @@ interface MessageType {
   type: 'text' | 'image' | 'file';
   created_at: string;
   is_edited: boolean;
-  reactions?: any[];
+  reactions?: Array<{ user_id: string; emoji: string; }>;
 }
 
 interface ConversationType {
@@ -34,7 +34,7 @@ interface ConversationType {
   name: string;
   type: 'dm' | 'group';
   avatar_url?: string;
-  members?: any[];
+  members?: Array<{ id: string; name: string; avatar_url?: string; }>;
 }
 
 interface ChatWindowProps {
@@ -54,7 +54,7 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
       fetchConversation();
       fetchMessages();
     }
-  }, [conversationId]);
+  }, [conversationId, fetchConversation, fetchMessages]);
 
   useEffect(() => {
     scrollToBottom();
@@ -106,7 +106,7 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const fetchConversation = async () => {
+  const fetchConversation = useCallback(async () => {
     try {
       const token = authService.getStoredToken();
       const response = await fetch(
@@ -125,9 +125,9 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
     } catch (error) {
       console.error('Error fetching conversation:', error);
     }
-  };
+  }, [conversationId]);
 
-  const fetchMessages = async () => {
+  const fetchMessages = useCallback(async () => {
     try {
       setIsLoading(true);
       const token = authService.getStoredToken();
@@ -150,7 +150,7 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [conversationId]);
 
   const sendMessage = async () => {
     if (!newMessage.trim() || isSending) return;
@@ -181,9 +181,9 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
       } else {
         throw new Error('Failed to send message');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error sending message:', error);
-      toast.error(error.message || 'Failed to send message');
+      toast.error((error as Error).message || 'Failed to send message');
     } finally {
       setIsSending(false);
     }
