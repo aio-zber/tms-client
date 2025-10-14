@@ -1,6 +1,7 @@
 /**
  * Authentication Service
  * Handles authentication with Team Management System (TMS)
+ * Uses session-based authentication with NextAuth.js
  */
 
 import { TMS_API_URL, STORAGE_KEYS } from '@/lib/constants';
@@ -11,10 +12,13 @@ export interface LoginCredentials {
 }
 
 export interface LoginResponse {
-  access_token: string;
-  refresh_token?: string;
-  token_type: string;
-  expires_in?: number;
+  success: boolean;
+  user?: {
+    id: string;
+    email: string;
+    name: string;
+    role: string;
+  };
 }
 
 export class AuthError extends Error {
@@ -29,37 +33,55 @@ export class AuthError extends Error {
 
 class AuthService {
   /**
-   * Login with TMS credentials.
+   * Login with TMS credentials using session-based authentication.
    * @param credentials Email and password
-   * @returns JWT tokens
+   * @returns User session info
    */
   async login(credentials: LoginCredentials): Promise<LoginResponse> {
     try {
-      const response = await fetch(`${TMS_API_URL}/auth/login`, {
+      // First, try to authenticate with the TMS signin endpoint
+      const signinResponse = await fetch(`${TMS_API_URL}/api/auth/signin/credentials`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: JSON.stringify(credentials),
+        credentials: 'include',
+        body: new URLSearchParams({
+          email: credentials.email,
+          password: credentials.password,
+          redirect: 'false',
+          json: 'true'
+        }).toString(),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new AuthError(
-          errorData.message || errorData.detail || 'Login failed',
-          response.status
-        );
+      if (!signinResponse.ok) {
+        throw new AuthError('Invalid credentials', signinResponse.status);
       }
 
-      const data: LoginResponse = await response.json();
+      // Get user session info
+      const userResponse = await fetch(`${TMS_API_URL}/api/v1/users/me`, {
+        credentials: 'include',
+      });
 
-      // Store tokens
-      this.setStoredToken(data.access_token);
-      if (data.refresh_token) {
-        this.setStoredRefreshToken(data.refresh_token);
+      if (!userResponse.ok) {
+        throw new AuthError('Failed to get user info', userResponse.status);
       }
 
-      return data;
+      const userData = await userResponse.json();
+
+      // Store session indicator
+      this.setSessionActive(true);
+      
+      return {
+        success: true,
+        user: {
+          id: userData.id,
+          email: userData.email,
+          name: userData.name,
+          role: userData.role
+        }
+      };
+
     } catch (error) {
       if (error instanceof AuthError) {
         throw error;
@@ -70,110 +92,98 @@ class AuthService {
 
   /**
    * Logout user.
-   * Clears all stored tokens and user data.
+   * Clears session and stored data.
    */
-  logout(): void {
-    if (typeof window === 'undefined') return;
-
-    localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem(STORAGE_KEYS.USER_DATA);
+  async logout(): Promise<void> {
+    try {
+      // Call TMS signout endpoint
+      await fetch(`${TMS_API_URL}/api/auth/signout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch (error) {
+      console.warn('TMS logout failed:', error);
+    } finally {
+      this.setSessionActive(false);
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(STORAGE_KEYS.USER_DATA);
+        localStorage.removeItem('tms_session_active');
+      }
+    }
   }
 
   /**
-   * Refresh access token using refresh token.
-   * @returns New access token
+   * Get current user from TMS API.
    */
-  async refreshToken(): Promise<string> {
-    const refreshToken = this.getStoredRefreshToken();
-
-    if (!refreshToken) {
-      throw new AuthError('No refresh token available');
-    }
-
+  async getCurrentUser() {
     try {
-      const response = await fetch(`${TMS_API_URL}/auth/refresh`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ refresh_token: refreshToken }),
+      const response = await fetch(`${TMS_API_URL}/api/v1/users/me`, {
+        credentials: 'include',
       });
 
       if (!response.ok) {
-        throw new AuthError('Token refresh failed', response.status);
+        throw new AuthError('Failed to get current user', response.status);
       }
 
-      const data: LoginResponse = await response.json();
-      this.setStoredToken(data.access_token);
-
-      return data.access_token;
+      return await response.json();
     } catch (error) {
-      // If refresh fails, clear all tokens
-      this.logout();
-      throw error;
+      if (error instanceof AuthError) {
+        throw error;
+      }
+      throw new AuthError('Network error while fetching user data');
     }
   }
 
   /**
-   * Get stored access token.
+   * Set session active indicator.
    */
-  getStoredToken(): string | null {
-    if (typeof window === 'undefined') return null;
-    return localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
-  }
-
-  /**
-   * Set stored access token.
-   */
-  setStoredToken(token: string): void {
+  setSessionActive(active: boolean): void {
     if (typeof window === 'undefined') return;
-    localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
+    if (active) {
+      localStorage.setItem('tms_session_active', 'true');
+    } else {
+      localStorage.removeItem('tms_session_active');
+    }
   }
 
   /**
-   * Get stored refresh token.
-   */
-  getStoredRefreshToken(): string | null {
-    if (typeof window === 'undefined') return null;
-    return localStorage.getItem('refresh_token');
-  }
-
-  /**
-   * Set stored refresh token.
-   */
-  setStoredRefreshToken(token: string): void {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem('refresh_token', token);
-  }
-
-  /**
-   * Check if user is authenticated (has valid token).
+   * Check if user session is active.
    */
   isAuthenticated(): boolean {
-    return !!this.getStoredToken();
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('tms_session_active') === 'true';
   }
 
   /**
-   * Validate token by attempting to use it.
-   * @returns True if token is valid
+   * Validate session by attempting to fetch current user.
+   * @returns True if session is valid
    */
-  async validateToken(): Promise<boolean> {
-    const token = this.getStoredToken();
-    if (!token) return false;
+  async validateSession(): Promise<boolean> {
+    if (!this.isAuthenticated()) return false;
 
     try {
-      // Try to fetch current user to validate token
-      const response = await fetch(`${TMS_API_URL}/users/me`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+      const response = await fetch(`${TMS_API_URL}/api/v1/users/me`, {
+        credentials: 'include',
       });
 
-      return response.ok;
+      const isValid = response.ok;
+      if (!isValid) {
+        this.setSessionActive(false);
+      }
+      return isValid;
     } catch {
+      this.setSessionActive(false);
       return false;
     }
+  }
+
+  /**
+   * Get stored access token (compatibility method).
+   */
+  getStoredToken(): string | null {
+    // For session-based auth, we don't store tokens
+    // but return session indicator for compatibility
+    return this.isAuthenticated() ? 'session-active' : null;
   }
 }
 

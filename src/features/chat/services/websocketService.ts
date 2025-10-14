@@ -14,6 +14,10 @@ export interface WebSocketMessage {
   content: string;
   type: string;
   created_at: string;
+  is_edited: boolean;
+  sender_name?: string;
+  sender_avatar?: string;
+  reactions?: Array<{ user_id: string; emoji: string; }>;
   [key: string]: unknown;
 }
 

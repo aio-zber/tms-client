@@ -2,7 +2,6 @@
 
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { getUserInitials } from '@/lib/mockData';
 import type { Conversation } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
 import { useRouter } from 'next/navigation';
@@ -12,6 +11,16 @@ interface ConversationListItemProps {
   conversation: Conversation;
   isActive?: boolean;
 }
+
+// Helper function to get initials from a name string
+const getNameInitials = (name: string): string => {
+  return name
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2) || 'U';
+};
 
 export function ConversationListItem({
   conversation,
@@ -35,7 +44,7 @@ export function ConversationListItem({
       <div className="relative shrink-0">
         <Avatar className="h-12 w-12">
           <AvatarFallback className="bg-viber-purple text-white font-semibold">
-            {getUserInitials(conversation.name || 'Unknown')}
+            {getNameInitials(conversation.name || 'Unknown')}
           </AvatarFallback>
         </Avatar>
         {/* Online indicator - mock as online for now */}

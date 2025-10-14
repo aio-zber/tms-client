@@ -40,8 +40,8 @@ class ApiClient {
   /**
    * Get default headers including authentication.
    */
-  private getHeaders(customHeaders: HeadersInit = {}): HeadersInit {
-    const headers: HeadersInit = {
+  private getHeaders(customHeaders: Record<string, string> = {}): Record<string, string> {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...customHeaders,
     };
@@ -182,7 +182,7 @@ class ApiClient {
     }
 
     const token = this.getAuthToken();
-    const headers: HeadersInit = {};
+    const headers: Record<string, string> = {};
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
