@@ -7,12 +7,14 @@ import { ConversationListItem } from '@/components/chat/ConversationListItem';
 import { userService } from '@/features/users/services/userService';
 import { Search, MessageSquarePlus, Filter } from 'lucide-react';
 import { usePathname } from 'next/navigation';
+import NewConversationDialog from '@/features/conversations/components/NewConversationDialog';
 import type { Conversation } from '@/types';
 
 export function CenterPanel() {
   const [searchQuery, setSearchQuery] = useState('');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showNewConversation, setShowNewConversation] = useState(false);
   const pathname = usePathname();
 
   // Extract conversation ID from pathname
@@ -92,7 +94,11 @@ export function CenterPanel() {
       <div className="p-4 border-b border-gray-200 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-gray-900">Messages</h2>
-          <button className="p-2 hover:bg-gray-100 rounded-lg transition">
+          <button
+            onClick={() => setShowNewConversation(true)}
+            className="p-2 hover:bg-gray-100 rounded-lg transition"
+            title="New Conversation"
+          >
             <MessageSquarePlus className="w-5 h-5 text-viber-purple" />
           </button>
         </div>
@@ -175,6 +181,12 @@ export function CenterPanel() {
           </div>
         )}
       </ScrollArea>
+
+      {/* New Conversation Dialog */}
+      <NewConversationDialog
+        open={showNewConversation}
+        onOpenChange={setShowNewConversation}
+      />
     </div>
   );
 }
