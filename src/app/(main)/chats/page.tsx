@@ -1,9 +1,10 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import ChatWindow from '@/features/chat/components/ChatWindow';
 
-export default function ChatsPage() {
+function ChatsContent() {
   const searchParams = useSearchParams();
   const conversationId = searchParams.get('id');
 
@@ -24,4 +25,16 @@ export default function ChatsPage() {
   }
 
   return <ChatWindow conversationId={conversationId} />;
+}
+
+export default function ChatsPage() {
+  return (
+    <Suspense fallback={
+      <div className="h-full flex items-center justify-center">
+        <div className="animate-spin w-8 h-8 border-2 border-viber-purple border-t-transparent rounded-full"></div>
+      </div>
+    }>
+      <ChatsContent />
+    </Suspense>
+  );
 }

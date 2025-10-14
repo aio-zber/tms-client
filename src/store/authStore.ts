@@ -54,7 +54,7 @@ export const useAuthStore = create<AuthState>()(
 
         try {
           // Call TMS login API
-          const response = await authService.login(credentials);
+          await authService.login(credentials);
 
           // Set session state in store
           set({
