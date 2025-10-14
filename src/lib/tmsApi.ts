@@ -148,7 +148,24 @@ class TMSApiClient {
       credentials: 'include', // Use session cookies instead of Bearer token
     });
 
-    return this.handleResponse<TMSUser[]>(response);
+    const data = await this.handleResponse<any>(response);
+
+    // Handle different response formats from TMS API
+    // Format 1: { users: [...] }
+    // Format 2: { data: [...] }
+    // Format 3: Direct array [...]
+    if (Array.isArray(data)) {
+      return data;
+    } else if (data.users && Array.isArray(data.users)) {
+      return data.users;
+    } else if (data.data && Array.isArray(data.data)) {
+      return data.data;
+    } else if (data.results && Array.isArray(data.results)) {
+      return data.results;
+    } else {
+      console.error('Unexpected TMS API response format:', data);
+      return [];
+    }
   }
 
   /**
