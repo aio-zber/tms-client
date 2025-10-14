@@ -9,3 +9,6 @@ export * from './services/messageService';
 
 // Hooks
 export * from './hooks';
+
+// Components
+export { default as MessageSearchDialog } from './components/MessageSearchDialog';
