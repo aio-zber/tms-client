@@ -29,7 +29,7 @@ export function ConversationListItem({
   const router = useRouter();
 
   const handleClick = () => {
-    router.push(`/chats/${conversation.id}`);
+    router.push(`/chats?id=${conversation.id}`);
   };
 
   return (
