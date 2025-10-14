@@ -115,6 +115,7 @@ class TMSApiClient {
     const response = await fetch(`${this.baseURL}/api/v1/users/me`, {
       method: 'GET',
       headers: this.getHeaders(),
+      credentials: 'include', // Use session cookies
     });
 
     return this.handleResponse<TMSUser>(response);
@@ -127,6 +128,7 @@ class TMSApiClient {
     const response = await fetch(`${this.baseURL}/api/v1/users/${id}`, {
       method: 'GET',
       headers: this.getHeaders(),
+      credentials: 'include', // Use session cookies
     });
 
     return this.handleResponse<TMSUser>(response);
@@ -143,6 +145,7 @@ class TMSApiClient {
     const response = await fetch(url.toString(), {
       method: 'GET',
       headers: this.getHeaders(),
+      credentials: 'include', // Use session cookies instead of Bearer token
     });
 
     return this.handleResponse<TMSUser[]>(response);
