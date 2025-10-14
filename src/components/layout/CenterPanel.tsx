@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { ConversationListItem } from '@/components/chat/ConversationListItem';
-import { tmsApi } from '@/lib/tmsApi';
+import { userService } from '@/features/users/services/userService';
 import { Search, MessageSquarePlus, Filter } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import type { Conversation } from '@/types';
@@ -24,7 +24,8 @@ export function CenterPanel() {
       try {
         // For now, since this is TMS integration, we'll create placeholder conversations
         // In a real implementation, you'd have a conversations API endpoint
-        const users = await tmsApi.searchUsers('', 10);
+        const result = await userService.searchUsers({ query: '', limit: 10 });
+        const users = result;
         
         // Get current user ID first
         const currentUserId = await getCurrentUserId();
@@ -73,7 +74,7 @@ export function CenterPanel() {
   // Helper function to get current user ID
   const getCurrentUserId = async () => {
     try {
-      const currentUser = await tmsApi.getCurrentUser();
+      const currentUser = await userService.getCurrentUser();
       return currentUser.id;
     } catch {
       return null;
