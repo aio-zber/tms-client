@@ -1,6 +1,4 @@
 'use client';
-
-import { useState } from 'react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -10,7 +8,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { mockCurrentUser, getUserInitials } from '@/lib/mockData';
+import { getUserInitials, User } from '@/types';
+import { useState, useEffect } from 'react';
+import { tmsApi } from '@/lib/tmsApi';
 import {
   Settings,
   Sun,
@@ -24,9 +24,37 @@ import {
 import { cn } from '@/lib/utils';
 
 export function AppHeader() {
-  const user = mockCurrentUser;
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('light');
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        // Check if user has an active session
+        const isAuthenticated = tmsApi.isAuthenticated();
+        if (isAuthenticated) {
+          // Get real user data from TMS API
+          const tmsUser = await tmsApi.getCurrentUser();
+          const transformedUser = tmsApi.transformTMSUser(tmsUser);
+          setUser(transformedUser);
+        } else {
+          // No session, redirect to login
+          window.location.href = '/login';
+        }
+      } catch (error) {
+        console.error('Failed to load user data:', error);
+        // Clear invalid session and redirect to login
+        await tmsApi.logout();
+        window.location.href = '/login';
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadUser();
+  }, []);
 
   const handleThemeChange = (newTheme: 'light' | 'dark' | 'system') => {
     setTheme(newTheme);
@@ -40,10 +68,30 @@ export function AppHeader() {
     console.log('Notifications:', !notificationsEnabled);
   };
 
-  const handleLogout = () => {
-    // TODO: Implement actual logout
-    console.log('Logout clicked');
+  const handleLogout = async () => {
+    try {
+      await tmsApi.logout();
+      setUser(null);
+      // TODO: Redirect to login page
+      console.log('User logged out');
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
   };
+
+  // Show loading state if user is not loaded
+  if (loading || !user) {
+    return (
+      <header className="h-[60px] bg-white border-b border-gray-200 flex items-center justify-between px-4 shrink-0">
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl font-bold text-viber-purple">GCG Team Chat</h1>
+        </div>
+        <div className="animate-pulse">
+          <div className="w-8 h-8 bg-gray-200 rounded-full"></div>
+        </div>
+      </header>
+    );
+  }
 
   return (
     <header className="h-[60px] bg-white border-b border-gray-200 flex items-center justify-between px-4 shrink-0">
@@ -58,7 +106,7 @@ export function AppHeader() {
           <button className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition">
             <Avatar className="h-8 w-8">
               <AvatarFallback className="bg-viber-purple text-white font-semibold text-xs">
-                {getUserInitials(user.username)}
+                {getUserInitials(user)}
               </AvatarFallback>
             </Avatar>
             <span className="text-sm font-medium text-gray-900 hidden md:block">
@@ -75,7 +123,7 @@ export function AppHeader() {
               <div className="relative">
                 <Avatar className="h-16 w-16">
                   <AvatarFallback className="bg-viber-purple text-white font-semibold text-lg">
-                    {getUserInitials(user.username)}
+                    {getUserInitials(user)}
                   </AvatarFallback>
                 </Avatar>
                 {/* Online Status Indicator */}
@@ -85,7 +133,7 @@ export function AppHeader() {
                 <p className="font-semibold text-gray-900 text-base">
                   {user.username}
                 </p>
-                <p className="text-sm text-gray-600">{user.position}</p>
+                <p className="text-sm text-gray-600">{user.positionTitle}</p>
                 <p className="text-xs text-gray-500 mt-1">{user.email}</p>
               </div>
             </div>

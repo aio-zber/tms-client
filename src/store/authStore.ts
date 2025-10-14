@@ -56,9 +56,9 @@ export const useAuthStore = create<AuthState>()(
           // Call TMS login API
           const response = await authService.login(credentials);
 
-          // Set token in store
+          // Set session state in store
           set({
-            token: response.access_token,
+            token: 'session-active', // Session-based auth doesn't use tokens
             isAuthenticated: true,
             isLoading: false,
             error: null,
@@ -111,7 +111,7 @@ export const useAuthStore = create<AuthState>()(
        */
       setToken: (token) => {
         if (token) {
-          authService.setStoredToken(token);
+          authService.setSessionActive(true);
           set({
             token,
             isAuthenticated: true,
@@ -127,15 +127,15 @@ export const useAuthStore = create<AuthState>()(
 
       /**
        * Check authentication status.
-       * Validates stored token and updates state accordingly.
+       * Validates session and updates state accordingly.
        */
       checkAuth: async () => {
         set({ isLoading: true });
 
         try {
-          const storedToken = authService.getStoredToken();
+          const isAuthenticated = authService.isAuthenticated();
 
-          if (!storedToken) {
+          if (!isAuthenticated) {
             set({
               token: null,
               isAuthenticated: false,
@@ -144,12 +144,12 @@ export const useAuthStore = create<AuthState>()(
             return;
           }
 
-          // Validate token by attempting to use it
-          const isValid = await authService.validateToken();
+          // Validate session by attempting to use it
+          const isValid = await authService.validateSession();
 
           if (isValid) {
             set({
-              token: storedToken,
+              token: 'session-active',
               isAuthenticated: true,
               isLoading: false,
             });
@@ -158,12 +158,12 @@ export const useAuthStore = create<AuthState>()(
             try {
               await userService.getCurrentUser();
             } catch {
-              // User data fetch failed, but token is valid
+              // User data fetch failed, but session is valid
               // Continue with authentication
             }
           } else {
-            // Token is invalid, clear everything
-            authService.logout();
+            // Session is invalid, clear everything
+            await authService.logout();
             set({
               token: null,
               isAuthenticated: false,
@@ -174,7 +174,7 @@ export const useAuthStore = create<AuthState>()(
           console.error('Auth check failed:', error);
 
           // On error, assume not authenticated
-          authService.logout();
+          await authService.logout();
           set({
             token: null,
             isAuthenticated: false,

@@ -49,6 +49,51 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Define functions first
+  const fetchConversation = useCallback(async () => {
+    try {
+      const token = authService.getStoredToken();
+      const response = await fetch(
+        `${API_BASE_URL}/conversations/${conversationId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setConversation(data);
+      }
+    } catch (error) {
+      console.error('Error fetching conversation:', error);
+    }
+  }, [conversationId]);
+
+  const fetchMessages = useCallback(async () => {
+    try {
+      const token = authService.getStoredToken();
+      const response = await fetch(
+        `${API_BASE_URL}/conversations/${conversationId}/messages`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setMessages(data.messages || []);
+      }
+    } catch (error) {
+      console.error('Error fetching messages:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [conversationId]);
+
   useEffect(() => {
     if (conversationId) {
       fetchConversation();
@@ -105,52 +150,6 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
-
-  const fetchConversation = useCallback(async () => {
-    try {
-      const token = authService.getStoredToken();
-      const response = await fetch(
-        `${API_BASE_URL}/conversations/${conversationId}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setConversation(data);
-      }
-    } catch (error) {
-      console.error('Error fetching conversation:', error);
-    }
-  }, [conversationId]);
-
-  const fetchMessages = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const token = authService.getStoredToken();
-      const response = await fetch(
-        `${API_BASE_URL}/messages/conversations/${conversationId}/messages?limit=50`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setMessages(data.data || []);
-      }
-    } catch (error) {
-      console.error('Error fetching messages:', error);
-      toast.error('Failed to load messages');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [conversationId]);
 
   const sendMessage = async () => {
     if (!newMessage.trim() || isSending) return;
