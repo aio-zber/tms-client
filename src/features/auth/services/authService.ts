@@ -77,8 +77,8 @@ class AuthService {
         user: {
           id: userData.id,
           email: userData.email,
-          name: userData.name,
-          role: userData.role
+          name: userData.name || `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.username || 'User',
+          role: userData.role || 'member'
         }
       };
 
