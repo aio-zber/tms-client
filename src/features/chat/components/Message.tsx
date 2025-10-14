@@ -18,7 +18,7 @@ interface MessageProps {
     type: 'text' | 'image' | 'file';
     created_at: string;
     is_edited: boolean;
-    reactions?: any[];
+    reactions?: Array<{ user_id: string; emoji: string; count?: number; }>;
   };
   isOwnMessage: boolean;
   showAvatar: boolean;
@@ -98,7 +98,7 @@ export default function Message({ message, isOwnMessage, showAvatar }: MessagePr
         {/* Reactions (if any) */}
         {message.reactions && message.reactions.length > 0 && (
           <div className="flex items-center space-x-1 mt-1 px-3">
-            {message.reactions.map((reaction: any, index: number) => (
+            {message.reactions.map((reaction, index: number) => (
               <div
                 key={index}
                 className="bg-white border border-gray-200 rounded-full px-2 py-0.5 text-xs"

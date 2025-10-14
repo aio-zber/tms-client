@@ -70,9 +70,9 @@ export default function LoginPage() {
         router.push('/chats');
       }, 500);
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Error is already in auth store, show toast
-      const errorMessage = err?.message || error || 'Login failed. Please try again.';
+      const errorMessage = (err as Error)?.message || error || 'Login failed. Please try again.';
       toast.error(errorMessage, {
         duration: 4000,
         icon: '❌',

@@ -14,7 +14,7 @@ export interface WebSocketMessage {
   content: string;
   type: string;
   created_at: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface TypingIndicator {
@@ -145,7 +145,7 @@ class WebSocketService {
   /**
    * Listen for message status updates (delivered/read)
    */
-  onMessageStatus(callback: (data: any) => void): void {
+  onMessageStatus(callback: (data: { message_id: string; status: string; user_id: string; }) => void): void {
     if (!this.socket) return;
     this.socket.on('message_status', callback);
   }
@@ -161,12 +161,12 @@ class WebSocketService {
   /**
    * Listen for reactions
    */
-  onReactionAdded(callback: (data: any) => void): void {
+  onReactionAdded(callback: (data: { message_id: string; user_id: string; emoji: string; }) => void): void {
     if (!this.socket) return;
     this.socket.on('reaction_added', callback);
   }
 
-  onReactionRemoved(callback: (data: any) => void): void {
+  onReactionRemoved(callback: (data: { message_id: string; user_id: string; emoji: string; }) => void): void {
     if (!this.socket) return;
     this.socket.on('reaction_removed', callback);
   }

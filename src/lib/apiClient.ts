@@ -15,7 +15,7 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public statusCode: number,
-    public response?: any
+    public response?: unknown
   ) {
     super(message);
     this.name = 'ApiError';
@@ -116,7 +116,7 @@ class ApiClient {
   /**
    * Perform POST request.
    */
-  async post<T, D = any>(endpoint: string, data?: D): Promise<T> {
+  async post<T, D = unknown>(endpoint: string, data?: D): Promise<T> {
     const response = await fetch(`${this.baseURL}${endpoint}`, {
       method: 'POST',
       headers: this.getHeaders(),
@@ -129,7 +129,7 @@ class ApiClient {
   /**
    * Perform PUT request.
    */
-  async put<T, D = any>(endpoint: string, data?: D): Promise<T> {
+  async put<T, D = unknown>(endpoint: string, data?: D): Promise<T> {
     const response = await fetch(`${this.baseURL}${endpoint}`, {
       method: 'PUT',
       headers: this.getHeaders(),
@@ -142,7 +142,7 @@ class ApiClient {
   /**
    * Perform PATCH request.
    */
-  async patch<T, D = any>(endpoint: string, data?: D): Promise<T> {
+  async patch<T, D = unknown>(endpoint: string, data?: D): Promise<T> {
     const response = await fetch(`${this.baseURL}${endpoint}`, {
       method: 'PATCH',
       headers: this.getHeaders(),

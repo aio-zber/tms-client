@@ -103,12 +103,12 @@ export const useUserStore = create<UserState>()(
 
           // Cache the user
           get().cacheUser(user);
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error('Failed to fetch current user:', error);
 
           // If we have cached data and the error is network-related, keep using cache
           const currentState = get();
-          if (currentState.currentUser && (error.statusCode === undefined || error.statusCode >= 500)) {
+          if (currentState.currentUser && ((error as { statusCode?: number }).statusCode === undefined || (error as { statusCode?: number }).statusCode! >= 500)) {
             set({
               isLoading: false,
               error: 'Using cached data (offline)',
@@ -118,7 +118,7 @@ export const useUserStore = create<UserState>()(
               currentUser: null,
               isAuthenticated: false,
               isLoading: false,
-              error: error.message || 'Failed to authenticate',
+              error: (error as Error).message || 'Failed to authenticate',
             });
           }
         }
@@ -163,8 +163,8 @@ export const useUserStore = create<UserState>()(
 
         try {
           const user = await userService.getUserById(userId);
-          get().cacheUser(user as any); // UserProfile is compatible with User
-          return user as any;
+          get().cacheUser(user as User); // UserProfile is compatible with User
+          return user as User;
         } catch (error) {
           console.error(`Failed to fetch user ${userId}:`, error);
           return null;
@@ -208,14 +208,14 @@ export const useUserStore = create<UserState>()(
 
           // Cache each search result
           results.forEach((user) => {
-            get().cacheUser(user as any);
+            get().cacheUser(user as User);
           });
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error('User search failed:', error);
           set({
             searchResults: [],
             isSearching: false,
-            error: error.message || 'Search failed',
+            error: (error as Error).message || 'Search failed',
           });
         }
       },
