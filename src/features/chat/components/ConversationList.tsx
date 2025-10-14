@@ -5,78 +5,30 @@
 
 'use client';
 
-import { useEffect, useState, useCallback, Suspense } from 'react';
+import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { MessageCircle, Search } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
-import { authService } from '@/features/auth/services/authService';
-import { API_BASE_URL } from '@/lib/constants';
 import { formatDistanceToNow } from 'date-fns';
-
-interface Conversation {
-  id: string;
-  name: string;
-  type: 'dm' | 'group';
-  avatar_url?: string;
-  last_message?: {
-    content: string;
-    created_at: string;
-    sender_name?: string;
-  };
-  unread_count?: number;
-  updated_at: string;
-}
+import { useConversations } from '@/features/conversations';
 
 function ConversationListContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const selectedId = searchParams.get('id');
 
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const fetchConversations = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
+  // Use custom hook for conversations
+  const {
+    conversations,
+    loading: isLoading,
+    error: fetchError,
+    refresh,
+  } = useConversations();
 
-      const token = authService.getStoredToken();
-      if (!token) {
-        router.push('/login');
-        return;
-      }
-
-      const response = await fetch(`${API_BASE_URL}/conversations/`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          router.push('/login');
-          return;
-        }
-        throw new Error('Failed to fetch conversations');
-      }
-
-      const data = await response.json();
-      setConversations(data.data || []);
-    } catch (err: unknown) {
-      console.error('Error fetching conversations:', err);
-      setError((err as Error).message || 'Failed to load conversations');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [router]);
-
-  useEffect(() => {
-    fetchConversations();
-  }, [fetchConversations]);
+  const error = fetchError ? fetchError.message : null;
 
   const handleConversationClick = (conversationId: string) => {
     router.push(`/chats?id=${conversationId}`);
@@ -100,7 +52,7 @@ function ConversationListContent() {
   };
 
   const filteredConversations = conversations.filter(conv =>
-    conv.name.toLowerCase().includes(searchQuery.toLowerCase())
+    (conv.name || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   if (isLoading) {
@@ -124,7 +76,7 @@ function ConversationListContent() {
       <div className="p-4 text-center">
         <div className="text-red-500 mb-2">❌ {error}</div>
         <button
-          onClick={fetchConversations}
+          onClick={refresh}
           className="text-viber-purple hover:underline text-sm"
         >
           Try again
@@ -174,14 +126,14 @@ function ConversationListContent() {
                 {/* Avatar */}
                 <div className="relative">
                   <Avatar className="w-12 h-12">
-                    <AvatarImage src={conversation.avatar_url} />
+                    <AvatarImage src={conversation.avatarUrl} />
                     <AvatarFallback className="bg-viber-purple text-white">
-                      {getInitials(conversation.name)}
+                      {getInitials(conversation.name || 'Chat')}
                     </AvatarFallback>
                   </Avatar>
-                  {conversation.unread_count && conversation.unread_count > 0 && (
+                  {conversation.unreadCount && conversation.unreadCount > 0 && (
                     <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                      {conversation.unread_count > 9 ? '9+' : conversation.unread_count}
+                      {conversation.unreadCount > 9 ? '9+' : conversation.unreadCount}
                     </div>
                   )}
                 </div>
@@ -190,23 +142,23 @@ function ConversationListContent() {
                 <div className="flex-1 min-w-0 text-left">
                   <div className="flex items-baseline justify-between mb-1">
                     <h3 className="font-semibold text-gray-900 truncate">
-                      {conversation.name}
+                      {conversation.name || 'Direct Message'}
                     </h3>
-                    {conversation.last_message && (
+                    {conversation.lastMessage && (
                       <span className="text-xs text-gray-500 ml-2 flex-shrink-0">
-                        {formatTimestamp(conversation.last_message.created_at)}
+                        {formatTimestamp(conversation.lastMessage.timestamp)}
                       </span>
                     )}
                   </div>
                   <p className="text-sm text-gray-600 truncate">
-                    {conversation.last_message ? (
+                    {conversation.lastMessage ? (
                       <>
-                        {conversation.type === 'group' && conversation.last_message.sender_name && (
+                        {conversation.type === 'group' && conversation.lastMessage.senderId && (
                           <span className="font-medium">
-                            {conversation.last_message.sender_name}:{' '}
+                            {conversation.lastMessage.senderId}:{' '}
                           </span>
                         )}
-                        {conversation.last_message.content}
+                        {conversation.lastMessage.content}
                       </>
                     ) : (
                       <span className="text-gray-400 italic">No messages yet</span>
