@@ -4,6 +4,7 @@
  */
 
 // API Configuration
+export const TMS_API_URL = process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL || 'https://gcgc-team-management-system-staging.up.railway.app';
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 export const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000';
 
