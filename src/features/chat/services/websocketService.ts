@@ -1,0 +1,247 @@
+/**
+ * WebSocket Service
+ * Manages Socket.IO connection for real-time messaging
+ */
+
+import { io, Socket } from 'socket.io-client';
+import { WS_URL } from '@/lib/constants';
+import { authService } from '@/features/auth/services/authService';
+
+export interface WebSocketMessage {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  content: string;
+  type: string;
+  created_at: string;
+  [key: string]: any;
+}
+
+export interface TypingIndicator {
+  conversation_id: string;
+  user_id: string;
+  user_name: string;
+  is_typing: boolean;
+}
+
+class WebSocketService {
+  private socket: Socket | null = null;
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 5;
+  private isConnecting = false;
+
+  /**
+   * Connect to WebSocket server
+   */
+  connect(): void {
+    if (this.socket?.connected || this.isConnecting) {
+      console.log('WebSocket already connected or connecting');
+      return;
+    }
+
+    this.isConnecting = true;
+    const token = authService.getStoredToken();
+
+    if (!token) {
+      console.error('No auth token available for WebSocket connection');
+      this.isConnecting = false;
+      return;
+    }
+
+    console.log('Connecting to WebSocket:', WS_URL);
+
+    this.socket = io(WS_URL, {
+      auth: { token },
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: this.maxReconnectAttempts,
+      reconnectionDelay: 1000,
+      timeout: 10000,
+    });
+
+    this.setupEventHandlers();
+  }
+
+  /**
+   * Setup Socket.IO event handlers
+   */
+  private setupEventHandlers(): void {
+    if (!this.socket) return;
+
+    this.socket.on('connect', () => {
+      console.log('✅ WebSocket connected:', this.socket?.id);
+      this.isConnecting = false;
+      this.reconnectAttempts = 0;
+    });
+
+    this.socket.on('disconnect', (reason) => {
+      console.log('❌ WebSocket disconnected:', reason);
+      this.isConnecting = false;
+    });
+
+    this.socket.on('connect_error', (error) => {
+      console.error('WebSocket connection error:', error);
+      this.isConnecting = false;
+      this.reconnectAttempts++;
+
+      if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+        console.error('Max reconnection attempts reached');
+        this.disconnect();
+      }
+    });
+
+    this.socket.on('error', (error) => {
+      console.error('WebSocket error:', error);
+    });
+  }
+
+  /**
+   * Join a conversation room
+   */
+  joinConversation(conversationId: string): void {
+    if (!this.socket?.connected) {
+      console.warn('WebSocket not connected, cannot join conversation');
+      return;
+    }
+
+    console.log('Joining conversation:', conversationId);
+    this.socket.emit('join_conversation', { conversation_id: conversationId });
+  }
+
+  /**
+   * Leave a conversation room
+   */
+  leaveConversation(conversationId: string): void {
+    if (!this.socket?.connected) return;
+
+    console.log('Leaving conversation:', conversationId);
+    this.socket.emit('leave_conversation', { conversation_id: conversationId });
+  }
+
+  /**
+   * Listen for new messages
+   */
+  onNewMessage(callback: (message: WebSocketMessage) => void): void {
+    if (!this.socket) return;
+    this.socket.on('new_message', callback);
+  }
+
+  /**
+   * Listen for message edits
+   */
+  onMessageEdited(callback: (message: WebSocketMessage) => void): void {
+    if (!this.socket) return;
+    this.socket.on('message_edited', callback);
+  }
+
+  /**
+   * Listen for message deletions
+   */
+  onMessageDeleted(callback: (data: { message_id: string; conversation_id: string }) => void): void {
+    if (!this.socket) return;
+    this.socket.on('message_deleted', callback);
+  }
+
+  /**
+   * Listen for message status updates (delivered/read)
+   */
+  onMessageStatus(callback: (data: any) => void): void {
+    if (!this.socket) return;
+    this.socket.on('message_status', callback);
+  }
+
+  /**
+   * Listen for typing indicators
+   */
+  onTyping(callback: (data: TypingIndicator) => void): void {
+    if (!this.socket) return;
+    this.socket.on('user_typing', callback);
+  }
+
+  /**
+   * Listen for reactions
+   */
+  onReactionAdded(callback: (data: any) => void): void {
+    if (!this.socket) return;
+    this.socket.on('reaction_added', callback);
+  }
+
+  onReactionRemoved(callback: (data: any) => void): void {
+    if (!this.socket) return;
+    this.socket.on('reaction_removed', callback);
+  }
+
+  /**
+   * Listen for user presence (online/offline)
+   */
+  onUserOnline(callback: (data: { user_id: string }) => void): void {
+    if (!this.socket) return;
+    this.socket.on('user_online', callback);
+  }
+
+  onUserOffline(callback: (data: { user_id: string }) => void): void {
+    if (!this.socket) return;
+    this.socket.on('user_offline', callback);
+  }
+
+  /**
+   * Emit typing start event
+   */
+  emitTypingStart(conversationId: string): void {
+    if (!this.socket?.connected) return;
+    this.socket.emit('typing_start', { conversation_id: conversationId });
+  }
+
+  /**
+   * Emit typing stop event
+   */
+  emitTypingStop(conversationId: string): void {
+    if (!this.socket?.connected) return;
+    this.socket.emit('typing_stop', { conversation_id: conversationId });
+  }
+
+  /**
+   * Send message read receipt
+   */
+  emitMessageRead(messageId: string, conversationId: string): void {
+    if (!this.socket?.connected) return;
+    this.socket.emit('message_read', {
+      message_id: messageId,
+      conversation_id: conversationId,
+    });
+  }
+
+  /**
+   * Disconnect from WebSocket server
+   */
+  disconnect(): void {
+    if (this.socket) {
+      console.log('Disconnecting WebSocket');
+      this.socket.disconnect();
+      this.socket = null;
+      this.isConnecting = false;
+    }
+  }
+
+  /**
+   * Remove all event listeners
+   */
+  removeAllListeners(): void {
+    if (this.socket) {
+      this.socket.removeAllListeners();
+    }
+  }
+
+  /**
+   * Check if WebSocket is connected
+   */
+  isConnected(): boolean {
+    return this.socket?.connected || false;
+  }
+}
+
+// Export singleton instance
+export const wsService = new WebSocketService();
+
+// Export class for testing
+export default WebSocketService;

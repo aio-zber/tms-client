@@ -1,10 +1,12 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Eye, EyeOff, Mail, Lock, Loader2 } from 'lucide-react';
+import toast, { Toaster } from 'react-hot-toast';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,6 +19,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { useAuth } from '@/features/auth';
 
 // Form validation schema
 const loginSchema = z.object({
@@ -30,8 +33,9 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const { login, isLoading, error, clearError } = useAuth(false);
 
   const {
     register,
@@ -47,39 +51,57 @@ export default function LoginPage() {
   });
 
   const onSubmit = async (data: LoginFormValues) => {
-    setIsLoading(true);
+    clearError(); // Clear previous errors
 
-    // Mock login - just log to console (no real authentication)
-    console.log('🔐 Login attempt:', {
-      email: data.email,
-      password: '***hidden***',
-      rememberMe: data.rememberMe,
-    });
+    try {
+      await login({
+        email: data.email,
+        password: data.password,
+      });
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+      // Success! Show toast and redirect
+      toast.success('Login successful! Redirecting to chats...', {
+        duration: 2000,
+        icon: '✅',
+      });
 
-    setIsLoading(false);
+      // Small delay to let user see the success message
+      setTimeout(() => {
+        router.push('/chats');
+      }, 500);
 
-    // Show success message
-    alert(`✅ Login successful!\n\nEmail: ${data.email}\n\nThis is a UI test - no actual authentication.`);
-
-    console.log('✅ Login successful (mock)');
+    } catch (err: any) {
+      // Error is already in auth store, show toast
+      const errorMessage = err?.message || error || 'Login failed. Please try again.';
+      toast.error(errorMessage, {
+        duration: 4000,
+        icon: '❌',
+      });
+    }
   };
 
   return (
-    <Card className="shadow-xl border-gray-200">
-      <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl font-bold text-center">
-          Welcome Back
-        </CardTitle>
-        <CardDescription className="text-center">
-          Enter your credentials to access your account
-        </CardDescription>
-      </CardHeader>
+    <>
+      <Toaster position="top-center" />
+      <Card className="shadow-xl border-gray-200">
+        <CardHeader className="space-y-1">
+          <CardTitle className="text-2xl font-bold text-center">
+            Welcome Back
+          </CardTitle>
+          <CardDescription className="text-center">
+            Enter your credentials to access your account
+          </CardDescription>
+        </CardHeader>
 
-      <CardContent>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <CardContent>
+          {/* Error Display */}
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+              <p className="text-sm text-red-600 text-center">{error}</p>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           {/* Email Field */}
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
@@ -174,9 +196,10 @@ export default function LoginPage() {
           </a>
         </p>
         <p className="text-xs text-gray-400 mt-4">
-          🔧 Test Mode - No actual authentication
+          ✨ Real authentication with TMS
         </p>
       </CardFooter>
     </Card>
+    </>
   );
 }
