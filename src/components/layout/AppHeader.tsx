@@ -8,7 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { getUserInitials, User, TMSRole } from '@/types';
+import { getUserInitials, User } from '@/types';
 import { useState, useEffect } from 'react';
 import { tmsApi } from '@/lib/tmsApi';
 import {
