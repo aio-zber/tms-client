@@ -34,6 +34,13 @@ export interface AuthResponse {
   expiresAt: string;
 }
 
+// TMS API can return user search results in different formats
+type TMSUserSearchResponse =
+  | TMSUser[]
+  | { users: TMSUser[] }
+  | { data: TMSUser[] }
+  | { results: TMSUser[] };
+
 export class TMSApiError extends Error {
   constructor(
     message: string,
@@ -148,19 +155,20 @@ class TMSApiClient {
       credentials: 'include', // Use session cookies instead of Bearer token
     });
 
-    const data = await this.handleResponse<any>(response);
+    const data = await this.handleResponse<TMSUserSearchResponse>(response);
 
     // Handle different response formats from TMS API
-    // Format 1: { users: [...] }
-    // Format 2: { data: [...] }
-    // Format 3: Direct array [...]
+    // Format 1: Direct array [...]
+    // Format 2: { users: [...] }
+    // Format 3: { data: [...] }
+    // Format 4: { results: [...] }
     if (Array.isArray(data)) {
       return data;
-    } else if (data.users && Array.isArray(data.users)) {
+    } else if ('users' in data && Array.isArray(data.users)) {
       return data.users;
-    } else if (data.data && Array.isArray(data.data)) {
+    } else if ('data' in data && Array.isArray(data.data)) {
       return data.data;
-    } else if (data.results && Array.isArray(data.results)) {
+    } else if ('results' in data && Array.isArray(data.results)) {
       return data.results;
     } else {
       console.error('Unexpected TMS API response format:', data);
