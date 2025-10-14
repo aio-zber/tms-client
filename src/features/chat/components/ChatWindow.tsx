@@ -5,101 +5,40 @@
 
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Send, MoreVertical, Phone, Video } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { authService } from '@/features/auth/services/authService';
-import { API_BASE_URL } from '@/lib/constants';
 import Message from './Message';
 import toast from 'react-hot-toast';
 import { wsService, WebSocketMessage } from '../services/websocketService';
-
-interface MessageType {
-  id: string;
-  content: string;
-  sender_id: string;
-  sender_name?: string;
-  sender_avatar?: string;
-  type: 'text' | 'image' | 'file';
-  created_at: string;
-  is_edited: boolean;
-  reactions?: Array<{ user_id: string; emoji: string; }>;
-}
-
-interface ConversationType {
-  id: string;
-  name: string;
-  type: 'dm' | 'group';
-  avatar_url?: string;
-  members?: Array<{ id: string; name: string; avatar_url?: string; }>;
-}
+import { useMessages, useSendMessage } from '@/features/messaging';
+import { useConversation, useConversationActions } from '@/features/conversations';
 
 interface ChatWindowProps {
   conversationId: string;
 }
 
 export default function ChatWindow({ conversationId }: ChatWindowProps) {
-  const [conversation, setConversation] = useState<ConversationType | null>(null);
-  const [messages, setMessages] = useState<MessageType[]>([]);
   const [newMessage, setNewMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Define functions first
-  const fetchConversation = useCallback(async () => {
-    try {
-      const token = authService.getStoredToken();
-      const response = await fetch(
-        `${API_BASE_URL}/conversations/${conversationId}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
+  // Use custom hooks for API integration
+  const { conversation, loading: conversationLoading } = useConversation(conversationId);
+  const { messages, loading: messagesLoading, refresh: refreshMessages } = useMessages(conversationId);
+  const { sendMessage: sendMsg, sending } = useSendMessage();
+  const { markAsRead } = useConversationActions();
 
-      if (response.ok) {
-        const data = await response.json();
-        setConversation(data);
-      }
-    } catch (error) {
-      console.error('Error fetching conversation:', error);
-    }
-  }, [conversationId]);
+  const isLoading = conversationLoading || messagesLoading;
 
-  const fetchMessages = useCallback(async () => {
-    try {
-      const token = authService.getStoredToken();
-      const response = await fetch(
-        `${API_BASE_URL}/conversations/${conversationId}/messages`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setMessages(data.messages || []);
-      }
-    } catch (error) {
-      console.error('Error fetching messages:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [conversationId]);
-
+  // Mark conversation as read when opened
   useEffect(() => {
-    if (conversationId) {
-      fetchConversation();
-      fetchMessages();
+    if (conversationId && !isLoading) {
+      markAsRead(conversationId);
     }
-  }, [conversationId, fetchConversation, fetchMessages]);
+  }, [conversationId, isLoading, markAsRead]);
 
   useEffect(() => {
     scrollToBottom();
@@ -116,27 +55,21 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
     // Listen for new messages
     wsService.onNewMessage((message: WebSocketMessage) => {
       if (message.conversation_id === conversationId) {
-        setMessages((prev) => {
-          // Avoid duplicates
-          if (prev.some((m) => m.id === message.id)) return prev;
-          return [...prev, message as MessageType];
-        });
+        refreshMessages();
       }
     });
 
     // Listen for message edits
     wsService.onMessageEdited((message: WebSocketMessage) => {
       if (message.conversation_id === conversationId) {
-        setMessages((prev) =>
-          prev.map((m) => (m.id === message.id ? (message as MessageType) : m))
-        );
+        refreshMessages();
       }
     });
 
     // Listen for message deletions
     wsService.onMessageDeleted((data) => {
       if (data.conversation_id === conversationId) {
-        setMessages((prev) => prev.filter((m) => m.id !== data.message_id));
+        refreshMessages();
       }
     });
 
@@ -145,50 +78,37 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
       wsService.leaveConversation(conversationId);
       wsService.removeAllListeners();
     };
-  }, [conversationId]);
+  }, [conversationId, refreshMessages]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   const sendMessage = async () => {
-    if (!newMessage.trim() || isSending) return;
+    if (!newMessage.trim() || sending) return;
 
     try {
-      setIsSending(true);
-      const token = authService.getStoredToken();
-
-      const response = await fetch(`${API_BASE_URL}/messages/`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          conversation_id: conversationId,
-          content: newMessage.trim(),
-          type: 'text',
-          metadata_json: {},
-        }),
+      const message = await sendMsg({
+        conversation_id: conversationId,
+        content: newMessage.trim(),
+        type: 'text',
       });
 
-      if (response.ok) {
-        const sentMessage = await response.json();
-        setMessages(prev => [...prev, sentMessage]);
+      if (message) {
         setNewMessage('');
+        refreshMessages();
         scrollToBottom();
+        toast.success('Message sent');
       } else {
-        throw new Error('Failed to send message');
+        toast.error('Failed to send message');
       }
     } catch (error: unknown) {
       console.error('Error sending message:', error);
       toast.error((error as Error).message || 'Failed to send message');
-    } finally {
-      setIsSending(false);
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
@@ -231,13 +151,13 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
       <header className="px-6 py-4 border-b border-gray-200 bg-white flex items-center justify-between">
         <div className="flex items-center space-x-3">
           <Avatar className="w-10 h-10">
-            <AvatarImage src={conversation.avatar_url} />
+            <AvatarImage src={conversation.avatarUrl} />
             <AvatarFallback className="bg-viber-purple text-white">
-              {getInitials(conversation.name)}
+              {getInitials(conversation.name || 'Chat')}
             </AvatarFallback>
           </Avatar>
           <div>
-            <h2 className="font-semibold text-gray-900">{conversation.name}</h2>
+            <h2 className="font-semibold text-gray-900">{conversation.name || 'Chat'}</h2>
             <p className="text-sm text-gray-500">
               {conversation.type === 'group'
                 ? `${conversation.members?.length || 0} members`
@@ -270,17 +190,37 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
               </p>
             </div>
           ) : (
-            messages.map((message, index) => (
-              <Message
-                key={message.id}
-                message={message}
-                isOwnMessage={false} // Will be determined by comparing with current user
-                showAvatar={
-                  index === 0 ||
-                  messages[index - 1].sender_id !== message.sender_id
-                }
-              />
-            ))
+            messages.map((message, index) => {
+              // Map camelCase to snake_case for Message component
+              const msgProps = {
+                id: message.id,
+                content: message.content,
+                sender_id: message.senderId,
+                sender_name: message.senderId, // TODO: Get actual user name
+                sender_avatar: undefined,
+                type: message.type as 'text' | 'image' | 'file',
+                created_at: message.createdAt,
+                is_edited: message.isEdited,
+                reactions: message.reactions?.map(r => ({
+                  user_id: r.userId,
+                  emoji: r.emoji,
+                  count: 1
+                }))
+              };
+
+              return (
+                <Message
+                  key={message.id}
+                  message={msgProps}
+                  isOwnMessage={false} // Will be determined by comparing with current user
+                  showAvatar={
+                    index === 0 ||
+                    messages[index - 1].senderId !== message.senderId
+                  }
+                  onUpdate={refreshMessages}
+                />
+              );
+            })
           )}
           <div ref={messagesEndRef} />
         </div>
@@ -294,16 +234,16 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
             placeholder="Type a message..."
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
-            onKeyPress={handleKeyPress}
-            disabled={isSending}
+            onKeyDown={handleKeyDown}
+            disabled={sending}
             className="flex-1"
           />
           <Button
             onClick={sendMessage}
-            disabled={!newMessage.trim() || isSending}
+            disabled={!newMessage.trim() || sending}
             className="bg-viber-purple hover:bg-viber-purple-dark"
           >
-            {isSending ? (
+            {sending ? (
               <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
             ) : (
               <Send className="h-4 w-4" />

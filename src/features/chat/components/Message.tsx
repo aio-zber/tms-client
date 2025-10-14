@@ -5,8 +5,20 @@
 
 'use client';
 
+import { useState } from 'react';
 import { format } from 'date-fns';
+import { MoreVertical, Edit2, Trash2, Smile } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
+import { useMessageActions } from '@/features/messaging';
+import toast from 'react-hot-toast';
 
 interface MessageProps {
   message: {
@@ -22,9 +34,16 @@ interface MessageProps {
   };
   isOwnMessage: boolean;
   showAvatar: boolean;
+  onUpdate?: () => void;
 }
 
-export default function Message({ message, isOwnMessage, showAvatar }: MessageProps) {
+export default function Message({ message, isOwnMessage, showAvatar, onUpdate }: MessageProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState(message.content);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+
+  const { editMessage, deleteMessage, addReaction, loading } = useMessageActions();
+
   const formatTime = (timestamp: string) => {
     try {
       return format(new Date(timestamp), 'HH:mm');
@@ -42,6 +61,47 @@ export default function Message({ message, isOwnMessage, showAvatar }: MessagePr
       .toUpperCase()
       .slice(0, 2);
   };
+
+  const handleEdit = async () => {
+    if (!editContent.trim() || editContent === message.content) {
+      setIsEditing(false);
+      return;
+    }
+
+    const updated = await editMessage(message.id, { content: editContent.trim() });
+    if (updated) {
+      toast.success('Message updated');
+      setIsEditing(false);
+      onUpdate?.();
+    } else {
+      toast.error('Failed to update message');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirm('Are you sure you want to delete this message?')) return;
+
+    const success = await deleteMessage(message.id);
+    if (success) {
+      toast.success('Message deleted');
+      onUpdate?.();
+    } else {
+      toast.error('Failed to delete message');
+    }
+  };
+
+  const handleReaction = async (emoji: string) => {
+    const success = await addReaction(message.id, emoji);
+    if (success) {
+      toast.success('Reaction added');
+      setShowEmojiPicker(false);
+      onUpdate?.();
+    } else {
+      toast.error('Failed to add reaction');
+    }
+  };
+
+  const commonEmojis = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
   return (
     <div
@@ -63,7 +123,7 @@ export default function Message({ message, isOwnMessage, showAvatar }: MessagePr
 
       {/* Message Bubble */}
       <div
-        className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'}`}
+        className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} group relative`}
       >
         {/* Sender Name (for group chats, not own messages) */}
         {!isOwnMessage && showAvatar && message.sender_name && (
@@ -72,18 +132,71 @@ export default function Message({ message, isOwnMessage, showAvatar }: MessagePr
           </span>
         )}
 
+        {/* Message Actions (hover menu) */}
+        {isOwnMessage && !isEditing && (
+          <div className="absolute top-0 right-0 -mt-2 -mr-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 rounded-full bg-white shadow-sm border"
+                  disabled={loading}
+                >
+                  <MoreVertical className="h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setIsEditing(true)}>
+                  <Edit2 className="h-4 w-4 mr-2" />
+                  Edit
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleDelete} className="text-red-600">
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setShowEmojiPicker(!showEmojiPicker)}>
+                  <Smile className="h-4 w-4 mr-2" />
+                  React
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
+
         {/* Message Content */}
-        <div
-          className={`rounded-2xl px-4 py-2 max-w-md ${
-            isOwnMessage
-              ? 'bg-viber-purple text-white'
-              : 'bg-gray-100 text-gray-900'
-          }`}
-        >
-          <p className="text-sm whitespace-pre-wrap break-words">
-            {message.content}
-          </p>
-        </div>
+        {isEditing ? (
+          <div className="flex items-center space-x-2">
+            <Input
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleEdit();
+                if (e.key === 'Escape') setIsEditing(false);
+              }}
+              className="max-w-md"
+              autoFocus
+            />
+            <Button size="sm" onClick={handleEdit} disabled={loading}>
+              Save
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setIsEditing(false)}>
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <div
+            className={`rounded-2xl px-4 py-2 max-w-md ${
+              isOwnMessage
+                ? 'bg-viber-purple text-white'
+                : 'bg-gray-100 text-gray-900'
+            }`}
+          >
+            <p className="text-sm whitespace-pre-wrap break-words">
+              {message.content}
+            </p>
+          </div>
+        )}
 
         {/* Timestamp and Edit indicator */}
         <div className="flex items-center space-x-1 mt-1 px-3">
@@ -95,16 +208,32 @@ export default function Message({ message, isOwnMessage, showAvatar }: MessagePr
           )}
         </div>
 
+        {/* Emoji Picker */}
+        {showEmojiPicker && (
+          <div className="flex items-center space-x-1 mt-2 px-3 bg-white border border-gray-200 rounded-lg p-2 shadow-lg">
+            {commonEmojis.map((emoji) => (
+              <button
+                key={emoji}
+                onClick={() => handleReaction(emoji)}
+                className="hover:bg-gray-100 rounded px-2 py-1 text-lg transition-colors"
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Reactions (if any) */}
         {message.reactions && message.reactions.length > 0 && (
           <div className="flex items-center space-x-1 mt-1 px-3">
             {message.reactions.map((reaction, index: number) => (
-              <div
+              <button
                 key={index}
-                className="bg-white border border-gray-200 rounded-full px-2 py-0.5 text-xs"
+                className="bg-white border border-gray-200 rounded-full px-2 py-0.5 text-xs hover:bg-gray-50 transition-colors"
+                onClick={() => handleReaction(reaction.emoji)}
               >
                 {reaction.emoji} {reaction.count || 1}
-              </div>
+              </button>
             ))}
           </div>
         )}
