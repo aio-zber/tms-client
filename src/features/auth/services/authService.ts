@@ -1,10 +1,10 @@
 /**
  * Authentication Service
- * Handles authentication with Team Management System (TMS)
- * Uses session-based authentication with NextAuth.js
+ * Handles authentication with GCGC Team Management System
+ * Uses session-based authentication
  */
 
-import { TMS_API_URL, STORAGE_KEYS } from '@/lib/constants';
+import { STORAGE_KEYS } from '@/lib/constants';
 
 export interface LoginCredentials {
   email: string;
@@ -39,8 +39,8 @@ class AuthService {
    */
   async login(credentials: LoginCredentials): Promise<LoginResponse> {
     try {
-      // First, try to authenticate with the TMS signin endpoint
-      const signinResponse = await fetch(`${TMS_API_URL}/api/auth/signin/credentials`, {
+      // First, try to authenticate with the GCGC Team Management System signin endpoint
+      const signinResponse = await fetch(`${process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL}/api/auth/signin/credentials`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -59,7 +59,7 @@ class AuthService {
       }
 
       // Get user session info
-      const userResponse = await fetch(`${TMS_API_URL}/api/v1/users/me`, {
+      const userResponse = await fetch(`${process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL}/api/v1/users/me`, {
         credentials: 'include',
       });
 
@@ -77,8 +77,8 @@ class AuthService {
         user: {
           id: userData.id,
           email: userData.email,
-          name: userData.name || `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.username || 'User',
-          role: userData.role || 'member'
+          name: userData.displayName || userData.name || `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.username || 'User',
+          role: userData.role || 'MEMBER'
         }
       };
 
@@ -96,13 +96,13 @@ class AuthService {
    */
   async logout(): Promise<void> {
     try {
-      // Call TMS signout endpoint
-      await fetch(`${TMS_API_URL}/api/auth/signout`, {
+      // Call GCGC Team Management System signout endpoint
+      await fetch(`${process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL}/api/auth/signout`, {
         method: 'POST',
         credentials: 'include',
       });
     } catch (error) {
-      console.warn('TMS logout failed:', error);
+      console.warn('Team Management System logout failed:', error);
     } finally {
       this.setSessionActive(false);
       if (typeof window !== 'undefined') {
@@ -113,11 +113,11 @@ class AuthService {
   }
 
   /**
-   * Get current user from TMS API.
+   * Get current user from GCGC Team Management System API.
    */
   async getCurrentUser() {
     try {
-      const response = await fetch(`${TMS_API_URL}/api/v1/users/me`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL}/api/v1/users/me`, {
         credentials: 'include',
       });
 
@@ -162,7 +162,7 @@ class AuthService {
     if (!this.isAuthenticated()) return false;
 
     try {
-      const response = await fetch(`${TMS_API_URL}/api/v1/users/me`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL}/api/v1/users/me`, {
         credentials: 'include',
       });
 
