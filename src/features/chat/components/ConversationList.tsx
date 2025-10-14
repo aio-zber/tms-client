@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { MessageCircle, Search } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -28,7 +28,7 @@ interface Conversation {
   updated_at: string;
 }
 
-export default function ConversationList() {
+function ConversationListContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const selectedId = searchParams.get('id');
@@ -219,5 +219,25 @@ export default function ConversationList() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function ConversationList() {
+  return (
+    <Suspense fallback={
+      <div className="space-y-2 p-2">
+        {[...Array(6)].map((_, i) => (
+          <div key={i} className="flex items-center space-x-3 p-3 rounded-lg animate-pulse">
+            <div className="w-12 h-12 rounded-full bg-gray-200" />
+            <div className="flex-1 space-y-2">
+              <div className="h-4 bg-gray-200 rounded w-3/4" />
+              <div className="h-3 bg-gray-200 rounded w-1/2" />
+            </div>
+          </div>
+        ))}
+      </div>
+    }>
+      <ConversationListContent />
+    </Suspense>
   );
 }
