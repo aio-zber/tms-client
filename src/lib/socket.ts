@@ -112,67 +112,67 @@ class SocketClient {
   /**
    * Listen for new messages
    */
-  onNewMessage(callback: (message: any) => void) {
+  onNewMessage(callback: (message: Record<string, unknown>) => void) {
     this.socket?.on('new_message', callback);
   }
 
   /**
    * Listen for message edits
    */
-  onMessageEdited(callback: (message: any) => void) {
+  onMessageEdited(callback: (message: Record<string, unknown>) => void) {
     this.socket?.on('message_edited', callback);
   }
 
   /**
    * Listen for message deletions
    */
-  onMessageDeleted(callback: (data: any) => void) {
+  onMessageDeleted(callback: (data: Record<string, unknown>) => void) {
     this.socket?.on('message_deleted', callback);
   }
 
   /**
    * Listen for message status updates
    */
-  onMessageStatus(callback: (data: any) => void) {
+  onMessageStatus(callback: (data: Record<string, unknown>) => void) {
     this.socket?.on('message_status', callback);
   }
 
   /**
    * Listen for typing indicators
    */
-  onUserTyping(callback: (data: any) => void) {
+  onUserTyping(callback: (data: Record<string, unknown>) => void) {
     this.socket?.on('user_typing', callback);
   }
 
   /**
    * Listen for user online status
    */
-  onUserOnline(callback: (data: any) => void) {
+  onUserOnline(callback: (data: Record<string, unknown>) => void) {
     this.socket?.on('user_online', callback);
   }
 
   /**
    * Listen for user offline status
    */
-  onUserOffline(callback: (data: any) => void) {
+  onUserOffline(callback: (data: Record<string, unknown>) => void) {
     this.socket?.on('user_offline', callback);
   }
 
   /**
    * Listen for reactions
    */
-  onReactionAdded(callback: (data: any) => void) {
+  onReactionAdded(callback: (data: Record<string, unknown>) => void) {
     this.socket?.on('reaction_added', callback);
   }
 
-  onReactionRemoved(callback: (data: any) => void) {
+  onReactionRemoved(callback: (data: Record<string, unknown>) => void) {
     this.socket?.on('reaction_removed', callback);
   }
 
   /**
    * Remove event listener
    */
-  off(event: string, callback?: (...args: any[]) => void) {
+  off(event: string, callback?: (data: Record<string, unknown>) => void) {
     this.socket?.off(event, callback);
   }
 

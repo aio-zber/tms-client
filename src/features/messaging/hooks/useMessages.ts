@@ -100,14 +100,16 @@ export function useMessages(
     socketClient.joinConversation(conversationId);
 
     // Listen for new messages
-    const handleNewMessage = (message: Message) => {
+    const handleNewMessage = (data: Record<string, unknown>) => {
+      const message = data as unknown as Message;
       if (message.conversationId === conversationId) {
         setMessages((prev) => [message, ...prev]);
       }
     };
 
     // Listen for message edits
-    const handleMessageEdited = (message: Message) => {
+    const handleMessageEdited = (data: Record<string, unknown>) => {
+      const message = data as unknown as Message;
       if (message.conversationId === conversationId) {
         setMessages((prev) =>
           prev.map((msg) => (msg.id === message.id ? message : msg))
@@ -116,9 +118,10 @@ export function useMessages(
     };
 
     // Listen for message deletions
-    const handleMessageDeleted = (data: { conversation_id: string; message_id: string }) => {
-      if (data.conversation_id === conversationId) {
-        setMessages((prev) => prev.filter((msg) => msg.id !== data.message_id));
+    const handleMessageDeleted = (data: Record<string, unknown>) => {
+      const deletionData = data as unknown as { conversation_id: string; message_id: string };
+      if (deletionData.conversation_id === conversationId) {
+        setMessages((prev) => prev.filter((msg) => msg.id !== deletionData.message_id));
       }
     };
 
