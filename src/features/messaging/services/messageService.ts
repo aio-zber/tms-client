@@ -16,7 +16,7 @@ import type {
   MessageReaction,
 } from '@/types/message';
 
-const BASE_PATH = '/api/v1/messages';
+const BASE_PATH = '/messages';
 
 /**
  * Send a new message

@@ -13,7 +13,7 @@ import type {
   ConversationListResponse,
 } from '@/types/conversation';
 
-const BASE_PATH = '/api/v1/conversations';
+const BASE_PATH = '/conversations';
 
 /**
  * Create a new conversation
