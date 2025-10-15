@@ -69,25 +69,36 @@ class AuthService {
 
       const userData = await userResponse.json();
 
-      // Authenticate with backend server using TMS session
-      // The backend will validate the TMS session via cookies
+      // Authenticate with backend server
+      // Extract NextAuth session token from cookies if available
+      const sessionToken = this.extractSessionToken();
+
       try {
         const backendAuthResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/login`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          credentials: 'include', // Send TMS session cookies to backend
+          credentials: 'include', // Include cookies for CORS
           body: JSON.stringify({
-            token: 'tms-session' // Backend should validate via session cookies
+            token: sessionToken || 'session-based-auth',
+            // Send user data as fallback for session-based validation
+            user_id: userData.id,
+            email: userData.email,
           }),
         });
 
-        if (!backendAuthResponse.ok) {
-          console.warn('Backend authentication failed, but TMS login succeeded');
+        if (backendAuthResponse.ok) {
+          const backendData = await backendAuthResponse.json();
+          console.log('Backend authentication successful:', backendData);
+        } else {
+          const errorText = await backendAuthResponse.text();
+          console.warn('Backend authentication failed:', errorText);
+          // Continue anyway - user is authenticated with TMS
         }
       } catch (error) {
         console.warn('Failed to authenticate with backend:', error);
+        // Continue anyway - user is authenticated with TMS
       }
 
       // Store session indicator
@@ -199,11 +210,44 @@ class AuthService {
   }
 
   /**
+   * Extract NextAuth session token from cookies.
+   * NextAuth typically stores the session token in cookies with names like:
+   * - next-auth.session-token (production)
+   * - __Secure-next-auth.session-token (secure)
+   */
+  private extractSessionToken(): string | null {
+    if (typeof document === 'undefined') return null;
+
+    const cookies = document.cookie.split(';');
+
+    // Common NextAuth cookie names
+    const tokenNames = [
+      'next-auth.session-token',
+      '__Secure-next-auth.session-token',
+      '__Host-next-auth.session-token',
+      'authjs.session-token',
+      '__Secure-authjs.session-token',
+    ];
+
+    for (const cookie of cookies) {
+      const [name, value] = cookie.trim().split('=');
+      if (tokenNames.includes(name) && value) {
+        return decodeURIComponent(value);
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Get stored access token (compatibility method).
    */
   getStoredToken(): string | null {
-    // For session-based auth, we don't store tokens
-    // but return session indicator for compatibility
+    // Try to extract session token from cookies first
+    const sessionToken = this.extractSessionToken();
+    if (sessionToken) return sessionToken;
+
+    // Otherwise return session indicator for compatibility
     return this.isAuthenticated() ? 'session-active' : null;
   }
 }

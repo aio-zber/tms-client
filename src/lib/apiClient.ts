@@ -4,6 +4,7 @@
  */
 
 import { API_BASE_URL, STORAGE_KEYS } from './constants';
+import { authService } from '@/features/auth/services/authService';
 
 export interface ApiResponse<T> {
   data: T;
@@ -30,10 +31,18 @@ class ApiClient {
   }
 
   /**
-   * Get authentication token from localStorage.
+   * Get authentication token from localStorage or authService.
    */
   private getAuthToken(): string | null {
     if (typeof window === 'undefined') return null;
+
+    // Try to get token from authService (session-based)
+    const sessionToken = authService.getStoredToken();
+    if (sessionToken && sessionToken !== 'session-active') {
+      return sessionToken;
+    }
+
+    // Fallback to localStorage (token-based)
     return localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
   }
 
