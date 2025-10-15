@@ -1,5 +1,30 @@
 # Backend Authentication Requirements
 
+## 🔥 IMMEDIATE FIX NEEDED
+
+**Current Error**: `Failed to fetch current user: /auth/signin?callbackUrl=%2Fapi%2Fv1%2Fusers%2Fme`
+
+**The Problem**: Backend is calling TMS without authentication (cookies don't work cross-domain).
+
+**The Fix** (one line change):
+
+```python
+# ❌ CURRENT CODE (BROKEN):
+response = await client.get(f"{TMS_API_URL}/api/v1/users/me")
+
+# ✅ FIXED CODE:
+response = await client.get(
+    f"{TMS_API_URL}/api/v1/users/me",
+    headers={"Authorization": f"Bearer {token}"}  # Use token from frontend!
+)
+```
+
+**Where to change**: In your `/api/v1/auth/login` endpoint, use the `token` from the request body as a Bearer token.
+
+**Full implementation below** ↓
+
+---
+
 ## Current Issue
 
 The frontend authenticates with TMS (Team Management System) using **session-based authentication** (NextAuth cookies), but the backend's `/api/v1/auth/login` endpoint expects a **JWT token** in the request body.
@@ -36,6 +61,33 @@ Headers: Cookie: next-auth.session-token=abc123...
 
 ---
 
+## 🚨 CRITICAL: Cross-Domain Cookie Issue
+
+**Current Error**:
+```json
+{"detail":"Failed to fetch current user: /auth/signin?callbackUrl=%2Fapi%2Fv1%2Fusers%2Fme"}
+```
+
+**Why This Happens**:
+
+```
+Frontend Domain:  tms-client-staging.up.railway.app
+    ↓ (sends session cookie for gcgc-team-management...)
+    ↓
+TMS Domain:       gcgc-team-management-system-staging.up.railway.app (sets session cookie)
+    ↓
+Backend Domain:   tms-server-staging.up.railway.app
+    ↓ (tries to call TMS but has NO session cookie!)
+    ↓
+TMS:             "No auth → Redirect to /auth/signin" ❌
+```
+
+**Session cookies are domain-specific!** The backend can't use the TMS session cookies because they belong to a different domain.
+
+**The Fix**: Backend must use the **session token as a Bearer token** when calling TMS.
+
+---
+
 ## Backend Implementation (Python/FastAPI)
 
 ```python
@@ -59,20 +111,25 @@ async def login(request: Request, data: LoginRequest):
     """
     Authenticate user via TMS.
 
-    Supports two methods:
-    1. JWT token validation (legacy)
-    2. Session cookie validation (recommended)
+    Supports session token validation using NextAuth session tokens
+    sent from the frontend.
     """
 
-    # Method 1: JWT Token Validation (existing logic)
+    # Validate using token as Bearer auth
     if data.token and data.token != "session-based-auth":
-        return await validate_jwt_token(data.token)
+        # Real session token from frontend - use as Bearer token
+        return await validate_session_token(
+            data.token, data.user_id, data.email
+        )
 
-    # Method 2: Session Cookie Validation (new)
-    if data.token == "session-based-auth" and data.user_id:
-        return await validate_session_cookie(request, data.user_id, data.email)
+    # Fallback: No token extracted from cookies
+    if data.token == "session-based-auth":
+        raise HTTPException(
+            status_code=401,
+            detail="Session token required. Frontend couldn't extract token from cookies."
+        )
 
-    raise HTTPException(status_code=401, detail="Invalid authentication method")
+    raise HTTPException(status_code=401, detail="Missing token")
 
 
 async def validate_jwt_token(token: str) -> LoginResponse:
@@ -94,44 +151,51 @@ async def validate_jwt_token(token: str) -> LoginResponse:
         return LoginResponse(success=True, user=user_data)
 
 
-async def validate_session_cookie(
-    request: Request,
-    user_id: str,
-    email: str
+async def validate_session_token(
+    token: str,
+    user_id: str | None = None,
+    email: str | None = None
 ) -> LoginResponse:
     """
-    New: Validate TMS session by forwarding cookies
-    """
-    # Extract cookies from frontend request
-    cookies = request.cookies
+    Validate NextAuth session token with TMS.
 
-    # Forward cookies to TMS to validate session
+    CRITICAL FIX for cross-domain issue:
+    - Cookies don't work across different domains
+    - Frontend: tms-client-staging.up.railway.app
+    - TMS: gcgc-team-management-system-staging.up.railway.app
+    - Backend: tms-server-staging.up.railway.app
+
+    Solution: Use the session token as a Bearer token for TMS API calls
+    """
+
+    # Call TMS /api/v1/users/me with session token as Bearer auth
     async with httpx.AsyncClient() as client:
         response = await client.get(
             f"{TMS_API_URL}/api/v1/users/me",
-            cookies=cookies  # Forward session cookies
+            headers={"Authorization": f"Bearer {token}"}  # ← KEY FIX: Use token!
         )
 
         if response.status_code != 200:
+            error_text = response.text
             raise HTTPException(
                 status_code=401,
-                detail="TMS session invalid or expired"
+                detail=f"TMS validation failed: {error_text}"
             )
 
         user_data = response.json()
 
-        # Verify user_id matches
-        if user_data.get("id") != user_id:
+        # Optional: Verify user_id matches if provided
+        if user_id and user_data.get("id") != user_id:
             raise HTTPException(
                 status_code=401,
-                detail="User ID mismatch"
+                detail="User ID mismatch - token may be for different user"
             )
 
-        # Sync user to database
+        # Sync user to local database
         await sync_user_to_db(user_data)
 
-        # Create backend session
-        # (Set your own session cookie or return a token)
+        # Optional: Create backend session or return backend-specific token
+        # backend_token = create_backend_session(user_data)
 
         return LoginResponse(success=True, user=user_data)
 
