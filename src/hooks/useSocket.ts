@@ -10,36 +10,17 @@ export function useSocket() {
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    // Get auth token from localStorage (same as apiClient)
-    const token = localStorage.getItem('auth_token');
+    // TEMPORARILY DISABLED - WebSocket connection failing on Railway
+    // Will re-enable once backend WebSocket route is fixed
+    console.warn('[Socket] WebSocket temporarily disabled - using HTTP polling fallback');
+    setIsConnected(false);
 
-    if (token) {
-      const socket = socketClient.connect(token);
-
-      const handleConnect = () => {
-        setIsConnected(true);
-      };
-
-      const handleDisconnect = () => {
-        setIsConnected(false);
-      };
-
-      socket.on('connect', handleConnect);
-      socket.on('disconnect', handleDisconnect);
-
-      // Set initial connection status
-      setIsConnected(socket.connected);
-
-      // Cleanup on unmount
-      return () => {
-        socket.off('connect', handleConnect);
-        socket.off('disconnect', handleDisconnect);
-      };
-    } else {
-      // No token - disconnect
-      socketClient.disconnect();
-      setIsConnected(false);
-    }
+    // TODO: Re-enable WebSocket
+    // const token = localStorage.getItem('auth_token');
+    // if (token) {
+    //   const socket = socketClient.connect(token);
+    //   ...
+    // }
   }, []); // Connect once on mount
 
   return {

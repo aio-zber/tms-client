@@ -40,7 +40,7 @@ export default function ChatPage({ params }: ChatPageProps) {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [replyToMessage, setReplyToMessage] = useState<Message | undefined>();
 
-  const { messages, loading, hasMore, loadMore } = useMessages(conversationId);
+  const { messages, loading, hasMore, loadMore, refresh } = useMessages(conversationId);
   const { sendMessage, sending } = useSendMessage();
   const { editMessage, deleteMessage } = useMessageActions();
   useSocket(); // Initialize WebSocket connection
@@ -75,6 +75,15 @@ export default function ChatPage({ params }: ChatPageProps) {
 
     loadCurrentUser();
   }, []);
+
+  // Polling fallback (every 3 seconds) until WebSocket is fixed
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refresh();
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [refresh]);
 
   const handleSendMessage = async (content: string, replyToId?: string) => {
     const message = await sendMessage({

@@ -92,51 +92,13 @@ export function useMessages(
     }
   }, [conversationId, autoLoad, loadMessages]);
 
-  // WebSocket: Join conversation and listen for real-time updates
-  useEffect(() => {
-    if (!conversationId) return;
-
-    // Join conversation room
-    socketClient.joinConversation(conversationId);
-
-    // Listen for new messages
-    const handleNewMessage = (data: Record<string, unknown>) => {
-      const message = data as unknown as Message;
-      if (message.conversationId === conversationId) {
-        setMessages((prev) => [message, ...prev]);
-      }
-    };
-
-    // Listen for message edits
-    const handleMessageEdited = (data: Record<string, unknown>) => {
-      const message = data as unknown as Message;
-      if (message.conversationId === conversationId) {
-        setMessages((prev) =>
-          prev.map((msg) => (msg.id === message.id ? message : msg))
-        );
-      }
-    };
-
-    // Listen for message deletions
-    const handleMessageDeleted = (data: Record<string, unknown>) => {
-      const deletionData = data as unknown as { conversation_id: string; message_id: string };
-      if (deletionData.conversation_id === conversationId) {
-        setMessages((prev) => prev.filter((msg) => msg.id !== deletionData.message_id));
-      }
-    };
-
-    socketClient.onNewMessage(handleNewMessage);
-    socketClient.onMessageEdited(handleMessageEdited);
-    socketClient.onMessageDeleted(handleMessageDeleted);
-
-    // Cleanup on unmount
-    return () => {
-      socketClient.leaveConversation(conversationId);
-      socketClient.off('new_message', handleNewMessage);
-      socketClient.off('message_edited', handleMessageEdited);
-      socketClient.off('message_deleted', handleMessageDeleted);
-    };
-  }, [conversationId]);
+  // WebSocket: TEMPORARILY DISABLED - Using polling fallback
+  // TODO: Re-enable once WebSocket connection is fixed on Railway
+  // useEffect(() => {
+  //   if (!conversationId) return;
+  //   socketClient.joinConversation(conversationId);
+  //   ...
+  // }, [conversationId]);
 
   return {
     messages,
