@@ -41,17 +41,22 @@ export function useMessages(
     setError(null);
 
     try {
+      console.log('[useMessages] Fetching messages for conversation:', conversationId);
       const response = await messageService.getConversationMessages(
         conversationId,
         { limit }
       );
 
-      setMessages(response.data);
+      console.log('[useMessages] Received response:', response);
+      console.log('[useMessages] Messages count:', response.data?.length);
+      console.log('[useMessages] First message:', response.data?.[0]);
+
+      setMessages(response.data || []);
       setHasMore(response.pagination?.has_more ?? false);
       setCursor(response.pagination?.next_cursor ?? undefined);
     } catch (err) {
       setError(err as Error);
-      console.error('Failed to load messages:', err);
+      console.error('[useMessages] Failed to load messages:', err);
     } finally {
       setLoading(false);
     }
