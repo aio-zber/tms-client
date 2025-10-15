@@ -79,17 +79,20 @@ export async function getConversationMessages(
   conversationId: string,
   params?: {
     limit?: number;
-    offset?: number;
-    before?: string;
-    after?: string;
+    cursor?: string;
   }
 ): Promise<MessageListResponse> {
+  const queryParams: Record<string, any> = {
+    limit: params?.limit || 50,
+  };
+
+  if (params?.cursor) {
+    queryParams.cursor = params.cursor;
+  }
+
   return apiClient.get<MessageListResponse>(
-    `${BASE_PATH}/`,
-    {
-      conversation_id: conversationId,
-      ...params
-    }
+    `${BASE_PATH}/conversations/${conversationId}/messages`,
+    queryParams
   );
 }
 
