@@ -12,3 +12,6 @@ export * from './hooks';
 
 // Components
 export { default as MessageSearchDialog } from './components/MessageSearchDialog';
+export { MessageBubble } from './components/MessageBubble';
+export { MessageInput } from './components/MessageInput';
+export { MessageList } from './components/MessageList';

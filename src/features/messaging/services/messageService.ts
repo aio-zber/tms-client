@@ -85,8 +85,11 @@ export async function getConversationMessages(
   }
 ): Promise<MessageListResponse> {
   return apiClient.get<MessageListResponse>(
-    `${BASE_PATH}/conversations/${conversationId}/messages`,
-    params
+    `${BASE_PATH}/`,
+    {
+      conversation_id: conversationId,
+      ...params
+    }
   );
 }
 

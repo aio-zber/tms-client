@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { ConversationListItem } from '@/components/chat/ConversationListItem';
-import { userService } from '@/features/users/services/userService';
+import { conversationService } from '@/features/conversations/services/conversationService';
 import { Search, MessageSquarePlus, Filter } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import NewConversationDialog from '@/features/conversations/components/NewConversationDialog';
@@ -20,51 +20,19 @@ export function CenterPanel() {
   // Extract conversation ID from pathname
   const activeConversationId = pathname.split('/').pop();
 
-  // Load conversations from TMS API or backend
+  // Load conversations from backend API
   useEffect(() => {
     const loadConversations = async () => {
       try {
-        // For now, since this is TMS integration, we'll create placeholder conversations
-        // In a real implementation, you'd have a conversations API endpoint
-        const result = await userService.searchUsers({ query: '', limit: 10 });
-        const users = result;
-        
-        // Get current user ID first
-        const currentUserId = await getCurrentUserId();
-        
-        // Create conversation objects from TMS users for demo
-        const userConversations: Conversation[] = users
-          .filter(user => user.id !== currentUserId) // Don't include current user
-          .slice(0, 5) // Limit to 5 conversations
-          .map(user => ({
-            id: `conv-${user.id}`,
-            type: 'dm' as const,
-            name: user.name || `${user.firstName} ${user.lastName}`.trim() || user.email,
-            avatarUrl: user.image,
-            members: [
-              {
-                userId: user.id,
-                role: 'member' as const,
-                joinedAt: new Date().toISOString(),
-                lastReadAt: new Date().toISOString(),
-              }
-            ],
-            lastMessage: {
-              content: 'Start a conversation...',
-              senderId: user.id,
-              timestamp: new Date().toISOString(),
-            },
-            unreadCount: 0,
-            isMuted: false,
-            createdBy: user.id,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          }));
-
-        setConversations(userConversations);
+        setLoading(true);
+        const response = await conversationService.getConversations({
+          limit: 50,
+          offset: 0,
+        });
+        setConversations(response.conversations || []);
       } catch (error) {
         console.error('Failed to load conversations:', error);
-        setConversations([]); // Fallback to empty list
+        setConversations([]);
       } finally {
         setLoading(false);
       }
@@ -73,15 +41,22 @@ export function CenterPanel() {
     loadConversations();
   }, []);
 
-  // Helper function to get current user ID
-  const getCurrentUserId = async () => {
-    try {
-      const currentUser = await userService.getCurrentUser();
-      return currentUser.id;
-    } catch {
-      return null;
-    }
-  };
+  // Refresh conversations every 5 seconds
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const response = await conversationService.getConversations({
+          limit: 50,
+          offset: 0,
+        });
+        setConversations(response.conversations || []);
+      } catch (error) {
+        console.error('Failed to refresh conversations:', error);
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Filter conversations based on search
   const filteredConversations = conversations.filter((conv) =>
