@@ -91,9 +91,12 @@ export interface SearchMessagesRequest {
 }
 
 export interface MessageListResponse {
-  messages: Message[];
-  total?: number;
-  has_more?: boolean;
+  data: Message[];
+  pagination?: {
+    next_cursor?: string;
+    has_more?: boolean;
+    limit?: number;
+  };
 }
 
 export interface UnreadCountResponse {

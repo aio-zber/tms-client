@@ -32,7 +32,7 @@ export function useMessages(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [hasMore, setHasMore] = useState(true);
-  const [offset, setOffset] = useState(0);
+  const [cursor, setCursor] = useState<string | undefined>(undefined);
 
   const loadMessages = useCallback(async () => {
     if (!conversationId) return;
@@ -43,12 +43,12 @@ export function useMessages(
     try {
       const response = await messageService.getConversationMessages(
         conversationId,
-        { limit, offset: 0 }
+        { limit }
       );
 
-      setMessages(response.messages);
-      setHasMore(response.has_more ?? false);
-      setOffset(response.messages.length);
+      setMessages(response.data);
+      setHasMore(response.pagination?.has_more ?? false);
+      setCursor(response.pagination?.next_cursor ?? undefined);
     } catch (err) {
       setError(err as Error);
       console.error('Failed to load messages:', err);
@@ -58,7 +58,7 @@ export function useMessages(
   }, [conversationId, limit]);
 
   const loadMore = useCallback(async () => {
-    if (!conversationId || !hasMore || loading) return;
+    if (!conversationId || !hasMore || loading || !cursor) return;
 
     setLoading(true);
     setError(null);
@@ -66,22 +66,22 @@ export function useMessages(
     try {
       const response = await messageService.getConversationMessages(
         conversationId,
-        { limit, offset }
+        { limit, cursor }
       );
 
-      setMessages((prev) => [...prev, ...response.messages]);
-      setHasMore(response.has_more ?? false);
-      setOffset((prev) => prev + response.messages.length);
+      setMessages((prev) => [...prev, ...response.data]);
+      setHasMore(response.pagination?.has_more ?? false);
+      setCursor(response.pagination?.next_cursor ?? undefined);
     } catch (err) {
       setError(err as Error);
       console.error('Failed to load more messages:', err);
     } finally {
       setLoading(false);
     }
-  }, [conversationId, limit, offset, hasMore, loading]);
+  }, [conversationId, limit, cursor, hasMore, loading]);
 
   const refresh = useCallback(async () => {
-    setOffset(0);
+    setCursor(undefined);
     await loadMessages();
   }, [loadMessages]);
 
