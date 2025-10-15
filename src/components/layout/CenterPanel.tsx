@@ -188,7 +188,7 @@ export function CenterPanel() {
         onOpenChange={setShowNewConversation}
         onSuccess={(conversationId) => {
           // Navigate to the new conversation
-          window.location.href = `/messages/${conversationId}`;
+          window.location.href = `/chats/${conversationId}`;
         }}
       />
     </div>
