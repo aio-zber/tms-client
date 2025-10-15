@@ -13,6 +13,7 @@ import { MessageInput } from '@/features/messaging/components/MessageInput';
 import { useMessages } from '@/features/messaging/hooks/useMessages';
 import { useSendMessage } from '@/features/messaging/hooks/useSendMessage';
 import { useMessageActions } from '@/features/messaging/hooks/useMessageActions';
+import { useSocket } from '@/hooks/useSocket';
 import { conversationService } from '@/features/conversations/services/conversationService';
 import { userService } from '@/features/users/services/userService';
 import type { Conversation, Message } from '@/types';
@@ -42,6 +43,7 @@ export default function ChatPage({ params }: ChatPageProps) {
   const { messages, loading, hasMore, loadMore, refresh } = useMessages(conversationId);
   const { sendMessage, sending } = useSendMessage();
   const { editMessage, deleteMessage } = useMessageActions();
+  const { isConnected } = useSocket(); // Initialize WebSocket connection
 
   // Load conversation details
   useEffect(() => {
@@ -74,15 +76,6 @@ export default function ChatPage({ params }: ChatPageProps) {
     loadCurrentUser();
   }, []);
 
-  // Real-time polling (every 3 seconds)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      refresh();
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [refresh]);
-
   const handleSendMessage = async (content: string, replyToId?: string) => {
     const message = await sendMessage({
       conversation_id: conversationId,
@@ -93,7 +86,7 @@ export default function ChatPage({ params }: ChatPageProps) {
 
     if (message) {
       setReplyToMessage(undefined);
-      refresh();
+      // No need to refresh - WebSocket will push the new message
     }
   };
 
@@ -102,20 +95,20 @@ export default function ChatPage({ params }: ChatPageProps) {
       const newContent = prompt('Edit message:');
       if (newContent && newContent.trim()) {
         await editMessage(messageId, { content: newContent.trim() });
-        refresh();
+        // No need to refresh - WebSocket will push the edit
       }
     },
-    [editMessage, refresh]
+    [editMessage]
   );
 
   const handleDeleteMessage = useCallback(
     async (messageId: string) => {
       if (confirm('Are you sure you want to delete this message?')) {
         await deleteMessage(messageId);
-        refresh();
+        // No need to refresh - WebSocket will push the deletion
       }
     },
-    [deleteMessage, refresh]
+    [deleteMessage]
   );
 
   const handleReply = (message: Message) => {
