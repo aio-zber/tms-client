@@ -120,20 +120,21 @@ class UserService {
       }>>('/users', queryParams);
 
       // Transform backend UserResponse to UserSearchResult format
+      // Convert null to undefined for TypeScript compatibility
       return backendUsers.map((user) => ({
         id: user.id, // Local database UUID (use this for conversations!)
         tmsUserId: user.tms_user_id,
         email: user.email,
-        username: user.username,
+        username: user.username ?? undefined,
         name: user.display_name || user.name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email,
-        firstName: user.first_name,
-        lastName: user.last_name,
-        image: user.image,
-        positionTitle: user.position_title,
-        division: user.division,
-        department: user.department,
-        section: user.section,
-        customTeam: user.custom_team,
+        firstName: user.first_name ?? undefined,
+        lastName: user.last_name ?? undefined,
+        image: user.image ?? undefined,
+        positionTitle: user.position_title ?? undefined,
+        division: user.division ?? undefined,
+        department: user.department ?? undefined,
+        section: user.section ?? undefined,
+        customTeam: user.custom_team ?? undefined,
         isActive: user.is_active,
       }));
     } catch (error) {
