@@ -44,10 +44,10 @@ export function MessageList({
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
-  const previousMessageCountRef = useRef(messages.length);
+  const previousMessageCountRef = useRef(messages?.length || 0);
 
   // Group messages by date
-  const groupedMessages: MessageGroup[] = messages.reduce((groups, message) => {
+  const groupedMessages: MessageGroup[] = (messages || []).reduce((groups, message) => {
     const messageDate = new Date(message.createdAt);
     const dateKey = format(messageDate, 'yyyy-MM-dd');
 
@@ -74,21 +74,22 @@ export function MessageList({
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
-    if (autoScroll && messages.length > previousMessageCountRef.current) {
+    const messageCount = messages?.length || 0;
+    if (autoScroll && messageCount > previousMessageCountRef.current) {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-    previousMessageCountRef.current = messages.length;
-  }, [messages.length, autoScroll]);
+    previousMessageCountRef.current = messageCount;
+  }, [messages?.length, autoScroll, messages]);
 
   // Scroll to bottom on initial load
   useEffect(() => {
-    const hasMessages = messages.length > 0;
+    const hasMessages = (messages?.length || 0) > 0;
     if (hasMessages && !loading) {
       setTimeout(() => {
         bottomRef.current?.scrollIntoView({ behavior: 'auto' });
       }, 100);
     }
-  }, [messages.length, loading]);
+  }, [messages?.length, loading]);
 
   // Detect manual scroll
   const handleScroll = () => {
@@ -105,7 +106,7 @@ export function MessageList({
     }
   };
 
-  if (loading && messages.length === 0) {
+  if (loading && (!messages || messages.length === 0)) {
     return (
       <div className="flex-1 flex items-center justify-center bg-gray-50">
         <div className="text-center">
@@ -116,7 +117,7 @@ export function MessageList({
     );
   }
 
-  if (!loading && messages.length === 0) {
+  if (!loading && (!messages || messages.length === 0)) {
     return (
       <div className="flex-1 flex items-center justify-center bg-gray-50">
         <div className="text-center p-6">
