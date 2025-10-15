@@ -3,7 +3,7 @@
  * Centralized HTTP client with authentication and error handling.
  */
 
-import { API_BASE_URL, STORAGE_KEYS } from './constants';
+import { getApiBaseUrl, STORAGE_KEYS } from './constants';
 import { authService } from '@/features/auth/services/authService';
 
 export interface ApiResponse<T> {
@@ -24,10 +24,12 @@ export class ApiError extends Error {
 }
 
 class ApiClient {
-  private baseURL: string;
-
-  constructor(baseURL: string = API_BASE_URL) {
-    this.baseURL = baseURL;
+  /**
+   * Get base URL dynamically at runtime to ensure correct HTTPS usage.
+   * This prevents build-time env var issues in Railway deployments.
+   */
+  private getBaseURL(): string {
+    return getApiBaseUrl();
   }
 
   /**
@@ -103,7 +105,7 @@ class ApiClient {
     endpoint: string,
     params?: Record<string, string | number | boolean | undefined>
   ): Promise<T> {
-    const url = new URL(`${this.baseURL}${endpoint}`);
+    const url = new URL(`${this.getBaseURL()}${endpoint}`);
 
     // Add query parameters
     if (params) {
@@ -127,7 +129,7 @@ class ApiClient {
    * Perform POST request.
    */
   async post<T, D = unknown>(endpoint: string, data?: D): Promise<T> {
-    const response = await fetch(`${this.baseURL}${endpoint}`, {
+    const response = await fetch(`${this.getBaseURL()}${endpoint}`, {
       method: 'POST',
       headers: this.getHeaders(),
       credentials: 'include', // Include session cookies
@@ -141,7 +143,7 @@ class ApiClient {
    * Perform PUT request.
    */
   async put<T, D = unknown>(endpoint: string, data?: D): Promise<T> {
-    const response = await fetch(`${this.baseURL}${endpoint}`, {
+    const response = await fetch(`${this.getBaseURL()}${endpoint}`, {
       method: 'PUT',
       headers: this.getHeaders(),
       credentials: 'include', // Include session cookies
@@ -155,7 +157,7 @@ class ApiClient {
    * Perform PATCH request.
    */
   async patch<T, D = unknown>(endpoint: string, data?: D): Promise<T> {
-    const response = await fetch(`${this.baseURL}${endpoint}`, {
+    const response = await fetch(`${this.getBaseURL()}${endpoint}`, {
       method: 'PATCH',
       headers: this.getHeaders(),
       credentials: 'include', // Include session cookies
@@ -169,7 +171,7 @@ class ApiClient {
    * Perform DELETE request.
    */
   async delete<T>(endpoint: string): Promise<T> {
-    const response = await fetch(`${this.baseURL}${endpoint}`, {
+    const response = await fetch(`${this.getBaseURL()}${endpoint}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
       credentials: 'include', // Include session cookies
@@ -201,7 +203,7 @@ class ApiClient {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${this.baseURL}${endpoint}`, {
+    const response = await fetch(`${this.getBaseURL()}${endpoint}`, {
       method: 'POST',
       headers,
       credentials: 'include', // Include session cookies

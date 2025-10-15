@@ -51,9 +51,6 @@ export const getApiBaseUrl = (): string => {
   return 'https://tms-server-staging.up.railway.app/api/v1';
 };
 
-// For backwards compatibility - but components should call getApiBaseUrl()
-export const API_BASE_URL = getApiBaseUrl();
-
 const getWsUrl = () => {
   const envUrl = process.env.NEXT_PUBLIC_WS_URL;
   const fallbackUrl = 'ws://localhost:8000';
