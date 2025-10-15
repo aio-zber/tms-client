@@ -138,8 +138,9 @@ export default function ChatPage({ params }: ChatPageProps) {
     if (!otherMember) return 'Direct Message';
 
     // Handle different possible field names
-    const userId = otherMember.userId || otherMember.user_id || (otherMember as any).id;
-    return userId ? `User ${userId.toString().slice(0, 8)}` : 'Direct Message';
+    const memberData = otherMember as Record<string, unknown>;
+    const userId = otherMember.userId || memberData.user_id || memberData.id;
+    return userId ? `User ${String(userId).slice(0, 8)}` : 'Direct Message';
   };
 
   if (loadingConversation) {
