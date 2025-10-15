@@ -45,6 +45,12 @@ export default function ChatPage({ params }: ChatPageProps) {
   const { editMessage, deleteMessage } = useMessageActions();
   useSocket(); // Initialize WebSocket connection
 
+  // Debug: Log messages whenever they change
+  useEffect(() => {
+    console.log('[ChatPage] Messages updated:', messages);
+    console.log('[ChatPage] Messages count:', messages?.length);
+  }, [messages]);
+
   // Load conversation details
   useEffect(() => {
     const loadConversation = async () => {
