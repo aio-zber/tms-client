@@ -138,7 +138,7 @@ export default function ChatPage({ params }: ChatPageProps) {
     if (!otherMember) return 'Direct Message';
 
     // Handle different possible field names
-    const memberData = otherMember as Record<string, unknown>;
+    const memberData = otherMember as unknown as Record<string, unknown>;
     const userId = otherMember.userId || memberData.user_id || memberData.id;
     return userId ? `User ${String(userId).slice(0, 8)}` : 'Direct Message';
   };
