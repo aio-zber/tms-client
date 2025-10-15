@@ -4,7 +4,7 @@
  */
 
 import { tmsApi } from '@/lib/tmsApi';
-import { API_BASE_URL } from '@/lib/constants';
+import { getApiBaseUrl } from '@/lib/constants';
 import {
   User,
   UserSearchResult,
@@ -101,7 +101,9 @@ class UserService {
       if (filters?.isActive !== undefined) queryParams.append('is_active', filters.isActive.toString());
 
       // Call backend API which syncs users and returns local IDs
-      const response = await fetch(`${API_BASE_URL}/users?${queryParams.toString()}`, {
+      // Use getApiBaseUrl() function for runtime HTTPS enforcement
+      const apiUrl = getApiBaseUrl();
+      const response = await fetch(`${apiUrl}/users?${queryParams.toString()}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
