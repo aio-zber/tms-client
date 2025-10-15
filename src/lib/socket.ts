@@ -20,7 +20,10 @@ class SocketClient {
       return this.socket;
     }
 
-    this.socket = io(`${SOCKET_URL}/ws`, {
+    // Socket.IO will automatically append /socket.io/ to the path
+    // So if we connect to SOCKET_URL with path: '/ws', it becomes /ws/socket.io/
+    this.socket = io(SOCKET_URL, {
+      path: '/ws/socket.io',
       auth: {
         token,
       },
