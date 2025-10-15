@@ -30,8 +30,45 @@ class UserService {
    */
   async getCurrentUser(): Promise<User> {
     try {
-      const tmsUser = await tmsApi.getCurrentUser();
-      const user = tmsApi.transformTMSUser(tmsUser);
+      // IMPORTANT: Fetch from tms-server backend (NOT TMS directly)
+      // This returns the local UUID that matches message.senderId
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/me`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch current user: ${response.statusText}`);
+      }
+
+      const userData = await response.json();
+
+      // Transform backend response to User format
+      const user: User = {
+        id: userData.id, // Local UUID from tms-server (matches message.senderId!)
+        tmsUserId: userData.tms_user_id,
+        email: userData.email,
+        username: userData.username,
+        firstName: userData.first_name,
+        lastName: userData.last_name,
+        middleName: userData.middle_name,
+        name: userData.name,
+        displayName: userData.display_name || userData.name || `${userData.first_name || ''} ${userData.last_name || ''}`.trim() || userData.email,
+        image: userData.image,
+        role: userData.role,
+        positionTitle: userData.position_title,
+        division: userData.division,
+        department: userData.department,
+        section: userData.section,
+        customTeam: userData.custom_team,
+        hierarchyLevel: userData.hierarchy_level,
+        reportsToId: userData.reports_to_id,
+        isActive: userData.is_active !== false,
+        dateJoined: userData.date_joined,
+        lastLogin: userData.last_login,
+      };
 
       // Cache user in localStorage for quick access
       if (typeof window !== 'undefined') {
