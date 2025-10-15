@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useUserSearch } from '@/features/users/hooks/useUserSearch';
 import { useConversationActions } from '@/features/conversations';
+import { getUserImageUrl } from '@/lib/imageUtils';
 import toast from 'react-hot-toast';
 
 interface NewConversationDialogProps {
@@ -234,7 +235,7 @@ export default function NewConversationDialog({
                       }`}
                     >
                       <Avatar className="w-10 h-10">
-                        <AvatarImage src={user.image} />
+                        <AvatarImage src={getUserImageUrl(user.image)} />
                         <AvatarFallback className="bg-viber-purple text-white">
                           {getInitials(user.name || user.email)}
                         </AvatarFallback>
