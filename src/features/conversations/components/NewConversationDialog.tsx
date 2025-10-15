@@ -87,7 +87,8 @@ export default function NewConversationDialog({
       }
     } catch (error) {
       console.error('Error creating conversation:', error);
-      toast.error('Failed to create conversation');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create conversation';
+      toast.error(errorMessage);
     }
   };
 
