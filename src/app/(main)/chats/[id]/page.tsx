@@ -123,9 +123,9 @@ export default function ChatPage({ params }: ChatPageProps) {
   };
 
   const getUserName = (userId: string): string => {
-    if (!conversation) return 'Unknown';
+    if (!conversation || !conversation.members) return 'Unknown';
     const member = conversation.members.find((m) => m.userId === userId);
-    return member ? `User ${userId.slice(0, 8)}` : 'Unknown';
+    return member ? `User ${userId?.slice(0, 8) || userId}` : 'Unknown';
   };
 
   const getConversationTitle = (): string => {
@@ -133,8 +133,9 @@ export default function ChatPage({ params }: ChatPageProps) {
     if (conversation.type === 'group') return conversation.name || 'Group Chat';
 
     // For DM, show other user's name
+    if (!conversation.members || conversation.members.length === 0) return 'Direct Message';
     const otherMember = conversation.members.find((m) => m.userId !== currentUserId);
-    return otherMember ? `User ${otherMember.userId.slice(0, 8)}` : 'Direct Message';
+    return otherMember ? `User ${otherMember.userId?.slice(0, 8) || otherMember.userId}` : 'Direct Message';
   };
 
   if (loadingConversation) {
