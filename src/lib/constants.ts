@@ -5,8 +5,43 @@
 
 // API Configuration
 export const TMS_API_URL = process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL || 'https://gcgc-team-management-system-staging.up.railway.app';
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-export const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000';
+
+// Ensure HTTPS in production/staging
+const getApiBaseUrl = () => {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+  const fallbackUrl = 'http://localhost:8000/api/v1';
+
+  // If environment variable is set, use it
+  if (envUrl) {
+    // Force HTTPS if the URL contains 'railway.app' (production/staging)
+    if (envUrl.includes('railway.app') && envUrl.startsWith('http://')) {
+      return envUrl.replace('http://', 'https://');
+    }
+    return envUrl;
+  }
+
+  return fallbackUrl;
+};
+
+export const API_BASE_URL = getApiBaseUrl();
+
+const getWsUrl = () => {
+  const envUrl = process.env.NEXT_PUBLIC_WS_URL;
+  const fallbackUrl = 'ws://localhost:8000';
+
+  // If environment variable is set, use it
+  if (envUrl) {
+    // Force WSS if the URL contains 'railway.app' (production/staging)
+    if (envUrl.includes('railway.app') && envUrl.startsWith('ws://')) {
+      return envUrl.replace('ws://', 'wss://');
+    }
+    return envUrl;
+  }
+
+  return fallbackUrl;
+};
+
+export const WS_URL = getWsUrl();
 
 // Environment
 export const IS_DEVELOPMENT = process.env.NEXT_PUBLIC_ENVIRONMENT === 'development';
