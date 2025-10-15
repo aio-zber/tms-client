@@ -4,6 +4,7 @@
  */
 
 import { tmsApi } from '@/lib/tmsApi';
+import { API_BASE_URL } from '@/lib/constants';
 import {
   User,
   UserSearchResult,
@@ -100,7 +101,6 @@ class UserService {
       if (filters?.isActive !== undefined) queryParams.append('is_active', filters.isActive.toString());
 
       // Call backend API which syncs users and returns local IDs
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
       const response = await fetch(`${API_BASE_URL}/users?${queryParams.toString()}`, {
         method: 'GET',
         headers: {
