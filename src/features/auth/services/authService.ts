@@ -69,9 +69,30 @@ class AuthService {
 
       const userData = await userResponse.json();
 
+      // Authenticate with backend server using TMS session
+      // The backend will validate the TMS session via cookies
+      try {
+        const backendAuthResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include', // Send TMS session cookies to backend
+          body: JSON.stringify({
+            token: 'tms-session' // Backend should validate via session cookies
+          }),
+        });
+
+        if (!backendAuthResponse.ok) {
+          console.warn('Backend authentication failed, but TMS login succeeded');
+        }
+      } catch (error) {
+        console.warn('Failed to authenticate with backend:', error);
+      }
+
       // Store session indicator
       this.setSessionActive(true);
-      
+
       return {
         success: true,
         user: {
