@@ -185,6 +185,15 @@ export function MessageList({
             <div className="space-y-2">
               {group.messages.map((message, index) => {
                 const isSent = message.senderId === currentUserId;
+
+                // Debug logging for first message
+                if (index === 0) {
+                  console.log('[MessageList] Message senderId:', message.senderId);
+                  console.log('[MessageList] Current userId:', currentUserId);
+                  console.log('[MessageList] isSent:', isSent);
+                  console.log('[MessageList] Match:', message.senderId === currentUserId);
+                }
+
                 const previousMessage = group.messages[index - 1];
                 const showSender =
                   isGroupChat &&
