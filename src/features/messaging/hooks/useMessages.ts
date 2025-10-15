@@ -1,10 +1,11 @@
 /**
  * useMessages Hook
- * Manages message fetching and state for a conversation
+ * Manages message fetching and state for a conversation with real-time updates
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { messageService } from '../services/messageService';
+import { socketClient } from '@/lib/socket';
 import type { Message } from '@/types/message';
 
 interface UseMessagesOptions {
@@ -90,6 +91,49 @@ export function useMessages(
       loadMessages();
     }
   }, [conversationId, autoLoad, loadMessages]);
+
+  // WebSocket: Join conversation and listen for real-time updates
+  useEffect(() => {
+    if (!conversationId) return;
+
+    // Join conversation room
+    socketClient.joinConversation(conversationId);
+
+    // Listen for new messages
+    const handleNewMessage = (message: Message) => {
+      if (message.conversationId === conversationId) {
+        setMessages((prev) => [message, ...prev]);
+      }
+    };
+
+    // Listen for message edits
+    const handleMessageEdited = (message: Message) => {
+      if (message.conversationId === conversationId) {
+        setMessages((prev) =>
+          prev.map((msg) => (msg.id === message.id ? message : msg))
+        );
+      }
+    };
+
+    // Listen for message deletions
+    const handleMessageDeleted = (data: { conversation_id: string; message_id: string }) => {
+      if (data.conversation_id === conversationId) {
+        setMessages((prev) => prev.filter((msg) => msg.id !== data.message_id));
+      }
+    };
+
+    socketClient.onNewMessage(handleNewMessage);
+    socketClient.onMessageEdited(handleMessageEdited);
+    socketClient.onMessageDeleted(handleMessageDeleted);
+
+    // Cleanup on unmount
+    return () => {
+      socketClient.leaveConversation(conversationId);
+      socketClient.off('new_message', handleNewMessage);
+      socketClient.off('message_edited', handleMessageEdited);
+      socketClient.off('message_deleted', handleMessageDeleted);
+    };
+  }, [conversationId]);
 
   return {
     messages,
