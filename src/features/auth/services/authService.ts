@@ -69,36 +69,56 @@ class AuthService {
 
       const userData = await userResponse.json();
 
-      // Authenticate with backend server
-      // Extract NextAuth session token from cookies if available
-      const sessionToken = this.extractSessionToken();
-
+      // Get JWT token from TMS for cross-domain authentication
+      let jwtToken: string | null = null;
       try {
-        const backendAuthResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/login`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include', // Include cookies for CORS
-          body: JSON.stringify({
-            token: sessionToken || 'session-based-auth',
-            // Send user data as fallback for session-based validation
-            user_id: userData.id,
-            email: userData.email,
-          }),
+        const tokenResponse = await fetch(`${process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL}/api/v1/auth/token`, {
+          credentials: 'include',
         });
 
-        if (backendAuthResponse.ok) {
-          const backendData = await backendAuthResponse.json();
-          console.log('Backend authentication successful:', backendData);
+        if (tokenResponse.ok) {
+          const tokenData = await tokenResponse.json();
+          jwtToken = tokenData.token;
+
+          // Store JWT token in localStorage for API requests
+          if (typeof window !== 'undefined' && jwtToken) {
+            localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, jwtToken);
+          }
+
+          console.log('✅ JWT token obtained from TMS');
         } else {
-          const errorText = await backendAuthResponse.text();
-          console.warn('Backend authentication failed:', errorText);
-          // Continue anyway - user is authenticated with TMS
+          console.warn('⚠️ Failed to get JWT token from TMS:', await tokenResponse.text());
         }
       } catch (error) {
-        console.warn('Failed to authenticate with backend:', error);
-        // Continue anyway - user is authenticated with TMS
+        console.warn('⚠️ Error getting JWT token:', error);
+      }
+
+      // Authenticate with backend server using JWT token
+      if (jwtToken) {
+        try {
+          const backendAuthResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/login`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+            body: JSON.stringify({
+              token: jwtToken,
+            }),
+          });
+
+          if (backendAuthResponse.ok) {
+            const backendData = await backendAuthResponse.json();
+            console.log('✅ Backend authentication successful:', backendData);
+          } else {
+            const errorText = await backendAuthResponse.text();
+            console.warn('⚠️ Backend authentication failed:', errorText);
+          }
+        } catch (error) {
+          console.warn('⚠️ Failed to authenticate with backend:', error);
+        }
+      } else {
+        console.warn('⚠️ No JWT token available - backend authentication skipped');
       }
 
       // Store session indicator
@@ -138,6 +158,8 @@ class AuthService {
     } finally {
       this.setSessionActive(false);
       if (typeof window !== 'undefined') {
+        // Clear all stored auth data
+        localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN); // Clear JWT token
         localStorage.removeItem(STORAGE_KEYS.USER_DATA);
         localStorage.removeItem('tms_session_active');
       }
