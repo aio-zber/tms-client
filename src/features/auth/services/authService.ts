@@ -98,7 +98,7 @@ class AuthService {
         try {
           // Use runtime API URL to ensure HTTPS in production
           const apiBaseUrl = getApiBaseUrl();
-          const authEndpoint = apiBaseUrl.replace('/api/v1', '/auth/login');
+          const authEndpoint = `${apiBaseUrl}/auth/login`;
 
           const backendAuthResponse = await fetch(authEndpoint, {
             method: 'POST',
