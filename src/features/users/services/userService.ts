@@ -4,7 +4,7 @@
  */
 
 import { tmsApi } from '@/lib/tmsApi';
-import { getApiBaseUrl } from '@/lib/constants';
+import { apiClient } from '@/lib/apiClient';
 import {
   User,
   UserSearchResult,
@@ -88,38 +88,20 @@ class UserService {
     const { query, limit = 20, filters } = params;
 
     try {
-      // Build query parameters
-      const queryParams = new URLSearchParams({
+      // Build query parameters object
+      const queryParams: Record<string, string | number | boolean> = {
         q: query,
-        limit: limit.toString(),
-      });
+        limit: limit,
+      };
 
       // Add optional filters
-      if (filters?.division) queryParams.append('division', filters.division);
-      if (filters?.department) queryParams.append('department', filters.department);
-      if (filters?.role) queryParams.append('role', filters.role);
-      if (filters?.isActive !== undefined) queryParams.append('is_active', filters.isActive.toString());
+      if (filters?.division) queryParams.division = filters.division;
+      if (filters?.department) queryParams.department = filters.department;
+      if (filters?.role) queryParams.role = filters.role;
+      if (filters?.isActive !== undefined) queryParams.is_active = filters.isActive;
 
-      // Call backend API which syncs users and returns local IDs
-      // Use getApiBaseUrl() function for runtime HTTPS enforcement
-      const apiUrl = getApiBaseUrl();
-      const response = await fetch(`${apiUrl}/users?${queryParams.toString()}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('auth_token') : ''}`,
-        },
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        throw new Error(`User search failed: ${response.statusText}`);
-      }
-
-      const backendUsers = await response.json();
-
-      // Transform backend UserResponse to UserSearchResult format
-      return backendUsers.map((user: {
+      // Call backend API using centralized apiClient (handles HTTPS automatically)
+      const backendUsers = await apiClient.get<Array<{
         id: string;
         tms_user_id: string;
         email: string;
@@ -135,7 +117,10 @@ class UserService {
         section: string | null;
         custom_team: string | null;
         is_active: boolean;
-      }) => ({
+      }>>('/users', queryParams);
+
+      // Transform backend UserResponse to UserSearchResult format
+      return backendUsers.map((user) => ({
         id: user.id, // Local database UUID (use this for conversations!)
         tmsUserId: user.tms_user_id,
         email: user.email,
