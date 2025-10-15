@@ -29,6 +29,8 @@ export function CenterPanel() {
           limit: 50,
           offset: 0,
         });
+        console.log('[CenterPanel] API Response:', response);
+        console.log('[CenterPanel] Conversations data:', response.data);
         setConversations(response.data || []);
       } catch (error) {
         console.error('Failed to load conversations:', error);
@@ -59,9 +61,23 @@ export function CenterPanel() {
   }, []);
 
   // Filter conversations based on search
-  const filteredConversations = conversations.filter((conv) =>
-    conv.name?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // For DMs without names, we still want to show them when no search query
+  const filteredConversations = conversations.filter((conv) => {
+    if (!searchQuery) return true; // Show all when no search
+
+    // Search by conversation name (for groups)
+    if (conv.name?.toLowerCase().includes(searchQuery.toLowerCase())) {
+      return true;
+    }
+
+    // For DMs, search by member names or user IDs
+    // TODO: Once we have user names enriched, search by those
+    return false;
+  });
+
+  console.log('[CenterPanel] Conversations:', conversations.length);
+  console.log('[CenterPanel] Filtered:', filteredConversations.length);
+  console.log('[CenterPanel] Conversations data:', conversations);
 
   return (
     <div className="h-full flex flex-col">
