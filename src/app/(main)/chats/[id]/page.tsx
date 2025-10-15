@@ -7,7 +7,7 @@
 
 import { use, useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, MoreVertical, Phone, Video, Loader2 } from 'lucide-react';
+import { ArrowLeft, MoreVertical, Loader2 } from 'lucide-react';
 import { MessageList } from '@/features/messaging/components/MessageList';
 import { MessageInput } from '@/features/messaging/components/MessageInput';
 import { useMessages } from '@/features/messaging/hooks/useMessages';
@@ -211,19 +211,6 @@ export default function ChatPage({ params }: ChatPageProps) {
         </div>
 
         <div className="flex items-center gap-1">
-          <button
-            className="p-2 hover:bg-gray-100 rounded-full transition"
-            title="Voice call (coming soon)"
-          >
-            <Phone className="w-5 h-5 text-gray-600" />
-          </button>
-          <button
-            className="p-2 hover:bg-gray-100 rounded-full transition"
-            title="Video call (coming soon)"
-          >
-            <Video className="w-5 h-5 text-gray-600" />
-          </button>
-
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="p-2 hover:bg-gray-100 rounded-full transition">
