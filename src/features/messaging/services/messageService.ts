@@ -82,7 +82,7 @@ export async function getConversationMessages(
     cursor?: string;
   }
 ): Promise<MessageListResponse> {
-  const queryParams: Record<string, any> = {
+  const queryParams: Record<string, string | number> = {
     limit: params?.limit || 50,
   };
 
