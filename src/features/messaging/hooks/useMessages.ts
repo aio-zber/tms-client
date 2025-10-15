@@ -1,11 +1,10 @@
 /**
  * useMessages Hook
- * Manages message fetching and state for a conversation with real-time updates
+ * Manages message fetching and state for a conversation
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { messageService } from '../services/messageService';
-// import { socketClient } from '@/lib/socket'; // Temporarily disabled
 import type { Message } from '@/types/message';
 
 interface UseMessagesOptions {
