@@ -127,8 +127,19 @@ export default function ChatPage({ params }: ChatPageProps) {
 
     // For DM, show other user's name
     if (!conversation.members || conversation.members.length === 0) return 'Direct Message';
+
+    // Debug log
+    console.log('Conversation members:', conversation.members);
+    console.log('Current user ID:', currentUserId);
+
     const otherMember = conversation.members.find((m) => m.userId !== currentUserId);
-    return otherMember ? `User ${otherMember.userId?.slice(0, 8) || otherMember.userId}` : 'Direct Message';
+    console.log('Other member:', otherMember);
+
+    if (!otherMember) return 'Direct Message';
+
+    // Handle different possible field names
+    const userId = otherMember.userId || otherMember.user_id || (otherMember as any).id;
+    return userId ? `User ${userId.toString().slice(0, 8)}` : 'Direct Message';
   };
 
   if (loadingConversation) {
