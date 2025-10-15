@@ -29,7 +29,7 @@ export function CenterPanel() {
           limit: 50,
           offset: 0,
         });
-        setConversations(response.conversations || []);
+        setConversations(response.data || []);
       } catch (error) {
         console.error('Failed to load conversations:', error);
         setConversations([]);
@@ -49,7 +49,7 @@ export function CenterPanel() {
           limit: 50,
           offset: 0,
         });
-        setConversations(response.conversations || []);
+        setConversations(response.data || []);
       } catch (error) {
         console.error('Failed to refresh conversations:', error);
       }
