@@ -4,17 +4,17 @@
  */
 
 import { useEffect, useState } from 'react';
-import { useSession } from 'next-auth/react';
 import { socketClient } from '@/lib/socket';
 
 export function useSocket() {
-  const { data: session, status } = useSession();
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    // Only connect if user is authenticated
-    if (status === 'authenticated' && session?.accessToken) {
-      const socket = socketClient.connect(session.accessToken as string);
+    // Get auth token from localStorage (same as apiClient)
+    const token = localStorage.getItem('auth_token');
+
+    if (token) {
+      const socket = socketClient.connect(token);
 
       const handleConnect = () => {
         setIsConnected(true);
@@ -35,12 +35,12 @@ export function useSocket() {
         socket.off('connect', handleConnect);
         socket.off('disconnect', handleDisconnect);
       };
-    } else if (status === 'unauthenticated') {
-      // Disconnect if user logs out
+    } else {
+      // No token - disconnect
       socketClient.disconnect();
       setIsConnected(false);
     }
-  }, [status, session?.accessToken]);
+  }, []); // Connect once on mount
 
   return {
     socket: socketClient.getSocket(),
