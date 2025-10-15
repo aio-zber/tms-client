@@ -4,7 +4,7 @@
  * Uses session-based authentication
  */
 
-import { STORAGE_KEYS } from '@/lib/constants';
+import { STORAGE_KEYS, getApiBaseUrl } from '@/lib/constants';
 
 export interface LoginCredentials {
   email: string;
@@ -96,7 +96,11 @@ class AuthService {
       // Authenticate with backend server using JWT token
       if (jwtToken) {
         try {
-          const backendAuthResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/login`, {
+          // Use runtime API URL to ensure HTTPS in production
+          const apiBaseUrl = getApiBaseUrl();
+          const authEndpoint = apiBaseUrl.replace('/api/v1', '/auth/login');
+
+          const backendAuthResponse = await fetch(authEndpoint, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

@@ -9,30 +9,45 @@ export const TMS_API_URL = process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL || 'h
 // RUNTIME API URL - bypasses Next.js build-time env var issues
 // This function is called at runtime, not build time
 export const getApiBaseUrl = (): string => {
-  // Client-side: check window.location
+  // Client-side: check window.location for dynamic detection
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
 
-    // If we're on Railway (production/staging)
+    // If we're on Railway (production/staging) - force HTTPS
     if (hostname.includes('railway.app')) {
       return 'https://tms-server-staging.up.railway.app/api/v1';
     }
 
     // Local development
-    return 'http://localhost:8000/api/v1';
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:8000/api/v1';
+    }
+
+    // Custom domain or unknown - try env var
+    const envUrl = process.env.NEXT_PUBLIC_API_URL;
+    if (envUrl) {
+      // Ensure HTTPS for production domains
+      if (envUrl.includes('railway.app') && envUrl.startsWith('http://')) {
+        return envUrl.replace(/^http:/, 'https:');
+      }
+      return envUrl;
+    }
+
+    // Final fallback for client-side
+    return 'https://tms-server-staging.up.railway.app/api/v1';
   }
 
-  // Server-side: try env var first, then fallback
+  // Server-side: try env var first
   const envUrl = process.env.NEXT_PUBLIC_API_URL;
   if (envUrl) {
-    // Fix HTTP to HTTPS for railway.app domains
-    if (envUrl.includes('railway.app') && !envUrl.startsWith('https://')) {
+    // Ensure HTTPS for railway.app domains
+    if (envUrl.includes('railway.app') && envUrl.startsWith('http://')) {
       return envUrl.replace(/^http:/, 'https:');
     }
     return envUrl;
   }
 
-  // SSR fallback - assume production if no env var
+  // SSR fallback - assume production Railway deployment
   return 'https://tms-server-staging.up.railway.app/api/v1';
 };
 
