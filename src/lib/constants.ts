@@ -6,23 +6,37 @@
 // API Configuration
 export const TMS_API_URL = process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL || 'https://gcgc-team-management-system-staging.up.railway.app';
 
-// Ensure HTTPS in production/staging
-const getApiBaseUrl = () => {
-  const envUrl = process.env.NEXT_PUBLIC_API_URL;
-  const fallbackUrl = 'http://localhost:8000/api/v1';
+// RUNTIME API URL - bypasses Next.js build-time env var issues
+// This function is called at runtime, not build time
+export const getApiBaseUrl = (): string => {
+  // Client-side: check window.location
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
 
-  // If environment variable is set, use it
+    // If we're on Railway (production/staging)
+    if (hostname.includes('railway.app')) {
+      return 'https://tms-server-staging.up.railway.app/api/v1';
+    }
+
+    // Local development
+    return 'http://localhost:8000/api/v1';
+  }
+
+  // Server-side: try env var first, then fallback
+  const envUrl = process.env.NEXT_PUBLIC_API_URL;
   if (envUrl) {
-    // Force HTTPS if the URL contains 'railway.app' (production/staging)
-    if (envUrl.includes('railway.app') && envUrl.startsWith('http://')) {
-      return envUrl.replace('http://', 'https://');
+    // Fix HTTP to HTTPS for railway.app domains
+    if (envUrl.includes('railway.app') && !envUrl.startsWith('https://')) {
+      return envUrl.replace(/^http:/, 'https:');
     }
     return envUrl;
   }
 
-  return fallbackUrl;
+  // SSR fallback - assume production if no env var
+  return 'https://tms-server-staging.up.railway.app/api/v1';
 };
 
+// For backwards compatibility - but components should call getApiBaseUrl()
 export const API_BASE_URL = getApiBaseUrl();
 
 const getWsUrl = () => {
