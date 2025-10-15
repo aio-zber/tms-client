@@ -65,7 +65,10 @@ export interface UpdateConversationSettingsRequest {
 }
 
 export interface ConversationListResponse {
-  conversations: Conversation[];
-  total?: number;
-  has_more?: boolean;
+  data: Conversation[];
+  pagination: {
+    next_cursor?: string;
+    has_more: boolean;
+    limit: number;
+  };
 }
