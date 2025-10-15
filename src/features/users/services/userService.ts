@@ -1,10 +1,10 @@
 /**
  * User Service
- * Handles all user-related API calls to the TMS backend.
+ * Handles all user-related API calls.
+ * All user data comes from GCGC Team Management System.
  */
 
 import { tmsApi } from '@/lib/tmsApi';
-import { apiClient } from '@/lib/apiClient';
 import {
   User,
   UserSearchResult,
@@ -72,7 +72,7 @@ class UserService {
 
   /**
    * Search users by query with optional filters.
-   * Uses TMS-client backend API which syncs users from GCGC TMS.
+   * Searches directly from GCGC Team Management System API.
    *
    * @param params Search parameters (query, filters, limit)
    * @returns Promise<UserSearchResult[]> List of matching users
@@ -85,60 +85,32 @@ class UserService {
    * });
    */
   async searchUsers(params: UserSearchParams): Promise<UserSearchResult[]> {
-    const { query, limit = 20, filters } = params;
+    const { query, limit = 20 } = params;
 
     try {
-      // Build query parameters object
-      const queryParams: Record<string, string | number | boolean> = {
-        q: query,
-        limit: limit,
-      };
+      // Search users directly from Team Management System
+      const tmsUsers = await tmsApi.searchUsers(query, limit);
 
-      // Add optional filters
-      if (filters?.division) queryParams.division = filters.division;
-      if (filters?.department) queryParams.department = filters.department;
-      if (filters?.role) queryParams.role = filters.role;
-      if (filters?.isActive !== undefined) queryParams.is_active = filters.isActive;
-
-      // Call backend API using centralized apiClient (handles HTTPS automatically)
-      const backendUsers = await apiClient.get<Array<{
-        id: string;
-        tms_user_id: string;
-        email: string;
-        username: string | null;
-        first_name: string | null;
-        last_name: string | null;
-        display_name: string;
-        name: string | null;
-        image: string | null;
-        position_title: string | null;
-        division: string | null;
-        department: string | null;
-        section: string | null;
-        custom_team: string | null;
-        is_active: boolean;
-      }>>('/users', queryParams);
-
-      // Transform backend UserResponse to UserSearchResult format
-      // Convert null to undefined for TypeScript compatibility
-      return backendUsers.map((user) => ({
-        id: user.id, // Local database UUID (use this for conversations!)
-        tmsUserId: user.tms_user_id,
-        email: user.email,
-        username: user.username ?? undefined,
-        name: user.display_name || user.name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email,
-        firstName: user.first_name ?? undefined,
-        lastName: user.last_name ?? undefined,
-        image: user.image ?? undefined,
-        positionTitle: user.position_title ?? undefined,
-        division: user.division ?? undefined,
-        department: user.department ?? undefined,
-        section: user.section ?? undefined,
-        customTeam: user.custom_team ?? undefined,
-        isActive: user.is_active,
+      // Transform TMS users to UserSearchResult format
+      // Note: TMS users don't have local UUIDs yet - they'll be created when a conversation starts
+      return tmsUsers.map((tmsUser) => ({
+        id: tmsUser.id, // TMS user ID (will be synced to backend when conversation is created)
+        tmsUserId: tmsUser.id,
+        email: tmsUser.email,
+        username: tmsUser.username,
+        name: tmsUser.displayName || tmsUser.name || `${tmsUser.firstName || ''} ${tmsUser.lastName || ''}`.trim() || tmsUser.email,
+        firstName: tmsUser.firstName,
+        lastName: tmsUser.lastName,
+        image: tmsUser.image,
+        positionTitle: tmsUser.positionTitle,
+        division: tmsUser.division,
+        department: tmsUser.department,
+        section: tmsUser.section,
+        customTeam: tmsUser.customTeam,
+        isActive: tmsUser.isActive,
       }));
     } catch (error) {
-      console.error('Failed to search users:', error);
+      console.error('Failed to search users from Team Management System:', error);
       throw error;
     }
   }
