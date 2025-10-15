@@ -73,6 +73,8 @@ export default function ChatPage({ params }: ChatPageProps) {
     const loadCurrentUser = async () => {
       try {
         const user = await userService.getCurrentUser();
+        console.log('[ChatPage] Current user:', user);
+        console.log('[ChatPage] Current user ID:', user.id);
         setCurrentUserId(user.id);
       } catch (error) {
         console.error('Failed to load current user:', error);
