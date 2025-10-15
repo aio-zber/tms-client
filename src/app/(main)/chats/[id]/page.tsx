@@ -84,14 +84,8 @@ export default function ChatPage({ params }: ChatPageProps) {
     loadCurrentUser();
   }, []);
 
-  // Polling fallback (every 3 seconds) until WebSocket is fixed
-  useEffect(() => {
-    const interval = setInterval(() => {
-      refresh();
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [refresh]);
+  // WebSocket is now enabled - no need for polling fallback
+  // Real-time updates are handled by useMessages hook via WebSocket
 
   const handleSendMessage = async (content: string, replyToId?: string) => {
     const message = await sendMessage({

@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { messageService } from '../services/messageService';
+import { socketClient } from '@/lib/socket';
 import type { Message } from '@/types/message';
 
 interface UseMessagesOptions {
@@ -96,13 +97,47 @@ export function useMessages(
     }
   }, [conversationId, autoLoad, loadMessages]);
 
-  // WebSocket: TEMPORARILY DISABLED - Using polling fallback
-  // TODO: Re-enable once WebSocket connection is fixed on Railway
-  // useEffect(() => {
-  //   if (!conversationId) return;
-  //   socketClient.joinConversation(conversationId);
-  //   ...
-  // }, [conversationId]);
+  // WebSocket: Real-time message updates
+  useEffect(() => {
+    if (!conversationId) return;
+
+    // Join conversation room
+    socketClient.joinConversation(conversationId);
+
+    // Listen for new messages
+    const handleNewMessage = (message: Record<string, unknown>) => {
+      console.log('[useMessages] New message received via WebSocket:', message);
+      setMessages((prev) => [...prev, message as Message]);
+    };
+
+    // Listen for message edits
+    const handleMessageEdited = (updatedMessage: Record<string, unknown>) => {
+      console.log('[useMessages] Message edited via WebSocket:', updatedMessage);
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === (updatedMessage.id as string) ? (updatedMessage as Message) : msg
+        )
+      );
+    };
+
+    // Listen for message deletions
+    const handleMessageDeleted = (data: Record<string, unknown>) => {
+      console.log('[useMessages] Message deleted via WebSocket:', data);
+      setMessages((prev) => prev.filter((msg) => msg.id !== (data.message_id as string)));
+    };
+
+    socketClient.onNewMessage(handleNewMessage);
+    socketClient.onMessageEdited(handleMessageEdited);
+    socketClient.onMessageDeleted(handleMessageDeleted);
+
+    // Cleanup
+    return () => {
+      socketClient.leaveConversation(conversationId);
+      socketClient.off('new_message', handleNewMessage);
+      socketClient.off('message_edited', handleMessageEdited);
+      socketClient.off('message_deleted', handleMessageDeleted);
+    };
+  }, [conversationId]);
 
   return {
     messages,
