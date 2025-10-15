@@ -38,8 +38,8 @@ export function useSearchMessages(): UseSearchMessagesReturn {
           ...filters,
         });
 
-        setResults(response.messages);
-        setHasMore(response.has_more ?? false);
+        setResults(response.data);
+        setHasMore(response.pagination?.has_more ?? false);
       } catch (err) {
         setError(err as Error);
         console.error('Failed to search messages:', err);
