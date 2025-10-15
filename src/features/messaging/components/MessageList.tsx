@@ -48,7 +48,12 @@ export function MessageList({
 
   // Group messages by date
   const groupedMessages: MessageGroup[] = (messages || []).reduce((groups, message) => {
+    // Validate date before formatting
+    if (!message.createdAt) return groups;
+
     const messageDate = new Date(message.createdAt);
+    if (isNaN(messageDate.getTime())) return groups; // Skip invalid dates
+
     const dateKey = format(messageDate, 'yyyy-MM-dd');
 
     const existingGroup = groups.find((g) => g.date === dateKey);
@@ -66,10 +71,16 @@ export function MessageList({
 
   // Format date label
   const formatDateLabel = (dateString: string): string => {
-    const date = new Date(dateString);
-    if (isToday(date)) return 'Today';
-    if (isYesterday(date)) return 'Yesterday';
-    return format(date, 'MMMM d, yyyy');
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'Unknown date';
+
+      if (isToday(date)) return 'Today';
+      if (isYesterday(date)) return 'Yesterday';
+      return format(date, 'MMMM d, yyyy');
+    } catch {
+      return 'Unknown date';
+    }
   };
 
   // Auto-scroll to bottom on new messages
