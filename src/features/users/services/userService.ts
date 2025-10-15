@@ -71,7 +71,7 @@ class UserService {
 
   /**
    * Search users by query with optional filters.
-   * Uses GCGC Team Management System API with authentication.
+   * Uses TMS-client backend API which syncs users from GCGC TMS.
    *
    * @param params Search parameters (query, filters, limit)
    * @returns Promise<UserSearchResult[]> List of matching users
@@ -84,28 +84,54 @@ class UserService {
    * });
    */
   async searchUsers(params: UserSearchParams): Promise<UserSearchResult[]> {
-    const { query, limit = 20 } = params;
+    const { query, limit = 20, filters } = params;
 
     try {
-      // Use tmsApi which includes proper authentication
-      const tmsUsers = await tmsApi.searchUsers(query, limit);
+      // Build query parameters
+      const queryParams = new URLSearchParams({
+        q: query,
+        limit: limit.toString(),
+      });
 
-      // Transform TMS users to UserSearchResult format
-      return tmsUsers.map(tmsUser => ({
-        id: tmsUser.id,
-        tmsUserId: tmsUser.id,
-        email: tmsUser.email,
-        username: tmsUser.username,
-        name: tmsUser.displayName || tmsUser.name || `${tmsUser.firstName || ''} ${tmsUser.lastName || ''}`.trim(),
-        firstName: tmsUser.firstName,
-        lastName: tmsUser.lastName,
-        image: tmsUser.image,
-        positionTitle: tmsUser.positionTitle,
-        division: tmsUser.division,
-        department: tmsUser.department,
-        section: tmsUser.section,
-        customTeam: tmsUser.customTeam,
-        isActive: tmsUser.isActive,
+      // Add optional filters
+      if (filters?.division) queryParams.append('division', filters.division);
+      if (filters?.department) queryParams.append('department', filters.department);
+      if (filters?.role) queryParams.append('role', filters.role);
+      if (filters?.isActive !== undefined) queryParams.append('is_active', filters.isActive.toString());
+
+      // Call backend API which syncs users and returns local IDs
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
+      const response = await fetch(`${API_BASE_URL}/users?${queryParams.toString()}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('auth_token') : ''}`,
+        },
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error(`User search failed: ${response.statusText}`);
+      }
+
+      const backendUsers = await response.json();
+
+      // Transform backend UserResponse to UserSearchResult format
+      return backendUsers.map((user: any) => ({
+        id: user.id, // Local database UUID (use this for conversations!)
+        tmsUserId: user.tms_user_id,
+        email: user.email,
+        username: user.username,
+        name: user.display_name || user.name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        image: user.image,
+        positionTitle: user.position_title,
+        division: user.division,
+        department: user.department,
+        section: user.section,
+        customTeam: user.custom_team,
+        isActive: user.is_active,
       }));
     } catch (error) {
       console.error('Failed to search users:', error);
