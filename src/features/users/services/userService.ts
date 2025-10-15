@@ -117,7 +117,23 @@ class UserService {
       const backendUsers = await response.json();
 
       // Transform backend UserResponse to UserSearchResult format
-      return backendUsers.map((user: any) => ({
+      return backendUsers.map((user: {
+        id: string;
+        tms_user_id: string;
+        email: string;
+        username: string | null;
+        first_name: string | null;
+        last_name: string | null;
+        display_name: string;
+        name: string | null;
+        image: string | null;
+        position_title: string | null;
+        division: string | null;
+        department: string | null;
+        section: string | null;
+        custom_team: string | null;
+        is_active: boolean;
+      }) => ({
         id: user.id, // Local database UUID (use this for conversations!)
         tmsUserId: user.tms_user_id,
         email: user.email,
