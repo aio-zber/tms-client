@@ -45,9 +45,9 @@ export function useConversations(
         type,
       });
 
-      setConversations(response.conversations);
-      setHasMore(response.has_more ?? false);
-      setOffset(response.conversations.length);
+      setConversations(response.data);
+      setHasMore(response.pagination.has_more ?? false);
+      setOffset(response.data.length);
     } catch (err) {
       setError(err as Error);
       console.error('Failed to load conversations:', err);
@@ -69,9 +69,9 @@ export function useConversations(
         type,
       });
 
-      setConversations((prev) => [...prev, ...response.conversations]);
-      setHasMore(response.has_more ?? false);
-      setOffset((prev) => prev + response.conversations.length);
+      setConversations((prev) => [...prev, ...response.data]);
+      setHasMore(response.pagination.has_more ?? false);
+      setOffset((prev) => prev + response.data.length);
     } catch (err) {
       setError(err as Error);
       console.error('Failed to load more conversations:', err);
