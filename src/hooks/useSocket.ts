@@ -39,11 +39,12 @@ export function useSocket() {
       setIsConnected(false);
     });
 
-    // Cleanup on unmount
+    // Keep connection alive - don't disconnect on unmount
+    // Socket should stay connected for the entire session
     return () => {
-      console.log('[Socket] Cleaning up WebSocket connection');
-      socketClient.disconnect();
-      setIsConnected(false);
+      console.log('[Socket] Component unmounting but keeping connection alive');
+      // Don't call socketClient.disconnect() here
+      // Connection will be cleaned up when user logs out or closes tab
     };
   }, []); // Connect once on mount
 
