@@ -101,8 +101,27 @@ export function useMessages(
   useEffect(() => {
     if (!conversationId) return;
 
-    // Join conversation room
-    socketClient.joinConversation(conversationId);
+    const socket = socketClient.getSocket();
+    if (!socket) {
+      console.warn('[useMessages] Socket not initialized');
+      return;
+    }
+
+    // Wait for connection before joining room
+    const joinRoom = () => {
+      if (socketClient.isConnected()) {
+        console.log('[useMessages] Joining conversation room:', conversationId);
+        socketClient.joinConversation(conversationId);
+      } else {
+        console.log('[useMessages] Waiting for socket connection to join room...');
+      }
+    };
+
+    // Try to join immediately if already connected
+    joinRoom();
+
+    // Also listen for connection events in case we're not connected yet
+    socket.on('connect', joinRoom);
 
     // Listen for new messages
     const handleNewMessage = (message: Record<string, unknown>) => {
@@ -136,6 +155,7 @@ export function useMessages(
       socketClient.off('new_message', handleNewMessage);
       socketClient.off('message_edited', handleMessageEdited);
       socketClient.off('message_deleted', handleMessageDeleted);
+      socket.off('connect', joinRoom);
     };
   }, [conversationId]);
 
