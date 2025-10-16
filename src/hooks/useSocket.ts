@@ -18,6 +18,9 @@ export function useSocket() {
     }
 
     console.log('[Socket] Initializing WebSocket connection...');
+    console.log('[Socket] Token preview (first 30 chars):', token.substring(0, 30) + '...');
+    console.log('[Socket] Token length:', token.length);
+
     const socket = socketClient.connect(token);
 
     // Update connection status

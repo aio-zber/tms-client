@@ -20,6 +20,10 @@ class SocketClient {
       return this.socket;
     }
 
+    console.log('[SocketClient] Connecting to:', SOCKET_URL);
+    console.log('[SocketClient] Path:', '/ws/socket.io');
+    console.log('[SocketClient] Full URL:', `${SOCKET_URL}/ws/socket.io/`);
+
     // Socket.IO will automatically append /socket.io/ to the path
     // So if we connect to SOCKET_URL with path: '/ws', it becomes /ws/socket.io/
     this.socket = io(SOCKET_URL, {
