@@ -31,7 +31,9 @@ class SocketClient {
       auth: {
         token,
       },
-      transports: ['websocket', 'polling'],
+      // Try polling first, then upgrade to websocket
+      // This helps diagnose if the issue is WebSocket-specific or auth-related
+      transports: ['polling', 'websocket'],
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
