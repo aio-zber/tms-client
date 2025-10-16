@@ -21,15 +21,15 @@ class SocketClient {
     }
 
     console.log('[SocketClient] Connecting to:', SOCKET_URL);
-    console.log('[SocketClient] Path:', '/ws/socket.io');
-    console.log('[SocketClient] Full URL:', `${SOCKET_URL}/ws/socket.io/`);
+    console.log('[SocketClient] Path:', '/socket.io');
+    console.log('[SocketClient] Full URL:', `${SOCKET_URL}/socket.io/`);
 
     // CRITICAL PATH CONFIGURATION:
-    // Server mounts Socket.IO ASGI app at '/ws' with socketio_path='socket.io'
-    // Final endpoint: /ws/socket.io/
-    // Client MUST specify path: '/ws/socket.io' (Socket.IO appends trailing slash)
+    // Server wraps FastAPI with Socket.IO ASGIApp (socketio.ASGIApp(sio, fastapi_app))
+    // Socket.IO handles /socket.io/* endpoints directly
+    // Client connects to: /socket.io/?EIO=4&transport=websocket
     this.socket = io(SOCKET_URL, {
-      path: '/ws/socket.io',  // Must match server mount point + socketio_path
+      path: '/socket.io',  // Default Socket.IO path
       auth: {
         token,
       },
