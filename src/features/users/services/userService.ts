@@ -66,8 +66,7 @@ class UserService {
         hierarchyLevel: userData.hierarchy_level,
         reportsToId: userData.reports_to_id,
         isActive: userData.is_active !== false,
-        dateJoined: userData.date_joined,
-        lastLogin: userData.last_login,
+        isLeader: userData.role === 'LEADER' || userData.role === 'ADMIN',
       };
 
       // Cache user in localStorage for quick access
