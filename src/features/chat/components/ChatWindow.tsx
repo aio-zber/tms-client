@@ -270,7 +270,6 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
                     messages[index - 1].senderId !== message.senderId
                   }
                   currentUserId={currentUserId}
-                  onUpdate={refreshMessages}
                 />
               );
             })
