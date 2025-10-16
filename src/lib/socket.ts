@@ -31,13 +31,16 @@ class SocketClient {
       auth: {
         token,
       },
-      // Try polling first, then upgrade to websocket
-      // This helps diagnose if the issue is WebSocket-specific or auth-related
-      transports: ['polling', 'websocket'],
+      // WebSocket-only for Railway
+      transports: ['websocket'],
+      upgrade: false,
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       reconnectionAttempts: this.maxReconnectAttempts,
+      // Railway-specific WebSocket config
+      autoConnect: true,
+      forceNew: false,
     });
 
     this.setupEventHandlers();
