@@ -59,7 +59,6 @@ const getWsUrl = () => {
   // Client-side: detect from window.location
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 
     // Railway deployment (production/staging)
     if (hostname.includes('railway.app')) {
