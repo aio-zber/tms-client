@@ -20,7 +20,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import Message from './Message';
 import toast from 'react-hot-toast';
-import { wsService, WebSocketMessage } from '../services/websocketService';
 import { useMessages, useSendMessage } from '@/features/messaging';
 import { useConversation, useConversationActions } from '@/features/conversations';
 import MessageSearchDialog from '@/features/messaging/components/MessageSearchDialog';
@@ -42,7 +41,7 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
 
   // Use custom hooks for API integration
   const { conversation, loading: conversationLoading, refresh: refreshConversation } = useConversation(conversationId);
-  const { messages, loading: messagesLoading, refresh: refreshMessages } = useMessages(conversationId);
+  const { messages, loading: messagesLoading } = useMessages(conversationId);
   const { sendMessage: sendMsg, sending } = useSendMessage();
   const { markAsRead, leaveConversation } = useConversationActions();
 
@@ -62,42 +61,6 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
     scrollToBottom();
   }, [messages]);
 
-  // WebSocket Setup
-  useEffect(() => {
-    if (!conversationId) return;
-
-    // Connect to WebSocket
-    wsService.connect();
-    wsService.joinConversation(conversationId);
-
-    // Listen for new messages
-    wsService.onNewMessage((message: WebSocketMessage) => {
-      if (message.conversation_id === conversationId) {
-        refreshMessages();
-      }
-    });
-
-    // Listen for message edits
-    wsService.onMessageEdited((message: WebSocketMessage) => {
-      if (message.conversation_id === conversationId) {
-        refreshMessages();
-      }
-    });
-
-    // Listen for message deletions
-    wsService.onMessageDeleted((data) => {
-      if (data.conversation_id === conversationId) {
-        refreshMessages();
-      }
-    });
-
-    // Cleanup on unmount
-    return () => {
-      wsService.leaveConversation(conversationId);
-      wsService.removeAllListeners();
-    };
-  }, [conversationId, refreshMessages]);
-
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -114,7 +77,7 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
 
       if (message) {
         setNewMessage('');
-        refreshMessages();
+        // Message will appear via WebSocket broadcast automatically
         scrollToBottom();
         toast.success('Message sent');
       } else {
@@ -144,7 +107,7 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
 
   const handleConversationUpdate = () => {
     refreshConversation();
-    refreshMessages();
+    // Messages will update automatically via WebSocket
   };
 
   const handleLeaveConversation = async () => {
