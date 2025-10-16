@@ -53,11 +53,11 @@ class WebSocketService {
     }
 
     console.log('[WebSocket] Connecting to:', WS_URL);
-    console.log('[WebSocket] Path: /ws/socket.io');
-    console.log('[WebSocket] Full URL:', `${WS_URL}/ws/socket.io/`);
+    console.log('[WebSocket] Path: /socket.io');
+    console.log('[WebSocket] Full URL:', `${WS_URL}/socket.io/`);
 
     this.socket = io(WS_URL, {
-      path: '/ws/socket.io',  // CRITICAL: Must match server mount point + socketio_path
+      path: '/socket.io',  // FIXED: Socket.IO default path (server wraps FastAPI with socketio.ASGIApp)
       auth: { token },
       transports: ['websocket'],  // WebSocket-only for Railway (polling doesn't work well)
       upgrade: false,  // Don't upgrade from polling to WebSocket
