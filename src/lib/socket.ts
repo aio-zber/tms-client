@@ -29,7 +29,7 @@ class SocketClient {
     // Socket.IO handles /socket.io/* endpoints directly
     // Client connects to: /socket.io/?EIO=4&transport=websocket
     this.socket = io(SOCKET_URL, {
-      path: '/socket.io',  // Default Socket.IO path
+      path: '/socket.io',  // CORRECT: Default Socket.IO path matches server
       auth: {
         token,
       },
