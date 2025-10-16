@@ -89,10 +89,11 @@ class SocketClient {
       return;
     }
 
+    console.log('[Socket] Joining conversation:', conversationId);
     this.socket.emit('join_conversation', { conversation_id: conversationId });
 
     this.socket.once('joined_conversation', (data) => {
-      console.log('[Socket] Joined conversation:', data.conversation_id);
+      console.log('[Socket] ✅ Successfully joined conversation:', data.conversation_id);
     });
   }
 
