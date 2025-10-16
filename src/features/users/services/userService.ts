@@ -67,6 +67,8 @@ class UserService {
         reportsToId: userData.reports_to_id,
         isActive: userData.is_active !== false,
         isLeader: userData.role === 'LEADER' || userData.role === 'ADMIN',
+        createdAt: userData.created_at || new Date().toISOString(),
+        lastSyncedAt: userData.last_synced_at,
       };
 
       // Cache user in localStorage for quick access
