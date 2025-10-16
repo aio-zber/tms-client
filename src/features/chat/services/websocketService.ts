@@ -52,15 +52,21 @@ class WebSocketService {
       return;
     }
 
-    console.log('Connecting to WebSocket:', WS_URL);
+    console.log('[WebSocket] Connecting to:', WS_URL);
+    console.log('[WebSocket] Path: /ws/socket.io');
+    console.log('[WebSocket] Full URL:', `${WS_URL}/ws/socket.io/`);
 
     this.socket = io(WS_URL, {
+      path: '/ws/socket.io',  // CRITICAL: Must match server mount point + socketio_path
       auth: { token },
-      transports: ['websocket', 'polling'],
+      transports: ['websocket'],  // WebSocket-only for Railway (polling doesn't work well)
+      upgrade: false,  // Don't upgrade from polling to WebSocket
       reconnection: true,
       reconnectionAttempts: this.maxReconnectAttempts,
       reconnectionDelay: 1000,
-      timeout: 10000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,  // Increased timeout for Railway
+      autoConnect: true,
     });
 
     this.setupEventHandlers();

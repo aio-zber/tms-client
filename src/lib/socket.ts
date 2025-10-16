@@ -24,21 +24,23 @@ class SocketClient {
     console.log('[SocketClient] Path:', '/ws/socket.io');
     console.log('[SocketClient] Full URL:', `${SOCKET_URL}/ws/socket.io/`);
 
-    // Socket.IO will automatically append /socket.io/ to the path
-    // So if we connect to SOCKET_URL with path: '/ws', it becomes /ws/socket.io/
+    // CRITICAL PATH CONFIGURATION:
+    // Server mounts Socket.IO ASGI app at '/ws' with socketio_path='socket.io'
+    // Final endpoint: /ws/socket.io/
+    // Client MUST specify path: '/ws/socket.io' (Socket.IO appends trailing slash)
     this.socket = io(SOCKET_URL, {
-      path: '/ws/socket.io',
+      path: '/ws/socket.io',  // Must match server mount point + socketio_path
       auth: {
         token,
       },
-      // WebSocket-only for Railway
+      // WebSocket-only transport for Railway (polling unreliable)
       transports: ['websocket'],
-      upgrade: false,
+      upgrade: false,  // Don't upgrade from polling
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       reconnectionAttempts: this.maxReconnectAttempts,
-      // Railway-specific WebSocket config
+      timeout: 20000,  // Increased timeout for Railway
       autoConnect: true,
       forceNew: false,
     });
