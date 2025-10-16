@@ -51,11 +51,29 @@ export const getApiBaseUrl = (): string => {
   return 'https://tms-server-staging.up.railway.app/api/v1';
 };
 
+/**
+ * Get WebSocket URL based on runtime environment
+ * Critical: Returns BASE URL only - Socket.IO client will append path
+ */
 const getWsUrl = () => {
-  const envUrl = process.env.NEXT_PUBLIC_WS_URL;
-  const fallbackUrl = 'ws://localhost:8000';
+  // Client-side: detect from window.location
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 
-  // If environment variable is set, use it
+    // Railway deployment (production/staging)
+    if (hostname.includes('railway.app')) {
+      return 'wss://tms-server-staging.up.railway.app';
+    }
+
+    // Local development
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'ws://localhost:8000';
+    }
+  }
+
+  // Server-side or fallback: try environment variable
+  const envUrl = process.env.NEXT_PUBLIC_WS_URL;
   if (envUrl) {
     // Force WSS if the URL contains 'railway.app' (production/staging)
     if (envUrl.includes('railway.app') && envUrl.startsWith('ws://')) {
@@ -64,7 +82,8 @@ const getWsUrl = () => {
     return envUrl;
   }
 
-  return fallbackUrl;
+  // Final fallback for SSR
+  return 'ws://localhost:8000';
 };
 
 export const WS_URL = getWsUrl();
