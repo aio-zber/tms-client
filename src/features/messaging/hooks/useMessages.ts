@@ -107,7 +107,7 @@ export function useMessages(
     // Listen for new messages
     const handleNewMessage = (message: Record<string, unknown>) => {
       console.log('[useMessages] New message received via WebSocket:', message);
-      setMessages((prev) => [...prev, message as Message]);
+      setMessages((prev) => [...prev, message as unknown as Message]);
     };
 
     // Listen for message edits
@@ -115,7 +115,7 @@ export function useMessages(
       console.log('[useMessages] Message edited via WebSocket:', updatedMessage);
       setMessages((prev) =>
         prev.map((msg) =>
-          msg.id === (updatedMessage.id as string) ? (updatedMessage as Message) : msg
+          msg.id === (updatedMessage.id as string) ? (updatedMessage as unknown as Message) : msg
         )
       );
     };
