@@ -16,6 +16,7 @@ import { useMessageActions } from '@/features/messaging/hooks/useMessageActions'
 import { useSocket } from '@/hooks/useSocket';
 import { conversationService } from '@/features/conversations/services/conversationService';
 import { userService } from '@/features/users/services/userService';
+import { messageService } from '@/features/messaging/services/messageService';
 import type { Conversation, Message } from '@/types';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -173,6 +174,23 @@ export default function ChatPage({ params }: ChatPageProps) {
     [addReaction, removeReaction, messages, currentUserId]
   );
 
+  const handleClearConversation = useCallback(async () => {
+    const confirmed = confirm(
+      'Are you sure you want to clear all messages in this conversation? This action cannot be undone.'
+    );
+
+    if (!confirmed) return;
+
+    try {
+      await messageService.clearConversation(conversationId);
+      // Refresh messages list
+      window.location.reload();
+    } catch (error) {
+      console.error('Failed to clear conversation:', error);
+      alert('Failed to clear conversation. Please try again.');
+    }
+  }, [conversationId]);
+
   const getUserName = (userId: string): string => {
     if (!conversation || !conversation.members) return 'Unknown';
     const member = conversation.members.find((m) => m.userId === userId);
@@ -286,6 +304,12 @@ export default function ChatPage({ params }: ChatPageProps) {
               <DropdownMenuItem>View Details</DropdownMenuItem>
               <DropdownMenuItem>Mute Conversation</DropdownMenuItem>
               <DropdownMenuItem>Search Messages</DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={handleClearConversation}
+                className="text-orange-600"
+              >
+                Clear Conversation
+              </DropdownMenuItem>
               <DropdownMenuItem className="text-red-600">
                 Leave Conversation
               </DropdownMenuItem>

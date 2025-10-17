@@ -113,6 +113,18 @@ export function MessageBubble({
     }
   };
 
+  // State for dynamic timestamp updates
+  const [, setNow] = useState(Date.now());
+
+  // Update timestamps every minute
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNow(Date.now());
+    }, 60000); // Update every 60 seconds
+
+    return () => clearInterval(interval);
+  }, []);
+
   const formatTime = (timestamp: string) => {
     try {
       return formatDistanceToNow(new Date(timestamp), { addSuffix: true });
