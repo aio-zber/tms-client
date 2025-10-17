@@ -165,6 +165,29 @@ export function useMessages(
       console.log('[useMessages] Message keys:', Object.keys(message));
       
       // Transform snake_case to camelCase to match API format
+      const replyToData = message.reply_to || message.replyTo;
+      let replyTo: Message | undefined;
+      
+      // Transform replyTo message if present
+      if (replyToData && typeof replyToData === 'object') {
+        const replyMsg = replyToData as Record<string, unknown>;
+        replyTo = {
+          id: replyMsg.id as string,
+          conversationId: (replyMsg.conversation_id || replyMsg.conversationId) as string,
+          senderId: (replyMsg.sender_id || replyMsg.senderId) as string,
+          content: replyMsg.content as string,
+          type: (replyMsg.type || 'text') as 'text' | 'image' | 'file' | 'voice' | 'poll' | 'call',
+          status: (replyMsg.status || 'sent') as 'sending' | 'sent' | 'delivered' | 'read' | 'failed',
+          createdAt: (replyMsg.created_at || replyMsg.createdAt) as string,
+          updatedAt: (replyMsg.updated_at || replyMsg.updatedAt) as string,
+          deletedAt: (replyMsg.deleted_at || replyMsg.deletedAt || undefined) as string | undefined,
+          isEdited: (replyMsg.is_edited || replyMsg.isEdited || false) as boolean,
+          replyToId: (replyMsg.reply_to_id || replyMsg.replyToId) as string | undefined,
+          metadata: (replyMsg.metadata_json || replyMsg.metadata) as MessageMetadata | undefined,
+          reactions: (replyMsg.reactions || []) as MessageReaction[] | undefined,
+        };
+      }
+      
       const transformedMessage: Message = {
         id: message.id as string,
         conversationId: (message.conversation_id || message.conversationId) as string,
@@ -177,6 +200,7 @@ export function useMessages(
         deletedAt: (message.deleted_at || message.deletedAt || undefined) as string | undefined,
         isEdited: (message.is_edited || message.isEdited || false) as boolean,
         replyToId: (message.reply_to_id || message.replyToId) as string | undefined,
+        replyTo,
         metadata: (message.metadata_json || message.metadata) as MessageMetadata | undefined,
         reactions: (message.reactions || []) as MessageReaction[] | undefined,
       };
@@ -201,6 +225,29 @@ export function useMessages(
       console.log('[useMessages] Message edited via WebSocket:', updatedMessage);
       
       // Transform snake_case to camelCase to match API format
+      const replyToData = updatedMessage.reply_to || updatedMessage.replyTo;
+      let replyTo: Message | undefined;
+      
+      // Transform replyTo message if present
+      if (replyToData && typeof replyToData === 'object') {
+        const replyMsg = replyToData as Record<string, unknown>;
+        replyTo = {
+          id: replyMsg.id as string,
+          conversationId: (replyMsg.conversation_id || replyMsg.conversationId) as string,
+          senderId: (replyMsg.sender_id || replyMsg.senderId) as string,
+          content: replyMsg.content as string,
+          type: (replyMsg.type || 'text') as 'text' | 'image' | 'file' | 'voice' | 'poll' | 'call',
+          status: (replyMsg.status || 'sent') as 'sending' | 'sent' | 'delivered' | 'read' | 'failed',
+          createdAt: (replyMsg.created_at || replyMsg.createdAt) as string,
+          updatedAt: (replyMsg.updated_at || replyMsg.updatedAt) as string,
+          deletedAt: (replyMsg.deleted_at || replyMsg.deletedAt || undefined) as string | undefined,
+          isEdited: (replyMsg.is_edited || replyMsg.isEdited || false) as boolean,
+          replyToId: (replyMsg.reply_to_id || replyMsg.replyToId) as string | undefined,
+          metadata: (replyMsg.metadata_json || replyMsg.metadata) as MessageMetadata | undefined,
+          reactions: (replyMsg.reactions || []) as MessageReaction[] | undefined,
+        };
+      }
+      
       const transformedMessage: Message = {
         id: updatedMessage.id as string,
         conversationId: (updatedMessage.conversation_id || updatedMessage.conversationId) as string,
@@ -213,6 +260,7 @@ export function useMessages(
         deletedAt: (updatedMessage.deleted_at || updatedMessage.deletedAt || undefined) as string | undefined,
         isEdited: (updatedMessage.is_edited || updatedMessage.isEdited || false) as boolean,
         replyToId: (updatedMessage.reply_to_id || updatedMessage.replyToId) as string | undefined,
+        replyTo,
         metadata: (updatedMessage.metadata_json || updatedMessage.metadata) as MessageMetadata | undefined,
         reactions: (updatedMessage.reactions || []) as MessageReaction[] | undefined,
       };

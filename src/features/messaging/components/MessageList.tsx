@@ -18,6 +18,9 @@ interface MessageListProps {
   currentUserId: string;
   onLoadMore?: () => void;
   onEdit?: (messageId: string) => void;
+  onSaveEdit?: (messageId: string, content: string) => void;
+  onCancelEdit?: () => void;
+  editingMessageId?: string | null;
   onDelete?: (messageId: string) => void;
   onReply?: (message: Message) => void;
   onReact?: (messageId: string, emoji: string) => void;
@@ -37,6 +40,9 @@ export function MessageList({
   currentUserId,
   onLoadMore,
   onEdit,
+  onSaveEdit,
+  onCancelEdit,
+  editingMessageId,
   onDelete,
   onReply,
   onReact,
@@ -210,9 +216,13 @@ export function MessageList({
                     showSender={showSender}
                     senderName={getUserName ? getUserName(message.senderId) : undefined}
                     onEdit={isSent ? onEdit : undefined}
+                    onSaveEdit={onSaveEdit}
+                    onCancelEdit={onCancelEdit}
+                    isEditing={editingMessageId === message.id}
                     onDelete={isSent ? onDelete : undefined}
                     onReply={onReply}
                     onReact={onReact}
+                    getUserName={getUserName}
                   />
                 );
               })}

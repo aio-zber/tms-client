@@ -39,6 +39,7 @@ export default function ChatPage({ params }: ChatPageProps) {
   const [loadingConversation, setLoadingConversation] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [replyToMessage, setReplyToMessage] = useState<Message | undefined>();
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
 
   const { messages, loading, hasMore, loadMore, addOptimisticMessage } = useMessages(conversationId);
   const { sendMessage, sending } = useSendMessage();
@@ -113,15 +114,27 @@ export default function ChatPage({ params }: ChatPageProps) {
   };
 
   const handleEditMessage = useCallback(
-    async (messageId: string) => {
-      const newContent = prompt('Edit message:');
-      if (newContent && newContent.trim()) {
+    (messageId: string) => {
+      setEditingMessageId(messageId);
+      setReplyToMessage(undefined); // Clear reply when editing
+    },
+    []
+  );
+
+  const handleSaveEdit = useCallback(
+    async (messageId: string, newContent: string) => {
+      if (newContent.trim()) {
         await editMessage(messageId, { content: newContent.trim() });
+        setEditingMessageId(null);
         // No need to refresh - WebSocket will push the edit
       }
     },
     [editMessage]
   );
+
+  const handleCancelEdit = useCallback(() => {
+    setEditingMessageId(null);
+  }, []);
 
   const handleDeleteMessage = useCallback(
     async (messageId: string) => {
@@ -274,6 +287,9 @@ export default function ChatPage({ params }: ChatPageProps) {
         currentUserId={currentUserId || ''}
         onLoadMore={loadMore}
         onEdit={handleEditMessage}
+        onSaveEdit={handleSaveEdit}
+        onCancelEdit={handleCancelEdit}
+        editingMessageId={editingMessageId}
         onDelete={handleDeleteMessage}
         onReply={handleReply}
         onReact={handleReact}

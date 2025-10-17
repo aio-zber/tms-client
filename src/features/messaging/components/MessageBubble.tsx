@@ -16,9 +16,13 @@ interface MessageBubbleProps {
   showSender?: boolean;
   senderName?: string;
   onEdit?: (messageId: string) => void;
+  onSaveEdit?: (messageId: string, content: string) => void;
+  onCancelEdit?: () => void;
+  isEditing?: boolean;
   onDelete?: (messageId: string) => void;
   onReply?: (message: Message) => void;
   onReact?: (messageId: string, emoji: string) => void;
+  getUserName?: (userId: string) => string;
 }
 
 interface ContextMenuPosition {
@@ -32,17 +36,37 @@ export function MessageBubble({
   showSender = false,
   senderName,
   onEdit,
+  onSaveEdit,
+  onCancelEdit,
+  isEditing = false,
   onDelete,
   onReply,
   onReact,
+  getUserName,
 }: MessageBubbleProps) {
   const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [editContent, setEditContent] = useState(message.content);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
+  const editInputRef = useRef<HTMLTextAreaElement>(null);
   
   // Common emojis for quick reactions
   const quickEmojis = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥'];
+
+  // Focus edit input when isEditing changes to true
+  useEffect(() => {
+    if (isEditing && editInputRef.current) {
+      editInputRef.current.focus();
+      // Place cursor at end
+      editInputRef.current.setSelectionRange(editContent.length, editContent.length);
+    }
+  }, [isEditing, editContent.length]);
+
+  // Update editContent when message content changes
+  useEffect(() => {
+    setEditContent(message.content);
+  }, [message.content]);
 
   // Close context menu when clicking outside
   useEffect(() => {
@@ -137,56 +161,120 @@ export function MessageBubble({
         {/* Reply-to Message */}
         {message.replyTo && (
           <div
-            className={`text-xs px-3 py-2 rounded-lg mb-1 border-l-2 ${
+            className={`text-xs px-3 py-2 rounded-t-lg mb-[-8px] border-l-4 ${
               isSent
-                ? 'bg-viber-purple-dark/20 border-white/40'
-                : 'bg-gray-200 border-gray-400'
-            }`}
+                ? 'bg-white/10 border-white/50'
+                : 'bg-gray-100 border-viber-purple'
+            } max-w-full`}
           >
-            <span className="text-gray-600 dark:text-gray-300">
+            <div className={`font-semibold mb-0.5 ${isSent ? 'text-white' : 'text-viber-purple'}`}>
+              {getUserName ? getUserName(message.replyTo.senderId) : 'User'}
+            </div>
+            <div className={`truncate ${isSent ? 'text-white/80' : 'text-gray-600'}`}>
               {message.replyTo.content.length > 50
                 ? message.replyTo.content.slice(0, 50) + '...'
                 : message.replyTo.content}
-            </span>
+            </div>
           </div>
         )}
 
         <div className="flex items-end gap-2">
           {/* Message Bubble */}
           <div
-            className={`px-4 py-2 rounded-2xl ${
+            className={`px-4 py-2 ${message.replyTo ? 'rounded-b-2xl rounded-t-md' : 'rounded-2xl'} ${
               isSent
                 ? 'bg-viber-purple text-white rounded-br-sm order-1'
                 : 'bg-gray-100 text-gray-900 rounded-bl-sm order-2'
             } ${message.status === 'failed' ? 'opacity-60' : ''}`}
           >
-            <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap">
-              {message.content}
-            </p>
+            {isEditing ? (
+              <div className="space-y-2">
+                <textarea
+                  ref={editInputRef}
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      if (onSaveEdit) onSaveEdit(message.id, editContent);
+                    } else if (e.key === 'Escape') {
+                      if (onCancelEdit) onCancelEdit();
+                    }
+                  }}
+                  className={`w-full min-h-[60px] text-[15px] leading-relaxed resize-none rounded ${
+                    isSent
+                      ? 'bg-viber-purple-dark text-white placeholder-white/50'
+                      : 'bg-white text-gray-900 placeholder-gray-400'
+                  } border-none focus:outline-none focus:ring-2 focus:ring-viber-purple/50 p-2`}
+                  placeholder="Edit message..."
+                />
+                <div className="flex items-center justify-end gap-2 text-xs">
+                  <button
+                    onClick={() => onCancelEdit && onCancelEdit()}
+                    className={`px-3 py-1 rounded ${
+                      isSent
+                        ? 'text-white/70 hover:bg-white/10'
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => onSaveEdit && onSaveEdit(message.id, editContent)}
+                    disabled={!editContent.trim() || editContent === message.content}
+                    className={`px-3 py-1 rounded font-medium ${
+                      isSent
+                        ? 'bg-white text-viber-purple hover:bg-white/90 disabled:opacity-50'
+                        : 'bg-viber-purple text-white hover:bg-viber-purple-dark disabled:opacity-50'
+                    } disabled:cursor-not-allowed`}
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap">
+                {message.content}
+              </p>
+            )}
 
             {/* Metadata (time, status, edited) */}
-            <div
-              className={`flex items-center gap-1 mt-1 text-[11px] ${
-                isSent ? 'text-white/70 justify-end' : 'text-gray-500 justify-start'
-              }`}
-            >
-              <span>{formatTime(message.createdAt)}</span>
-              {message.isEdited && <span>(edited)</span>}
-              {renderStatusIcon()}
-            </div>
+            {!isEditing && (
+              <div
+                className={`flex items-center gap-1 mt-1 text-[11px] ${
+                  isSent ? 'text-white/70 justify-end' : 'text-gray-500 justify-start'
+                }`}
+              >
+                <span>{formatTime(message.createdAt)}</span>
+                {message.isEdited && <span>(edited)</span>}
+                {renderStatusIcon()}
+              </div>
+            )}
           </div>
         </div>
 
         {/* Reactions */}
         {message.reactions && message.reactions.length > 0 && (
-          <div className="flex gap-1 mt-1 px-2">
-            {message.reactions.map((reaction) => (
-              <span
-                key={reaction.id}
-                className="px-2 py-0.5 bg-white border border-gray-200 rounded-full text-xs"
+          <div className="flex flex-wrap gap-1 mt-1">
+            {/* Group reactions by emoji */}
+            {Object.entries(
+              message.reactions.reduce((acc, reaction) => {
+                acc[reaction.emoji] = (acc[reaction.emoji] || 0) + 1;
+                return acc;
+              }, {} as Record<string, number>)
+            ).map(([emoji, count]) => (
+              <button
+                key={emoji}
+                className={`px-2 py-0.5 rounded-full text-xs flex items-center gap-1 transition ${
+                  isSent
+                    ? 'bg-white/20 hover:bg-white/30 text-white border border-white/30'
+                    : 'bg-white hover:bg-gray-50 text-gray-900 border border-gray-200'
+                }`}
+                onClick={() => onReact && onReact(message.id, emoji)}
               >
-                {reaction.emoji}
-              </span>
+                <span className="text-sm">{emoji}</span>
+                {count > 1 && <span className="text-[10px] font-medium">{count}</span>}
+              </button>
             ))}
           </div>
         )}
