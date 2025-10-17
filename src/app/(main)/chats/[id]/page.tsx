@@ -140,7 +140,36 @@ export default function ChatPage({ params }: ChatPageProps) {
   const getUserName = (userId: string): string => {
     if (!conversation || !conversation.members) return 'Unknown';
     const member = conversation.members.find((m) => m.userId === userId);
-    return member ? `User ${userId?.slice(0, 8) || userId}` : 'Unknown';
+    
+    if (!member) return 'Unknown';
+    
+    // Check if member has enriched user data from backend
+    const memberData = member as unknown as Record<string, unknown>;
+    const userData = memberData.user as Record<string, unknown> | undefined;
+    
+    if (userData) {
+      // Try to get full name from various fields
+      const firstName = userData.firstName || userData.first_name || '';
+      const middleName = userData.middleName || userData.middle_name || '';
+      const lastName = userData.lastName || userData.last_name || '';
+      const name = userData.name;
+      
+      // Build full name
+      if (name) return String(name);
+      
+      const fullName = [firstName, middleName, lastName]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+      
+      if (fullName) return fullName;
+      
+      // Fallback to email
+      if (userData.email) return String(userData.email);
+    }
+    
+    // Final fallback
+    return `User ${userId?.slice(0, 8) || userId}`;
   };
 
   const getConversationTitle = (): string => {
@@ -150,19 +179,12 @@ export default function ChatPage({ params }: ChatPageProps) {
     // For DM, show other user's name
     if (!conversation.members || conversation.members.length === 0) return 'Direct Message';
 
-    // Debug log
-    console.log('Conversation members:', conversation.members);
-    console.log('Current user ID:', currentUserId);
-
     const otherMember = conversation.members.find((m) => m.userId !== currentUserId);
-    console.log('Other member:', otherMember);
-
+    
     if (!otherMember) return 'Direct Message';
 
-    // Handle different possible field names
-    const memberData = otherMember as unknown as Record<string, unknown>;
-    const userId = otherMember.userId || memberData.user_id || memberData.id;
-    return userId ? `User ${String(userId).slice(0, 8)}` : 'Direct Message';
+    // Use getUserName to get the actual user name
+    return getUserName(otherMember.userId);
   };
 
   if (loadingConversation) {

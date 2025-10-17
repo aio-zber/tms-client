@@ -5,6 +5,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { ConversationListItem } from '@/components/chat/ConversationListItem';
 import { conversationService } from '@/features/conversations/services/conversationService';
+import { userService } from '@/features/users/services/userService';
 import { Search, MessageSquarePlus, Filter } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import NewConversationDialog from '@/features/conversations/components/NewConversationDialog';
@@ -15,10 +16,25 @@ export function CenterPanel() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNewConversation, setShowNewConversation] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const pathname = usePathname();
 
   // Extract conversation ID from pathname
   const activeConversationId = pathname.split('/').pop();
+
+  // Get current user ID
+  useEffect(() => {
+    const fetchCurrentUser = async () => {
+      try {
+        const user = await userService.getCurrentUser();
+        setCurrentUserId(user.id);
+      } catch (error) {
+        console.error('Failed to fetch current user:', error);
+      }
+    };
+
+    fetchCurrentUser();
+  }, []);
 
   // Load conversations from backend API
   useEffect(() => {
@@ -153,6 +169,7 @@ export function CenterPanel() {
                 key={conversation.id}
                 conversation={conversation}
                 isActive={conversation.id === activeConversationId}
+                currentUserId={currentUserId || undefined}
               />
             ))}
           </div>

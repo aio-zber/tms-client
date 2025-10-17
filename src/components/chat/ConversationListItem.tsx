@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 interface ConversationListItemProps {
   conversation: Conversation;
   isActive?: boolean;
+  currentUserId?: string;
 }
 
 // Helper function to get initials from a name string
@@ -22,11 +23,64 @@ const getNameInitials = (name: string): string => {
     .slice(0, 2) || 'U';
 };
 
+// Helper function to get conversation display name
+const getConversationDisplayName = (
+  conversation: Conversation,
+  currentUserId?: string
+): string => {
+  // For group conversations, use the group name
+  if (conversation.type === 'group') {
+    return conversation.name || 'Group Chat';
+  }
+
+  // For DM conversations, get the other user's name
+  if (!conversation.members || conversation.members.length === 0) {
+    return 'Direct Message';
+  }
+
+  const otherMember = conversation.members.find(
+    (m) => m.userId !== currentUserId
+  );
+
+  if (!otherMember) return 'Direct Message';
+
+  // Check if member has enriched user data from backend
+  const memberData = otherMember as unknown as Record<string, unknown>;
+  const userData = memberData.user as Record<string, unknown> | undefined;
+
+  if (userData) {
+    // Try to get full name from various fields
+    const firstName = userData.firstName || userData.first_name || '';
+    const middleName = userData.middleName || userData.middle_name || '';
+    const lastName = userData.lastName || userData.last_name || '';
+    const name = userData.name;
+
+    // Build full name
+    if (name) return String(name);
+
+    const fullName = [firstName, middleName, lastName]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+
+    if (fullName) return fullName;
+
+    // Fallback to email
+    if (userData.email) return String(userData.email);
+  }
+
+  // Final fallback
+  return `User ${otherMember.userId?.slice(0, 8) || 'Unknown'}`;
+};
+
 export function ConversationListItem({
   conversation,
   isActive = false,
+  currentUserId,
 }: ConversationListItemProps) {
   const router = useRouter();
+  
+  const displayName = getConversationDisplayName(conversation, currentUserId);
 
   const handleClick = () => {
     router.push(`/chats/${conversation.id}`);
@@ -44,7 +98,7 @@ export function ConversationListItem({
       <div className="relative shrink-0">
         <Avatar className="h-12 w-12">
           <AvatarFallback className="bg-viber-purple text-white font-semibold">
-            {getNameInitials(conversation.name || 'Unknown')}
+            {getNameInitials(displayName)}
           </AvatarFallback>
         </Avatar>
         {/* Online indicator - mock as online for now */}
@@ -55,7 +109,7 @@ export function ConversationListItem({
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline justify-between gap-2 mb-1">
           <p className="font-semibold text-gray-900 truncate">
-            {conversation.name}
+            {displayName}
           </p>
           {conversation.lastMessage && (
             <span className="text-xs text-gray-500 shrink-0">
