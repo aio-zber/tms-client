@@ -76,7 +76,9 @@ export function useMessages(
         { limit, cursor }
       );
 
-      setMessages((prev) => [...prev, ...response.data]);
+      // PREPEND older messages to the START (not append to end)
+      // This preserves scroll position and keeps recent messages visible
+      setMessages((prev) => [...response.data, ...prev]);
       setHasMore(response.pagination?.has_more ?? false);
       setCursor(response.pagination?.next_cursor ?? undefined);
     } catch (err) {
