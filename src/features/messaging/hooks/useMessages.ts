@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { messageService } from '../services/messageService';
 import { socketClient } from '@/lib/socket';
-import type { Message } from '@/types/message';
+import type { Message, MessageMetadata, MessageReaction } from '@/types/message';
 
 interface UseMessagesOptions {
   limit?: number;
@@ -177,8 +177,8 @@ export function useMessages(
         deletedAt: (message.deleted_at || message.deletedAt || undefined) as string | undefined,
         isEdited: (message.is_edited || message.isEdited || false) as boolean,
         replyToId: (message.reply_to_id || message.replyToId) as string | undefined,
-        metadata: (message.metadata_json || message.metadata) as any,
-        reactions: (message.reactions || []) as any,
+        metadata: (message.metadata_json || message.metadata) as MessageMetadata | undefined,
+        reactions: (message.reactions || []) as MessageReaction[] | undefined,
       };
       
       console.log('[useMessages] Transformed message with camelCase:', transformedMessage);
