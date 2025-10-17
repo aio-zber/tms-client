@@ -87,37 +87,43 @@ export function AppHeader() {
   // Show loading state if user is not loaded
   if (loading || !user) {
     return (
-      <header className="h-[60px] bg-white border-b border-gray-200 flex items-center justify-between px-4 shrink-0">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold text-viber-purple">GCG Team Chat</h1>
+      <header className="h-[60px] md:h-[70px] bg-gradient-to-r from-viber-purple to-viber-purple-light shadow-md flex items-center justify-between px-4 md:px-6 shrink-0">
+        <div className="flex items-center gap-2 md:gap-3">
+          <div className="w-8 h-8 md:w-10 md:h-10 bg-white/20 rounded-full flex items-center justify-center backdrop-blur">
+            <span className="text-white font-bold text-lg md:text-xl">G</span>
+          </div>
+          <h1 className="text-lg md:text-xl lg:text-2xl font-bold text-white">GCG Team Chat</h1>
         </div>
         <div className="animate-pulse">
-          <div className="w-8 h-8 bg-gray-200 rounded-full"></div>
+          <div className="w-8 h-8 bg-white/20 rounded-full"></div>
         </div>
       </header>
     );
   }
 
   return (
-    <header className="h-[60px] bg-white border-b border-gray-200 flex items-center justify-between px-4 shrink-0">
+    <header className="h-[60px] md:h-[70px] bg-gradient-to-r from-viber-purple to-viber-purple-light shadow-md flex items-center justify-between px-4 md:px-6 shrink-0">
       {/* App Branding */}
-      <div className="flex items-center gap-3">
-        <h1 className="text-xl font-bold text-viber-purple">GCG Team Chat</h1>
+      <div className="flex items-center gap-2 md:gap-3">
+        <div className="w-8 h-8 md:w-10 md:h-10 bg-white/20 rounded-full flex items-center justify-center backdrop-blur">
+          <span className="text-white font-bold text-lg md:text-xl">G</span>
+        </div>
+        <h1 className="text-lg md:text-xl lg:text-2xl font-bold text-white">GCG Team Chat</h1>
       </div>
 
       {/* Settings Dropdown */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition">
-            <Avatar className="h-8 w-8">
-              <AvatarFallback className="bg-viber-purple text-white font-semibold text-xs">
+          <button className="flex items-center gap-2 px-2 md:px-3 py-2 rounded-lg hover:bg-white/20 transition backdrop-blur">
+            <Avatar className="h-8 w-8 md:h-9 md:w-9 border-2 border-white/30">
+              <AvatarFallback className="bg-white text-viber-purple font-semibold text-xs md:text-sm">
                 {getUserInitials(user)}
               </AvatarFallback>
             </Avatar>
-            <span className="text-sm font-medium text-gray-900 hidden md:block">
+            <span className="text-sm md:text-base font-medium text-white hidden md:block">
               {user.username}
             </span>
-            <ChevronDown className="w-4 h-4 text-gray-500 hidden md:block" />
+            <ChevronDown className="w-4 h-4 text-white/80 hidden md:block" />
           </button>
         </DropdownMenuTrigger>
 
