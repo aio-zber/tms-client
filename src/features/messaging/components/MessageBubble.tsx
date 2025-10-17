@@ -5,16 +5,10 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { Check, CheckCheck, MoreVertical, Reply, Edit, Trash2 } from 'lucide-react';
+import { Check, CheckCheck, Reply, Edit, Trash2 } from 'lucide-react';
 import type { Message } from '@/types/message';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 
 interface MessageBubbleProps {
   message: Message;
@@ -26,6 +20,11 @@ interface MessageBubbleProps {
   onReply?: (message: Message) => void;
 }
 
+interface ContextMenuPosition {
+  x: number;
+  y: number;
+}
+
 export function MessageBubble({
   message,
   isSent,
@@ -35,7 +34,43 @@ export function MessageBubble({
   onDelete,
   onReply,
 }: MessageBubbleProps) {
-  const [showActions, setShowActions] = useState(false);
+  const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close context menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(event.target as Node)) {
+        setContextMenu(null);
+      }
+    };
+
+    const handleScroll = () => {
+      setContextMenu(null);
+    };
+
+    if (contextMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('scroll', handleScroll, true);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+        document.removeEventListener('scroll', handleScroll, true);
+      };
+    }
+  }, [contextMenu]);
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+    });
+  };
+
+  const handleMenuAction = (action: () => void) => {
+    setContextMenu(null);
+    action();
+  };
 
   const renderStatusIcon = () => {
     if (!isSent) return null;
@@ -67,17 +102,15 @@ export function MessageBubble({
   };
 
   return (
-    <div
-      className={`flex gap-2 ${isSent ? 'justify-end' : 'justify-start'} group`}
-      onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => setShowActions(false)}
-    >
-      {/* Message Content */}
-      <div
-        className={`max-w-[70%] sm:max-w-[60%] flex flex-col ${
-          isSent ? 'items-end' : 'items-start'
-        }`}
-      >
+    <>
+      <div className={`flex gap-2 ${isSent ? 'justify-end' : 'justify-start'}`}>
+        {/* Message Content */}
+        <div
+          className={`max-w-[70%] sm:max-w-[60%] flex flex-col ${
+            isSent ? 'items-end' : 'items-start'
+          }`}
+          onContextMenu={handleContextMenu}
+        >
         {/* Sender Name (for group chats) */}
         {showSender && !isSent && senderName && (
           <span className="text-xs text-gray-600 mb-1 px-3">{senderName}</span>
@@ -101,44 +134,6 @@ export function MessageBubble({
         )}
 
         <div className="flex items-end gap-2">
-          {/* Action Menu (shown on hover) */}
-          {showActions && (onEdit || onDelete || onReply) && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  className={`p-1 rounded-full hover:bg-gray-200 transition opacity-0 group-hover:opacity-100 ${
-                    isSent ? 'order-2' : 'order-1'
-                  }`}
-                >
-                  <MoreVertical className="w-4 h-4 text-gray-500" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align={isSent ? 'end' : 'start'}>
-                {onReply && (
-                  <DropdownMenuItem onClick={() => onReply(message)}>
-                    <Reply className="w-4 h-4 mr-2" />
-                    Reply
-                  </DropdownMenuItem>
-                )}
-                {isSent && onEdit && (
-                  <DropdownMenuItem onClick={() => onEdit(message.id)}>
-                    <Edit className="w-4 h-4 mr-2" />
-                    Edit
-                  </DropdownMenuItem>
-                )}
-                {isSent && onDelete && (
-                  <DropdownMenuItem
-                    onClick={() => onDelete(message.id)}
-                    className="text-red-600 focus:text-red-600"
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Delete
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-
           {/* Message Bubble */}
           <div
             className={`px-4 py-2 rounded-2xl ${
@@ -179,5 +174,46 @@ export function MessageBubble({
         )}
       </div>
     </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div
+          ref={contextMenuRef}
+          className="fixed z-50 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[160px]"
+          style={{
+            left: `${contextMenu.x}px`,
+            top: `${contextMenu.y}px`,
+          }}
+        >
+          {onReply && (
+            <button
+              onClick={() => handleMenuAction(() => onReply(message))}
+              className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2 text-gray-700"
+            >
+              <Reply className="w-4 h-4" />
+              Reply
+            </button>
+          )}
+          {isSent && onEdit && (
+            <button
+              onClick={() => handleMenuAction(() => onEdit(message.id))}
+              className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2 text-gray-700"
+            >
+              <Edit className="w-4 h-4" />
+              Edit
+            </button>
+          )}
+          {isSent && onDelete && (
+            <button
+              onClick={() => handleMenuAction(() => onDelete(message.id))}
+              className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 flex items-center gap-2 text-red-600"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete
+            </button>
+          )}
+        </div>
+      )}
+    </>
   );
 }
