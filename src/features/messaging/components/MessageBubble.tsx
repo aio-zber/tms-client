@@ -16,9 +16,6 @@ interface MessageBubbleProps {
   showSender?: boolean;
   senderName?: string;
   onEdit?: (messageId: string) => void;
-  onSaveEdit?: (messageId: string, content: string) => void;
-  onCancelEdit?: () => void;
-  isEditing?: boolean;
   onDelete?: (messageId: string) => void;
   onReply?: (message: Message) => void;
   onReact?: (messageId: string, emoji: string) => void;
@@ -36,9 +33,6 @@ export function MessageBubble({
   showSender = false,
   senderName,
   onEdit,
-  onSaveEdit,
-  onCancelEdit,
-  isEditing = false,
   onDelete,
   onReply,
   onReact,
@@ -46,27 +40,11 @@ export function MessageBubble({
 }: MessageBubbleProps) {
   const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [editContent, setEditContent] = useState(message.content);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
-  const editInputRef = useRef<HTMLTextAreaElement>(null);
   
   // Common emojis for quick reactions
   const quickEmojis = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥'];
-
-  // Focus edit input when isEditing changes to true
-  useEffect(() => {
-    if (isEditing && editInputRef.current) {
-      editInputRef.current.focus();
-      // Place cursor at end
-      editInputRef.current.setSelectionRange(editContent.length, editContent.length);
-    }
-  }, [isEditing, editContent.length]);
-
-  // Update editContent when message content changes
-  useEffect(() => {
-    setEditContent(message.content);
-  }, [message.content]);
 
   // Close context menu when clicking outside
   useEffect(() => {
@@ -187,69 +165,20 @@ export function MessageBubble({
                 : 'bg-gray-100 text-gray-900 rounded-bl-sm order-2'
             } ${message.status === 'failed' ? 'opacity-60' : ''}`}
           >
-            {isEditing ? (
-              <div className="space-y-2">
-                <textarea
-                  ref={editInputRef}
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      if (onSaveEdit) onSaveEdit(message.id, editContent);
-                    } else if (e.key === 'Escape') {
-                      if (onCancelEdit) onCancelEdit();
-                    }
-                  }}
-                  className={`w-full min-h-[60px] text-[15px] leading-relaxed resize-none rounded ${
-                    isSent
-                      ? 'bg-viber-purple-dark text-white placeholder-white/50'
-                      : 'bg-white text-gray-900 placeholder-gray-400'
-                  } border-none focus:outline-none focus:ring-2 focus:ring-viber-purple/50 p-2`}
-                  placeholder="Edit message..."
-                />
-                <div className="flex items-center justify-end gap-2 text-xs">
-                  <button
-                    onClick={() => onCancelEdit && onCancelEdit()}
-                    className={`px-3 py-1 rounded ${
-                      isSent
-                        ? 'text-white/70 hover:bg-white/10'
-                        : 'text-gray-600 hover:bg-gray-100'
-                    }`}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => onSaveEdit && onSaveEdit(message.id, editContent)}
-                    disabled={!editContent.trim() || editContent === message.content}
-                    className={`px-3 py-1 rounded font-medium ${
-                      isSent
-                        ? 'bg-white text-viber-purple hover:bg-white/90 disabled:opacity-50'
-                        : 'bg-viber-purple text-white hover:bg-viber-purple-dark disabled:opacity-50'
-                    } disabled:cursor-not-allowed`}
-                  >
-                    Save
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap">
-                {message.content}
-              </p>
-            )}
+            <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap">
+              {message.content}
+            </p>
 
             {/* Metadata (time, status, edited) */}
-            {!isEditing && (
-              <div
-                className={`flex items-center gap-1 mt-1 text-[11px] ${
-                  isSent ? 'text-white/70 justify-end' : 'text-gray-500 justify-start'
-                }`}
-              >
-                <span>{formatTime(message.createdAt)}</span>
-                {message.isEdited && <span>(edited)</span>}
-                {renderStatusIcon()}
-              </div>
-            )}
+            <div
+              className={`flex items-center gap-1 mt-1 text-[11px] ${
+                isSent ? 'text-white/70 justify-end' : 'text-gray-500 justify-start'
+              }`}
+            >
+              <span>{formatTime(message.createdAt)}</span>
+              {message.isEdited && <span>(edited)</span>}
+              {renderStatusIcon()}
+            </div>
           </div>
         </div>
 
