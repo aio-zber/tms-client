@@ -164,17 +164,36 @@ export function useMessages(
       console.log('[useMessages] Message type:', typeof message);
       console.log('[useMessages] Message keys:', Object.keys(message));
       
+      // Transform snake_case to camelCase to match API format
+      const transformedMessage: Message = {
+        id: message.id as string,
+        conversationId: (message.conversation_id || message.conversationId) as string,
+        senderId: (message.sender_id || message.senderId) as string,
+        content: message.content as string,
+        type: (message.type || 'text') as string,
+        createdAt: (message.created_at || message.createdAt) as string,
+        updatedAt: (message.updated_at || message.updatedAt) as string,
+        deletedAt: (message.deleted_at || message.deletedAt) as string | null,
+        isEdited: (message.is_edited || message.isEdited || false) as boolean,
+        replyToId: (message.reply_to_id || message.replyToId) as string | undefined,
+        metadata: (message.metadata_json || message.metadata) as Record<string, unknown> | undefined,
+        reactions: (message.reactions || []) as Array<unknown>,
+        statuses: (message.statuses || []) as Array<unknown>,
+        sender: message.sender as Record<string, unknown> | undefined,
+      };
+      
+      console.log('[useMessages] Transformed message with camelCase:', transformedMessage);
+      
       setMessages((prev) => {
         // Check if message already exists (prevent duplicates from WebSocket)
-        const messageId = message.id as string;
-        const exists = prev.some((m) => m.id === messageId);
+        const exists = prev.some((m) => m.id === transformedMessage.id);
         if (exists) {
           console.log('[useMessages] Message already in state (from optimistic update), skipping WebSocket duplicate');
           return prev;
         }
         // Add new message
-        console.log('[useMessages] ✅ Adding message to state:', messageId);
-        return [...prev, message as unknown as Message];
+        console.log('[useMessages] ✅ Adding message to state:', transformedMessage.id);
+        return [...prev, transformedMessage];
       });
     };
 
