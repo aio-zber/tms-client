@@ -156,13 +156,13 @@ export const MessageBubble = memo(function MessageBubble({
             className={`text-xs px-3 py-2 rounded-t-lg mb-[-8px] border-l-4 ${
               isSent
                 ? 'bg-purple-800/80 border-purple-300/50'
-                : 'bg-gray-100 border-viber-purple'
+                : 'bg-viber-purple/10 border-viber-purple'
             } max-w-full`}
           >
             <div className={`font-semibold mb-0.5 ${isSent ? 'text-purple-200' : 'text-viber-purple'}`}>
               {getUserName ? getUserName(message.replyTo.senderId) : 'User'}
             </div>
-            <div className={`truncate ${isSent ? 'text-white/95' : 'text-gray-600'}`}>
+            <div className={`truncate ${isSent ? 'text-white/95' : 'text-gray-800'}`}>
               {message.replyTo.content.length > 50
                 ? message.replyTo.content.slice(0, 50) + '...'
                 : message.replyTo.content}
