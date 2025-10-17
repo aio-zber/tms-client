@@ -48,10 +48,21 @@ export function MessageList({
   const [autoScroll, setAutoScroll] = useState(true);
   const previousMessageCountRef = useRef(messages?.length || 0);
 
+  // Debug logging
+  console.log('[MessageList] Props received:', { 
+    messagesCount: messages?.length, 
+    loading, 
+    currentUserId,
+    messages: messages 
+  });
+
   // Group messages by date
   const groupedMessages: MessageGroup[] = (messages || []).reduce((groups, message) => {
     // Validate date before formatting
-    if (!message.createdAt) return groups;
+    if (!message.createdAt) {
+      console.log('[MessageList] Skipping message with no createdAt:', message);
+      return groups;
+    }
 
     const messageDate = new Date(message.createdAt);
     if (isNaN(messageDate.getTime())) return groups; // Skip invalid dates
@@ -70,6 +81,12 @@ export function MessageList({
 
     return groups;
   }, [] as MessageGroup[]);
+
+  console.log('[MessageList] Grouped messages:', { 
+    groupCount: groupedMessages.length, 
+    totalMessages: groupedMessages.reduce((sum, g) => sum + g.messages.length, 0),
+    groups: groupedMessages 
+  });
 
   // Format date label
   const formatDateLabel = (dateString: string): string => {
