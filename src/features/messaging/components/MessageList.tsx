@@ -172,10 +172,10 @@ export function MessageList({
 
   if (loading && (!messages || messages.length === 0)) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-gray-50">
+      <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-viber-purple/5 to-white">
         <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-viber-purple mx-auto mb-3" />
-          <p className="text-gray-500">Loading messages...</p>
+          <Loader2 className="w-8 h-8 md:w-10 md:h-10 animate-spin text-viber-purple mx-auto mb-3" />
+          <p className="text-viber-purple/70 text-sm md:text-base">Loading messages...</p>
         </div>
       </div>
     );
@@ -183,13 +183,13 @@ export function MessageList({
 
   if (!loading && (!messages || messages.length === 0)) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-gray-50">
+      <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-viber-purple/5 to-white">
         <div className="text-center p-6">
-          <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-3xl">💬</span>
+          <div className="w-16 h-16 md:w-20 md:h-20 bg-viber-purple/10 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
+            <span className="text-3xl md:text-4xl">💬</span>
           </div>
-          <p className="text-gray-500 mb-2">No messages yet</p>
-          <p className="text-sm text-gray-400">
+          <p className="text-viber-purple/70 mb-2 text-base md:text-lg font-medium">No messages yet</p>
+          <p className="text-sm md:text-base text-viber-purple/50">
             Start a conversation by sending a message below
           </p>
         </div>
@@ -201,9 +201,9 @@ export function MessageList({
     <div
       ref={scrollAreaRef}
       onScroll={handleScroll}
-      className="flex-1 overflow-y-auto bg-gray-50 px-4 py-4"
+      className="flex-1 overflow-y-auto bg-gradient-to-br from-viber-purple/5 via-white to-viber-purple/5 px-3 md:px-4 py-3 md:py-4"
     >
-      <div className="max-w-4xl mx-auto space-y-4">
+      <div className="max-w-4xl mx-auto space-y-3 md:space-y-4">
         {/* Load More Button */}
         {hasMore && (
           <div className="flex justify-center py-2">
@@ -235,16 +235,16 @@ export function MessageList({
 
         {/* Grouped Messages */}
         {groupedMessages.map((group) => (
-          <div key={group.date} className="space-y-4">
+          <div key={group.date} className="space-y-3 md:space-y-4">
             {/* Date Separator */}
             <div className="flex items-center justify-center py-2">
-              <div className="px-3 py-1 bg-white border border-gray-200 rounded-full text-xs text-gray-600 shadow-sm">
+              <div className="px-3 md:px-4 py-1 md:py-1.5 bg-viber-purple/10 border border-viber-purple/30 rounded-full text-xs md:text-sm text-viber-purple font-medium shadow-sm">
                 {formatDateLabel(group.date)}
               </div>
             </div>
 
             {/* Messages */}
-            <div className="space-y-2">
+            <div className="space-y-2 md:space-y-3">
               {group.messages.map((message, index) => {
                 const isSent = message.senderId === currentUserId;
 
