@@ -16,10 +16,14 @@ class SocketClient {
    * Initialize Socket.IO connection
    */
   connect(token: string): Socket {
-    if (this.socket?.connected) {
+    // If socket already exists (even if disconnected), reuse it
+    if (this.socket) {
+      console.log('[SocketClient] Socket already exists, reusing instance');
+      console.log('[SocketClient] Socket connected:', this.socket.connected);
       return this.socket;
     }
 
+    console.log('[SocketClient] Creating NEW socket instance');
     console.log('[SocketClient] Connecting to:', SOCKET_URL);
     console.log('[SocketClient] Path:', '/socket.io');
     console.log('[SocketClient] Full URL:', `${SOCKET_URL}/socket.io/`);
