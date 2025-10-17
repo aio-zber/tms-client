@@ -141,14 +141,14 @@ export function MessageBubble({
           <div
             className={`text-xs px-3 py-2 rounded-t-lg mb-[-8px] border-l-4 ${
               isSent
-                ? 'bg-white/10 border-white/50'
+                ? 'bg-purple-700/70 border-white/50'
                 : 'bg-gray-100 border-viber-purple'
             } max-w-full`}
           >
             <div className={`font-semibold mb-0.5 ${isSent ? 'text-white' : 'text-viber-purple'}`}>
               {getUserName ? getUserName(message.replyTo.senderId) : 'User'}
             </div>
-            <div className={`truncate ${isSent ? 'text-white/80' : 'text-gray-600'}`}>
+            <div className={`truncate ${isSent ? 'text-white/90' : 'text-gray-600'}`}>
               {message.replyTo.content.length > 50
                 ? message.replyTo.content.slice(0, 50) + '...'
                 : message.replyTo.content}
