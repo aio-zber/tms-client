@@ -47,6 +47,8 @@ export function MessageList({
   const bottomRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const previousMessageCountRef = useRef(messages?.length || 0);
+  const previousScrollHeightRef = useRef(0);
+  const isLoadingMoreRef = useRef(false);
 
   // Debug logging
   console.log('[MessageList] Props received:', { 
@@ -110,13 +112,33 @@ export function MessageList({
     }
   };
 
-  // Auto-scroll to bottom on new messages
+  // Preserve scroll position when loading more messages (prepending to top)
   useEffect(() => {
+    const scrollArea = scrollAreaRef.current;
+    if (!scrollArea) return;
+
     const messageCount = messages?.length || 0;
-    if (autoScroll && messageCount > previousMessageCountRef.current) {
+    const previousCount = previousMessageCountRef.current;
+
+    // If we're loading more (message count increased but we're not at bottom)
+    if (isLoadingMoreRef.current && messageCount > previousCount) {
+      const currentScrollHeight = scrollArea.scrollHeight;
+      const previousScrollHeight = previousScrollHeightRef.current;
+      const scrollHeightDiff = currentScrollHeight - previousScrollHeight;
+
+      // Restore scroll position (keep visual position stable)
+      scrollArea.scrollTop = scrollArea.scrollTop + scrollHeightDiff;
+      
+      isLoadingMoreRef.current = false;
+      console.log('[MessageList] Preserved scroll position after loading more');
+    } 
+    // If we're at bottom and new messages arrive (normal chat)
+    else if (autoScroll && messageCount > previousCount) {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
+
     previousMessageCountRef.current = messageCount;
+    previousScrollHeightRef.current = scrollArea.scrollHeight;
   }, [messages?.length, autoScroll, messages]);
 
   // Scroll to bottom on initial load
@@ -140,6 +162,10 @@ export function MessageList({
 
     // Load more when scrolling to top
     if (scrollTop < 100 && hasMore && !loading && onLoadMore) {
+      // Save scroll height before loading more
+      previousScrollHeightRef.current = scrollArea.scrollHeight;
+      isLoadingMoreRef.current = true;
+      console.log('[MessageList] Loading more messages, saving scroll position');
       onLoadMore();
     }
   };
@@ -182,7 +208,16 @@ export function MessageList({
         {hasMore && (
           <div className="flex justify-center py-2">
             <button
-              onClick={onLoadMore}
+              onClick={() => {
+                const scrollArea = scrollAreaRef.current;
+                if (scrollArea && onLoadMore) {
+                  // Save scroll height before loading more
+                  previousScrollHeightRef.current = scrollArea.scrollHeight;
+                  isLoadingMoreRef.current = true;
+                  console.log('[MessageList] Load More button clicked, saving scroll position');
+                  onLoadMore();
+                }
+              }}
               disabled={loading}
               className="px-4 py-2 text-sm text-viber-purple hover:bg-viber-purple/10 rounded-full transition disabled:opacity-50"
             >
