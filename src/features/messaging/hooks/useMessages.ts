@@ -159,7 +159,11 @@ export function useMessages(
 
     // Listen for new messages
     const handleNewMessage = (message: Record<string, unknown>) => {
+      console.log('[useMessages] 🔥🔥🔥 NEW MESSAGE HANDLER CALLED!');
       console.log('[useMessages] New message received via WebSocket:', message);
+      console.log('[useMessages] Message type:', typeof message);
+      console.log('[useMessages] Message keys:', Object.keys(message));
+      
       setMessages((prev) => {
         // Check if message already exists (prevent duplicates from WebSocket)
         const messageId = message.id as string;
@@ -169,6 +173,7 @@ export function useMessages(
           return prev;
         }
         // Add new message
+        console.log('[useMessages] ✅ Adding message to state:', messageId);
         return [...prev, message as unknown as Message];
       });
     };
