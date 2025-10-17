@@ -40,9 +40,10 @@ export const MessageBubble = memo(function MessageBubble({
 }: MessageBubbleProps) {
   const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showTimestamp, setShowTimestamp] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
-  
+
   // Common emojis for quick reactions
   const quickEmojis = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥'];
 
@@ -51,6 +52,7 @@ export const MessageBubble = memo(function MessageBubble({
     const handleClickOutside = (event: MouseEvent) => {
       if (contextMenuRef.current && !contextMenuRef.current.contains(event.target as Node)) {
         setContextMenu(null);
+        setShowTimestamp(false); // Hide timestamp when closing menu
       }
       if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target as Node)) {
         setShowEmojiPicker(false);
@@ -60,6 +62,7 @@ export const MessageBubble = memo(function MessageBubble({
     const handleScroll = () => {
       setContextMenu(null);
       setShowEmojiPicker(false);
+      setShowTimestamp(false); // Hide timestamp on scroll
     };
 
     if (contextMenu || showEmojiPicker) {
@@ -74,6 +77,7 @@ export const MessageBubble = memo(function MessageBubble({
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
+    setShowTimestamp(true); // Show timestamp on right-click
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
@@ -82,6 +86,7 @@ export const MessageBubble = memo(function MessageBubble({
 
   const handleMenuAction = (action: () => void) => {
     setContextMenu(null);
+    setShowTimestamp(false); // Hide timestamp when menu closes
     action();
   };
 
@@ -116,16 +121,8 @@ export const MessageBubble = memo(function MessageBubble({
   const formatTime = (timestamp: string) => {
     try {
       const date = new Date(timestamp);
-      const today = new Date();
-      const isToday = date.toDateString() === today.toDateString();
-      
-      // If today, show just the time (e.g., "10:30 AM")
-      // If not today, show date and time (e.g., "Oct 14, 10:30 AM")
-      if (isToday) {
-        return format(date, 'h:mm a');
-      } else {
-        return format(date, 'MMM d, h:mm a');
-      }
+      // Always show just time since date divider is already present
+      return format(date, 'h:mm a');
     } catch {
       return 'Unknown';
     }
@@ -179,16 +176,17 @@ export const MessageBubble = memo(function MessageBubble({
               {message.content}
             </p>
 
-            {/* Metadata (time, status, edited) */}
-            <div
-              className={`flex items-center gap-1 mt-1 text-[11px] ${
-                isSent ? 'text-white/70 justify-end' : 'text-gray-500 justify-start'
-              }`}
-            >
-              <span>{formatTime(message.createdAt)}</span>
-              {message.isEdited && <span>(edited)</span>}
-              {renderStatusIcon()}
-            </div>
+            {/* Metadata (edited label and status only, NO timestamp) */}
+            {(message.isEdited || message.status) && (
+              <div
+                className={`flex items-center gap-1 mt-1 text-[11px] ${
+                  isSent ? 'text-white/70 justify-end' : 'text-gray-500 justify-start'
+                }`}
+              >
+                {message.isEdited && <span>(edited)</span>}
+                {renderStatusIcon()}
+              </div>
+            )}
           </div>
         </div>
 
@@ -215,6 +213,13 @@ export const MessageBubble = memo(function MessageBubble({
                 {count > 1 && <span className="text-[10px] font-medium">{count}</span>}
               </button>
             ))}
+          </div>
+        )}
+
+        {/* Timestamp (outside bubble, only shown on right-click) */}
+        {showTimestamp && (
+          <div className={`text-[10px] text-gray-400 mt-1 px-1 ${isSent ? 'text-right' : 'text-left'}`}>
+            {formatTime(message.createdAt)}
           </div>
         )}
       </div>
