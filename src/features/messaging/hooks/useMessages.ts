@@ -171,15 +171,14 @@ export function useMessages(
         senderId: (message.sender_id || message.senderId) as string,
         content: message.content as string,
         type: (message.type || 'text') as 'text' | 'image' | 'file' | 'voice' | 'poll' | 'call',
+        status: (message.status || 'sent') as 'sending' | 'sent' | 'delivered' | 'read' | 'failed',
         createdAt: (message.created_at || message.createdAt) as string,
         updatedAt: (message.updated_at || message.updatedAt) as string,
         deletedAt: (message.deleted_at || message.deletedAt || undefined) as string | undefined,
         isEdited: (message.is_edited || message.isEdited || false) as boolean,
         replyToId: (message.reply_to_id || message.replyToId) as string | undefined,
-        metadata: (message.metadata_json || message.metadata) as Record<string, unknown> | undefined,
-        reactions: (message.reactions || []) as Array<unknown>,
-        statuses: (message.statuses || []) as Array<unknown>,
-        sender: message.sender as Record<string, unknown> | undefined,
+        metadata: (message.metadata_json || message.metadata) as any,
+        reactions: (message.reactions || []) as any,
       };
       
       console.log('[useMessages] Transformed message with camelCase:', transformedMessage);
