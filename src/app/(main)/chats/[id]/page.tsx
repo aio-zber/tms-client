@@ -42,7 +42,7 @@ export default function ChatPage({ params }: ChatPageProps) {
 
   const { messages, loading, hasMore, loadMore, addOptimisticMessage } = useMessages(conversationId);
   const { sendMessage, sending } = useSendMessage();
-  const { editMessage, deleteMessage } = useMessageActions();
+  const { editMessage, deleteMessage, addReaction } = useMessageActions();
   useSocket(); // Initialize WebSocket connection
 
   // Debug: Log messages whenever they change
@@ -136,6 +136,14 @@ export default function ChatPage({ params }: ChatPageProps) {
   const handleReply = (message: Message) => {
     setReplyToMessage(message);
   };
+
+  const handleReact = useCallback(
+    async (messageId: string, emoji: string) => {
+      await addReaction(messageId, emoji);
+      // No need to refresh - WebSocket will push the reaction
+    },
+    [addReaction]
+  );
 
   const getUserName = (userId: string): string => {
     if (!conversation || !conversation.members) return 'Unknown';
@@ -268,6 +276,7 @@ export default function ChatPage({ params }: ChatPageProps) {
         onEdit={handleEditMessage}
         onDelete={handleDeleteMessage}
         onReply={handleReply}
+        onReact={handleReact}
         getUserName={getUserName}
         isGroupChat={conversation.type === 'group'}
       />
