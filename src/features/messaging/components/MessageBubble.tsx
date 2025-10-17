@@ -128,6 +128,13 @@ export const MessageBubble = memo(function MessageBubble({
     }
   };
 
+  // Debug: Log reply data
+  if (message.replyToId) {
+    console.log(`[MessageBubble] Message ${message.id} has replyToId: ${message.replyToId}`);
+    console.log(`[MessageBubble] message.replyTo present: ${message.replyTo !== undefined}`);
+    console.log(`[MessageBubble] message.replyTo data:`, message.replyTo);
+  }
+
   return (
     <>
       <div className={`flex gap-2 ${isSent ? 'justify-end' : 'justify-start'}`}>
@@ -138,13 +145,13 @@ export const MessageBubble = memo(function MessageBubble({
           }`}
           onContextMenu={handleContextMenu}
         >
-        {/* Sender Name (for group chats) */}
-        {showSender && !isSent && senderName && (
-          <span className="text-xs text-gray-600 mb-1 px-3">{senderName}</span>
-        )}
+          {/* Sender Name (for group chats) */}
+          {showSender && !isSent && senderName && (
+            <span className="text-xs text-gray-600 mb-1 px-3">{senderName}</span>
+          )}
 
-        {/* Reply-to Message */}
-        {message.replyTo && (
+          {/* Reply-to Message */}
+          {message.replyTo && (
           <div
             className={`text-xs px-3 py-2 rounded-t-lg mb-[-8px] border-l-4 ${
               isSent
