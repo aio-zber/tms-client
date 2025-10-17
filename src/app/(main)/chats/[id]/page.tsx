@@ -43,7 +43,7 @@ export default function ChatPage({ params }: ChatPageProps) {
 
   const { messages, loading, hasMore, loadMore, addOptimisticMessage } = useMessages(conversationId);
   const { sendMessage, sending } = useSendMessage();
-  const { editMessage, deleteMessage, addReaction } = useMessageActions();
+  const { editMessage, deleteMessage, addReaction, removeReaction } = useMessageActions();
   useSocket(); // Initialize WebSocket connection
 
   // Debug: Log messages whenever they change
@@ -152,10 +152,25 @@ export default function ChatPage({ params }: ChatPageProps) {
 
   const handleReact = useCallback(
     async (messageId: string, emoji: string) => {
-      await addReaction(messageId, emoji);
+      // Find the message
+      const message = messages.find(m => m.id === messageId);
+      if (!message || !currentUserId) return;
+
+      // Check if user already reacted with this emoji
+      const existingReaction = message.reactions?.find(
+        r => r.emoji === emoji && r.userId === currentUserId
+      );
+
+      if (existingReaction) {
+        // Remove reaction
+        await removeReaction(messageId, emoji);
+      } else {
+        // Add reaction
+        await addReaction(messageId, emoji);
+      }
       // No need to refresh - WebSocket will push the reaction
     },
-    [addReaction]
+    [addReaction, removeReaction, messages, currentUserId]
   );
 
   const getUserName = (userId: string): string => {
