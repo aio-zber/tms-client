@@ -7,7 +7,7 @@
 
 import { use, useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, MoreVertical, Loader2 } from 'lucide-react';
+import { ArrowLeft, Menu, MoreVertical, Loader2, X } from 'lucide-react';
 import { MessageList } from '@/features/messaging/components/MessageList';
 import { MessageInput } from '@/features/messaging/components/MessageInput';
 import { useMessages } from '@/features/messaging/hooks/useMessages';
@@ -17,6 +17,7 @@ import { useSocket } from '@/hooks/useSocket';
 import { conversationService } from '@/features/conversations/services/conversationService';
 import { userService } from '@/features/users/services/userService';
 import { messageService } from '@/features/messaging/services/messageService';
+import { CenterPanel } from '@/components/layout/CenterPanel';
 import type { Conversation, Message } from '@/types';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -41,6 +42,7 @@ export default function ChatPage({ params }: ChatPageProps) {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [replyToMessage, setReplyToMessage] = useState<Message | undefined>();
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
 
   const { messages, loading, hasMore, loadMore, addOptimisticMessage } = useMessages(conversationId);
   const { sendMessage, sending } = useSendMessage();
@@ -269,22 +271,56 @@ export default function ChatPage({ params }: ChatPageProps) {
   }
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Chat Header */}
-      <div className="p-4 border-b border-gray-200 bg-white flex items-center gap-3">
-        <button
-          onClick={() => router.push('/chats')}
-          className="p-2 hover:bg-gray-100 rounded-full transition lg:hidden"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
+    <>
+      {/* Mobile Drawer Overlay */}
+      {isMobileDrawerOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={() => setIsMobileDrawerOpen(false)}
+        />
+      )}
 
-        <Avatar className="w-10 h-10">
-          <AvatarImage src={conversation.avatarUrl} />
-          <AvatarFallback className="bg-viber-purple text-white">
-            {getConversationTitle().charAt(0).toUpperCase()}
-          </AvatarFallback>
-        </Avatar>
+      {/* Mobile Drawer */}
+      <div
+        className={`fixed top-0 left-0 h-full w-[320px] bg-white z-50 transform transition-transform duration-300 lg:hidden ${
+          isMobileDrawerOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        {/* Drawer Header */}
+        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">Chats</h2>
+          <button
+            onClick={() => setIsMobileDrawerOpen(false)}
+            className="p-2 hover:bg-gray-100 rounded-full transition"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Conversation List */}
+        <div className="h-[calc(100%-73px)] overflow-y-auto">
+          <CenterPanel />
+        </div>
+      </div>
+
+      <div className="h-full flex flex-col">
+        {/* Chat Header */}
+        <div className="p-4 border-b border-gray-200 bg-white flex items-center gap-3">
+          {/* Hamburger Menu (Mobile Only) */}
+          <button
+            onClick={() => setIsMobileDrawerOpen(true)}
+            className="p-2 hover:bg-gray-100 rounded-full transition lg:hidden"
+            aria-label="Open conversations"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+
+          <Avatar className="w-10 h-10">
+            <AvatarImage src={conversation.avatarUrl} />
+            <AvatarFallback className="bg-viber-purple text-white">
+              {getConversationTitle().charAt(0).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
 
         <div className="flex-1 min-w-0">
           <h1 className="text-lg font-semibold truncate">{getConversationTitle()}</h1>
@@ -344,6 +380,7 @@ export default function ChatPage({ params }: ChatPageProps) {
         onSaveEdit={handleSaveEdit}
         onCancelEdit={handleCancelEdit}
       />
-    </div>
+      </div>
+    </>
   );
 }
