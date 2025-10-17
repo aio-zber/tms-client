@@ -78,6 +78,11 @@ class SocketClient {
     this.socket.on('error', (error) => {
       console.error('[Socket] Error:', error);
     });
+
+    // Debug: Log ALL incoming events to diagnose missing messages
+    this.socket.onAny((eventName, ...args) => {
+      console.log(`[Socket] 📨 Event received: "${eventName}"`, args);
+    });
   }
 
   /**
@@ -131,7 +136,22 @@ class SocketClient {
    * Listen for new messages
    */
   onNewMessage(callback: (message: Record<string, unknown>) => void) {
-    this.socket?.on('new_message', callback);
+    console.log('[Socket] Attaching new_message listener');
+    console.log('[Socket] Socket exists:', !!this.socket);
+    console.log('[Socket] Socket connected:', this.socket?.connected);
+    
+    if (this.socket) {
+      // Wrap callback with debug logging
+      const wrappedCallback = (message: Record<string, unknown>) => {
+        console.log('[Socket] 🔔 RAW new_message event received!', message);
+        callback(message);
+      };
+      
+      this.socket.on('new_message', wrappedCallback);
+      console.log('[Socket] ✅ new_message listener attached');
+    } else {
+      console.error('[Socket] ❌ Cannot attach new_message listener - socket not initialized');
+    }
   }
 
   /**
