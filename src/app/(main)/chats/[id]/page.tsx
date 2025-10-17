@@ -40,7 +40,7 @@ export default function ChatPage({ params }: ChatPageProps) {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [replyToMessage, setReplyToMessage] = useState<Message | undefined>();
 
-  const { messages, loading, hasMore, loadMore } = useMessages(conversationId);
+  const { messages, loading, hasMore, loadMore, addOptimisticMessage } = useMessages(conversationId);
   const { sendMessage, sending } = useSendMessage();
   const { editMessage, deleteMessage } = useMessageActions();
   useSocket(); // Initialize WebSocket connection
@@ -88,16 +88,27 @@ export default function ChatPage({ params }: ChatPageProps) {
   // Real-time updates are handled by useMessages hook via WebSocket
 
   const handleSendMessage = async (content: string, replyToId?: string) => {
-    const message = await sendMessage({
-      conversation_id: conversationId,
-      content,
-      type: 'text',
-      reply_to_id: replyToId,
-    });
+    console.log('[ChatPage] Sending message:', content);
+    
+    const message = await sendMessage(
+      {
+        conversation_id: conversationId,
+        content,
+        type: 'text',
+        reply_to_id: replyToId,
+      },
+      // Optimistic update callback - add message immediately to UI
+      (sentMessage) => {
+        console.log('[ChatPage] Message sent successfully, adding to UI optimistically:', sentMessage);
+        addOptimisticMessage(sentMessage);
+      }
+    );
 
     if (message) {
+      console.log('[ChatPage] Message confirmed:', message.id);
       setReplyToMessage(undefined);
-      // No need to refresh - WebSocket will push the new message
+    } else {
+      console.error('[ChatPage] Failed to send message');
     }
   };
 

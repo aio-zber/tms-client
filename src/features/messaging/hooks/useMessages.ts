@@ -21,6 +21,7 @@ interface UseMessagesReturn {
   loadMessages: () => Promise<void>;
   loadMore: () => Promise<void>;
   refresh: () => Promise<void>;
+  addOptimisticMessage: (message: Message) => void;
 }
 
 export function useMessages(
@@ -91,6 +92,22 @@ export function useMessages(
     await loadMessages();
   }, [loadMessages]);
 
+  // Add message optimistically (for sender's own messages)
+  const addOptimisticMessage = useCallback((message: Message) => {
+    console.log('[useMessages] Adding optimistic message:', message);
+    setMessages((prev) => {
+      // Check if message already exists (avoid duplicates)
+      const exists = prev.some((m) => m.id === message.id);
+      if (exists) {
+        console.log('[useMessages] Message already exists, skipping optimistic add');
+        return prev;
+      }
+      // Add new message at the end
+      console.log('[useMessages] Adding new message to state');
+      return [...prev, message];
+    });
+  }, []);
+
   useEffect(() => {
     if (autoLoad && conversationId) {
       loadMessages();
@@ -126,7 +143,17 @@ export function useMessages(
     // Listen for new messages
     const handleNewMessage = (message: Record<string, unknown>) => {
       console.log('[useMessages] New message received via WebSocket:', message);
-      setMessages((prev) => [...prev, message as unknown as Message]);
+      setMessages((prev) => {
+        // Check if message already exists (prevent duplicates from WebSocket)
+        const messageId = message.id as string;
+        const exists = prev.some((m) => m.id === messageId);
+        if (exists) {
+          console.log('[useMessages] Message already in state (from optimistic update), skipping WebSocket duplicate');
+          return prev;
+        }
+        // Add new message
+        return [...prev, message as unknown as Message];
+      });
     };
 
     // Listen for message edits
@@ -167,5 +194,6 @@ export function useMessages(
     loadMessages,
     loadMore,
     refresh,
+    addOptimisticMessage,
   };
 }
