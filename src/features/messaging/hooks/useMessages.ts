@@ -170,7 +170,7 @@ export function useMessages(
         conversationId: (message.conversation_id || message.conversationId) as string,
         senderId: (message.sender_id || message.senderId) as string,
         content: message.content as string,
-        type: (message.type || 'text') as string,
+        type: (message.type || 'text') as 'text' | 'image' | 'file' | 'voice' | 'poll' | 'call',
         createdAt: (message.created_at || message.createdAt) as string,
         updatedAt: (message.updated_at || message.updatedAt) as string,
         deletedAt: (message.deleted_at || message.deletedAt) as string | null,
