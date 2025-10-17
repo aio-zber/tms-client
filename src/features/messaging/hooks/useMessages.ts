@@ -52,6 +52,15 @@ export function useMessages(
       console.log('[useMessages] Received response:', response);
       console.log('[useMessages] Messages count:', response.data?.length);
       console.log('[useMessages] First message:', response.data?.[0]);
+      
+      // Debug: Check for reply_to in messages
+      response.data?.forEach((msg, idx) => {
+        if (msg.replyToId || msg.reply_to_id) {
+          console.log(`[useMessages] Message ${idx} has replyToId: ${msg.replyToId || msg.reply_to_id}`);
+          console.log(`[useMessages] Message ${idx} replyTo object:`, msg.replyTo || msg.reply_to);
+          console.log(`[useMessages] Message ${idx} full data:`, msg);
+        }
+      });
 
       setMessages(response.data || []);
       setHasMore(response.pagination?.has_more ?? false);
