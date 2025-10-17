@@ -236,13 +236,21 @@ export function useMessages(
       const messageId = data.message_id as string;
       const reaction = data.reaction as Record<string, unknown>;
       
+      // Transform reaction to proper format
+      const transformedReaction: MessageReaction = {
+        id: reaction.id as string,
+        userId: (reaction.user_id || reaction.userId) as string,
+        emoji: reaction.emoji as string,
+        createdAt: (reaction.created_at || reaction.createdAt) as string,
+      };
+      
       setMessages((prev) =>
         prev.map((msg) => {
           if (msg.id === messageId) {
             const reactions = msg.reactions || [];
             return {
               ...msg,
-              reactions: [...reactions, reaction as any],
+              reactions: [...reactions, transformedReaction],
             };
           }
           return msg;
@@ -262,7 +270,7 @@ export function useMessages(
             const reactions = msg.reactions || [];
             return {
               ...msg,
-              reactions: reactions.filter((r: any) => r.id !== reactionId),
+              reactions: reactions.filter((r: MessageReaction) => r.id !== reactionId),
             };
           }
           return msg;
