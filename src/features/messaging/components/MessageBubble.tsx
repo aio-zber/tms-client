@@ -6,7 +6,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { formatDistanceToNow } from 'date-fns';
+import { format } from 'date-fns';
 import { Check, CheckCheck, Reply, Edit, Trash2, Smile } from 'lucide-react';
 import type { Message } from '@/types/message';
 
@@ -113,23 +113,21 @@ export function MessageBubble({
     }
   };
 
-  // State for dynamic timestamp updates
-  const [, setNow] = useState(Date.now());
-
-  // Update timestamps every minute
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setNow(Date.now());
-    }, 60000); // Update every 60 seconds
-
-    return () => clearInterval(interval);
-  }, []);
-
   const formatTime = (timestamp: string) => {
     try {
-      return formatDistanceToNow(new Date(timestamp), { addSuffix: true });
+      const date = new Date(timestamp);
+      const today = new Date();
+      const isToday = date.toDateString() === today.toDateString();
+      
+      // If today, show just the time (e.g., "10:30 AM")
+      // If not today, show date and time (e.g., "Oct 14, 10:30 AM")
+      if (isToday) {
+        return format(date, 'h:mm a');
+      } else {
+        return format(date, 'MMM d, h:mm a');
+      }
     } catch {
-      return 'Just now';
+      return 'Unknown';
     }
   };
 

@@ -28,7 +28,7 @@ export function useMessages(
   conversationId: string,
   options: UseMessagesOptions = {}
 ): UseMessagesReturn {
-  const { limit = 50, autoLoad = true } = options;
+  const { limit = 10, autoLoad = true } = options;
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
