@@ -126,20 +126,16 @@ export function useMessages(
 
     let hasJoined = false;
 
-    // Wait for connection before joining room
+    // Join the conversation room
     const joinRoom = () => {
       if (hasJoined) {
         console.log('[useMessages] Already joined room, skipping');
         return;
       }
 
-      if (socketClient.isConnected()) {
-        console.log('[useMessages] Socket is connected, joining room:', conversationId);
-        socketClient.joinConversation(conversationId);
-        hasJoined = true;
-      } else {
-        console.log('[useMessages] Socket not connected yet, will join when connected...');
-      }
+      console.log('[useMessages] Joining conversation room:', conversationId);
+      socketClient.joinConversation(conversationId);
+      hasJoined = true;
     };
 
     // Try to join immediately if already connected
@@ -150,10 +146,13 @@ export function useMessages(
       console.log('[useMessages] Socket not connected, waiting for connection event...');
     }
 
-    // Also listen for connection events in case we're not connected yet
+    // Listen for connection events in case we're not connected yet
     const handleConnect = () => {
-      console.log('[useMessages] Socket connected event fired, attempting to join room');
-      joinRoom();
+      console.log('[useMessages] Socket connect event fired!');
+      // When connect event fires, socket IS connected - join immediately
+      if (!hasJoined) {
+        joinRoom();
+      }
     };
     
     socket.on('connect', handleConnect);
