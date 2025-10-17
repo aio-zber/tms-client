@@ -230,9 +230,51 @@ export function useMessages(
       setMessages((prev) => prev.filter((msg) => msg.id !== (data.message_id as string)));
     };
 
+    // Listen for reactions added
+    const handleReactionAdded = (data: Record<string, unknown>) => {
+      console.log('[useMessages] Reaction added via WebSocket:', data);
+      const messageId = data.message_id as string;
+      const reaction = data.reaction as Record<string, unknown>;
+      
+      setMessages((prev) =>
+        prev.map((msg) => {
+          if (msg.id === messageId) {
+            const reactions = msg.reactions || [];
+            return {
+              ...msg,
+              reactions: [...reactions, reaction as any],
+            };
+          }
+          return msg;
+        })
+      );
+    };
+
+    // Listen for reactions removed
+    const handleReactionRemoved = (data: Record<string, unknown>) => {
+      console.log('[useMessages] Reaction removed via WebSocket:', data);
+      const messageId = data.message_id as string;
+      const reactionId = data.reaction_id as string;
+      
+      setMessages((prev) =>
+        prev.map((msg) => {
+          if (msg.id === messageId) {
+            const reactions = msg.reactions || [];
+            return {
+              ...msg,
+              reactions: reactions.filter((r: any) => r.id !== reactionId),
+            };
+          }
+          return msg;
+        })
+      );
+    };
+
     socketClient.onNewMessage(handleNewMessage);
     socketClient.onMessageEdited(handleMessageEdited);
     socketClient.onMessageDeleted(handleMessageDeleted);
+    socketClient.onReactionAdded(handleReactionAdded);
+    socketClient.onReactionRemoved(handleReactionRemoved);
 
     // Cleanup
     return () => {
@@ -241,6 +283,8 @@ export function useMessages(
       socketClient.off('new_message', handleNewMessage);
       socketClient.off('message_edited', handleMessageEdited);
       socketClient.off('message_deleted', handleMessageDeleted);
+      socketClient.off('reaction_added', handleReactionAdded);
+      socketClient.off('reaction_removed', handleReactionRemoved);
       socket.off('connect', handleConnect);
     };
   }, [conversationId]);
