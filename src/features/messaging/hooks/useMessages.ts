@@ -64,7 +64,11 @@ export function useMessages(
 
       // REVERSE messages: Backend returns DESC (newest first), but chat should show ASC (oldest first)
       // This makes newest messages appear at BOTTOM like WhatsApp/Telegram
-      setMessages((response.data || []).reverse());
+      const reversedMessages = (response.data || []).reverse();
+      console.log('[useMessages] 🎯 SETTING MESSAGES TO STATE:', reversedMessages.length, 'messages');
+      console.log('[useMessages] 🎯 Message IDs being set:', reversedMessages.map(m => m.id));
+      console.log('[useMessages] 🎯 First 3 messages:', reversedMessages.slice(0, 3));
+      setMessages(reversedMessages);
       setHasMore(response.pagination?.has_more ?? false);
       setCursor(response.pagination?.next_cursor ?? undefined);
     } catch (err) {

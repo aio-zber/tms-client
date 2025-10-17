@@ -56,16 +56,24 @@ export function MessageList({
     messages: messages 
   });
 
+  console.log('[MessageList] 🔍 DETAILED MESSAGE INSPECTION:');
+  (messages || []).forEach((msg, idx) => {
+    console.log(`  [${idx}] id=${msg.id}, createdAt=${msg.createdAt}, content='${msg.content?.substring(0, 20)}...'`);
+  });
+
   // Group messages by date
   const groupedMessages: MessageGroup[] = (messages || []).reduce((groups, message) => {
     // Validate date before formatting
     if (!message.createdAt) {
-      console.log('[MessageList] Skipping message with no createdAt:', message);
+      console.log('[MessageList] ⚠️ SKIPPING message with no createdAt:', message);
       return groups;
     }
 
     const messageDate = new Date(message.createdAt);
-    if (isNaN(messageDate.getTime())) return groups; // Skip invalid dates
+    if (isNaN(messageDate.getTime())) {
+      console.log('[MessageList] ⚠️ SKIPPING message with invalid createdAt:', message.createdAt, message);
+      return groups; // Skip invalid dates
+    }
 
     const dateKey = format(messageDate, 'yyyy-MM-dd');
 
