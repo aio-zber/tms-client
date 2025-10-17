@@ -84,12 +84,15 @@ class SocketClient {
    * Join a conversation room
    */
   joinConversation(conversationId: string) {
-    if (!this.socket?.connected) {
-      console.warn('[Socket] Cannot join conversation - not connected');
+    if (!this.socket) {
+      console.warn('[Socket] Cannot join conversation - socket not initialized');
       return;
     }
 
     console.log('[Socket] Joining conversation:', conversationId);
+    console.log('[Socket] Socket connected state:', this.socket.connected);
+    
+    // Emit join event - Socket.IO will queue if not connected yet
     this.socket.emit('join_conversation', { conversation_id: conversationId });
 
     this.socket.once('joined_conversation', (data) => {
