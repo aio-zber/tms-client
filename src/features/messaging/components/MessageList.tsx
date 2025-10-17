@@ -20,6 +20,7 @@ interface MessageListProps {
   onEdit?: (messageId: string) => void;
   onDelete?: (messageId: string) => void;
   onReply?: (message: Message) => void;
+  onReact?: (messageId: string, emoji: string) => void;
   getUserName?: (userId: string) => string;
   isGroupChat?: boolean;
 }
@@ -38,6 +39,7 @@ export function MessageList({
   onEdit,
   onDelete,
   onReply,
+  onReact,
   getUserName,
   isGroupChat = false,
 }: MessageListProps) {
@@ -210,6 +212,7 @@ export function MessageList({
                     onEdit={isSent ? onEdit : undefined}
                     onDelete={isSent ? onDelete : undefined}
                     onReply={onReply}
+                    onReact={onReact}
                   />
                 );
               })}
