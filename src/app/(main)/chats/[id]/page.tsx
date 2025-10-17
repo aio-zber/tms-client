@@ -287,13 +287,13 @@ export default function ChatPage({ params }: ChatPageProps) {
         } shadow-2xl`}
       >
         {/* Drawer Header */}
-        <div className="p-4 bg-gradient-to-r from-viber-purple/5 to-viber-purple-light/5 border-b border-viber-purple/10 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-viber-purple">Chats</h2>
+        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">Chats</h2>
           <button
             onClick={() => setIsMobileDrawerOpen(false)}
-            className="p-2 hover:bg-viber-purple/10 rounded-full transition"
+            className="p-2 hover:bg-gray-100 rounded-full transition"
           >
-            <X className="w-5 h-5 text-viber-purple" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
@@ -304,18 +304,18 @@ export default function ChatPage({ params }: ChatPageProps) {
       </div>
 
       <div className="h-full flex flex-col">
-        {/* Chat Header with Purple Accent */}
-        <div className="p-3 md:p-4 border-b-2 border-viber-purple/20 bg-gradient-to-r from-viber-purple/5 to-white flex items-center gap-2 md:gap-3 shadow-sm">
+        {/* Chat Header */}
+        <div className="p-3 md:p-4 border-b border-gray-200 bg-white flex items-center gap-2 md:gap-3">
           {/* Hamburger Menu (Mobile Only) */}
           <button
             onClick={() => setIsMobileDrawerOpen(true)}
-            className="p-2 hover:bg-viber-purple/10 rounded-full transition lg:hidden"
+            className="p-2 hover:bg-gray-100 rounded-full transition lg:hidden"
             aria-label="Open conversations"
           >
-            <Menu className="w-5 h-5 text-viber-purple" />
+            <Menu className="w-5 h-5" />
           </button>
 
-          <Avatar className="w-10 h-10 md:w-12 md:h-12 border-2 border-viber-purple/20">
+          <Avatar className="w-10 h-10 md:w-12 md:h-12">
             <AvatarImage src={conversation.avatarUrl} />
             <AvatarFallback className="bg-viber-purple text-white font-semibold">
               {getConversationTitle().charAt(0).toUpperCase()}
@@ -323,8 +323,8 @@ export default function ChatPage({ params }: ChatPageProps) {
           </Avatar>
 
         <div className="flex-1 min-w-0">
-          <h1 className="text-base md:text-lg font-semibold truncate text-viber-purple">{getConversationTitle()}</h1>
-          <p className="text-xs md:text-sm text-viber-purple/60">
+          <h1 className="text-base md:text-lg font-semibold truncate">{getConversationTitle()}</h1>
+          <p className="text-xs md:text-sm text-gray-500">
             {conversation.members.length} member{conversation.members.length > 1 ? 's' : ''}
           </p>
         </div>
@@ -332,27 +332,21 @@ export default function ChatPage({ params }: ChatPageProps) {
         <div className="flex items-center gap-1">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="p-2 hover:bg-viber-purple/10 rounded-full transition">
-                <MoreVertical className="w-5 h-5 md:w-6 md:h-6 text-viber-purple" />
+              <button className="p-2 hover:bg-gray-100 rounded-full transition">
+                <MoreVertical className="w-5 h-5 md:w-6 md:h-6 text-gray-600" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem className="hover:bg-viber-purple/10 hover:text-viber-purple">
-                View Details
-              </DropdownMenuItem>
-              <DropdownMenuItem className="hover:bg-viber-purple/10 hover:text-viber-purple">
-                Mute Conversation
-              </DropdownMenuItem>
-              <DropdownMenuItem className="hover:bg-viber-purple/10 hover:text-viber-purple">
-                Search Messages
-              </DropdownMenuItem>
+              <DropdownMenuItem>View Details</DropdownMenuItem>
+              <DropdownMenuItem>Mute Conversation</DropdownMenuItem>
+              <DropdownMenuItem>Search Messages</DropdownMenuItem>
               <DropdownMenuItem 
                 onClick={handleClearConversation}
-                className="text-orange-600 hover:bg-orange-50"
+                className="text-orange-600"
               >
                 Clear Conversation
               </DropdownMenuItem>
-              <DropdownMenuItem className="text-red-600 hover:bg-red-50">
+              <DropdownMenuItem className="text-red-600">
                 Leave Conversation
               </DropdownMenuItem>
             </DropdownMenuContent>

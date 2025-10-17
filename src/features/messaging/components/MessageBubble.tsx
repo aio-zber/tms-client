@@ -147,22 +147,24 @@ export const MessageBubble = memo(function MessageBubble({
         >
           {/* Sender Name (for group chats) */}
           {showSender && !isSent && senderName && (
-            <span className="text-xs md:text-sm text-viber-purple/80 font-medium mb-1 px-3">{senderName}</span>
+            <span className="text-xs md:text-sm text-gray-600 mb-1 px-3">{senderName}</span>
           )}
 
-          {/* Reply-to Message */}
+          {/* Reply-to Message - NEW DESIGN matching the image */}
           {message.replyTo && (
           <div
             className={`text-xs md:text-sm px-3 py-2 rounded-t-xl mb-[-8px] border-l-4 ${
               isSent
-                ? 'bg-viber-purple-dark border-viber-purple-light shadow-sm'
-                : 'bg-viber-purple/10 border-viber-purple shadow-sm'
+                ? 'bg-gray-100/50 border-viber-purple'
+                : 'bg-gray-100 border-viber-purple'
             } max-w-full`}
           >
-            <div className={`font-semibold mb-0.5 ${isSent ? 'text-viber-purple-light' : 'text-viber-purple'}`}>
+            {/* Sender name in viber purple */}
+            <div className="font-semibold mb-0.5 text-viber-purple">
               {getUserName ? getUserName(message.replyTo.senderId) : 'User'}
             </div>
-            <div className={`truncate ${isSent ? 'text-white' : 'text-gray-800'}`}>
+            {/* Message content in gray */}
+            <div className="truncate text-gray-700">
               {message.replyTo.content.length > 50
                 ? message.replyTo.content.slice(0, 50) + '...'
                 : message.replyTo.content}
@@ -175,8 +177,8 @@ export const MessageBubble = memo(function MessageBubble({
           <div
             className={`px-3 md:px-4 py-2 md:py-2.5 ${message.replyTo ? 'rounded-b-2xl rounded-t-md' : 'rounded-2xl'} ${
               isSent
-                ? 'bg-gradient-to-br from-viber-purple to-viber-purple-dark text-white rounded-br-sm order-1 shadow-md'
-                : 'bg-white text-gray-900 rounded-bl-sm order-2 border border-gray-200 shadow-sm'
+                ? 'bg-viber-purple text-white rounded-br-sm order-1'
+                : 'bg-gray-100 text-gray-900 rounded-bl-sm order-2'
             } ${message.status === 'failed' ? 'opacity-60' : ''}`}
           >
             <p className="text-sm md:text-[15px] leading-relaxed break-words whitespace-pre-wrap">
@@ -209,10 +211,10 @@ export const MessageBubble = memo(function MessageBubble({
             ).map(([emoji, count]) => (
               <button
                 key={emoji}
-                className={`px-2 py-1 rounded-full text-xs md:text-sm flex items-center gap-1 transition-all duration-200 hover:scale-105 ${
+                className={`px-2 py-1 rounded-full text-xs md:text-sm flex items-center gap-1 transition ${
                   isSent
-                    ? 'bg-viber-purple-light/30 hover:bg-viber-purple-light/40 text-white border border-viber-purple-light/50 shadow-sm'
-                    : 'bg-viber-purple/10 hover:bg-viber-purple/20 text-viber-purple border border-viber-purple/30 shadow-sm'
+                    ? 'bg-white/20 hover:bg-white/30 text-white border border-white/30'
+                    : 'bg-white hover:bg-gray-50 text-gray-900 border border-gray-200'
                 }`}
                 onClick={() => onReact && onReact(message.id, emoji)}
               >
@@ -236,7 +238,7 @@ export const MessageBubble = memo(function MessageBubble({
       {contextMenu && (
         <div
           ref={contextMenuRef}
-          className="fixed z-50 bg-white rounded-xl shadow-2xl border-2 border-viber-purple/20 py-1 min-w-[160px]"
+          className="fixed z-50 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[160px]"
           style={{
             left: `${contextMenu.x}px`,
             top: `${contextMenu.y}px`,
@@ -247,7 +249,7 @@ export const MessageBubble = memo(function MessageBubble({
               setContextMenu(null);
               setShowEmojiPicker(true);
             }}
-            className="w-full px-4 py-2.5 text-left text-sm md:text-base hover:bg-viber-purple/10 flex items-center gap-2 text-viber-purple font-medium transition"
+            className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-gray-100 flex items-center gap-2 text-gray-700 transition"
           >
             <Smile className="w-4 h-4 md:w-5 md:h-5" />
             React
@@ -255,7 +257,7 @@ export const MessageBubble = memo(function MessageBubble({
           {onReply && (
             <button
               onClick={() => handleMenuAction(() => onReply(message))}
-              className="w-full px-4 py-2.5 text-left text-sm md:text-base hover:bg-viber-purple/10 flex items-center gap-2 text-viber-purple font-medium transition"
+              className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-gray-100 flex items-center gap-2 text-gray-700 transition"
             >
               <Reply className="w-4 h-4 md:w-5 md:h-5" />
               Reply
@@ -264,7 +266,7 @@ export const MessageBubble = memo(function MessageBubble({
           {isSent && onEdit && (
             <button
               onClick={() => handleMenuAction(() => onEdit(message.id))}
-              className="w-full px-4 py-2.5 text-left text-sm md:text-base hover:bg-viber-purple/10 flex items-center gap-2 text-viber-purple font-medium transition"
+              className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-gray-100 flex items-center gap-2 text-gray-700 transition"
             >
               <Edit className="w-4 h-4 md:w-5 md:h-5" />
               Edit
@@ -273,7 +275,7 @@ export const MessageBubble = memo(function MessageBubble({
           {isSent && onDelete && (
             <button
               onClick={() => handleMenuAction(() => onDelete(message.id))}
-              className="w-full px-4 py-2.5 text-left text-sm md:text-base hover:bg-red-50 flex items-center gap-2 text-red-600 font-medium transition"
+              className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-red-50 flex items-center gap-2 text-red-600 transition"
             >
               <Trash2 className="w-4 h-4 md:w-5 md:h-5" />
               Delete
@@ -286,7 +288,7 @@ export const MessageBubble = memo(function MessageBubble({
       {showEmojiPicker && (
         <div
           ref={emojiPickerRef}
-          className="fixed z-50 bg-gradient-to-br from-white to-viber-purple/5 rounded-2xl shadow-2xl border-2 border-viber-purple/20 p-4"
+          className="fixed z-50 bg-white rounded-lg shadow-lg border border-gray-200 p-3 md:p-4"
           style={{
             left: isSent ? 'auto' : '50%',
             right: isSent ? '20px' : 'auto',
@@ -299,7 +301,7 @@ export const MessageBubble = memo(function MessageBubble({
               <button
                 key={emoji}
                 onClick={() => handleReact(emoji)}
-                className="text-2xl md:text-3xl hover:bg-viber-purple/10 rounded-lg p-2 md:p-3 transition-all duration-200 hover:scale-110"
+                className="text-2xl md:text-3xl hover:bg-gray-100 rounded p-2 md:p-3 transition"
                 title={emoji}
               >
                 {emoji}
