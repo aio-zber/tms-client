@@ -95,45 +95,50 @@ export function MessageInput({
   };
 
   return (
-    <div className="p-3 md:p-4 border-t-2 border-viber-purple/10 bg-gradient-to-r from-white to-viber-purple/5">
+    <div className="p-3 md:p-4 border-t border-gray-200 bg-white">
       <div className="max-w-4xl mx-auto">
         {/* Edit Preview */}
         {editingMessage && (
-          <div className="mb-2 md:mb-3 flex items-center gap-2 p-3 bg-viber-purple/10 rounded-xl border-l-4 border-viber-purple shadow-sm">
+          <div className="mb-2 md:mb-3 flex items-center gap-2 p-3 bg-amber-50 rounded-lg border-l-4 border-amber-500">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs md:text-sm font-semibold text-viber-purple">Edit message</span>
+                <span className="text-xs md:text-sm font-semibold text-amber-700">Edit message</span>
               </div>
               <p className="text-sm md:text-base text-gray-700 truncate">{editingMessage.content}</p>
             </div>
             {onCancelEdit && (
               <button
                 onClick={onCancelEdit}
-                className="p-1.5 hover:bg-viber-purple/20 rounded-full transition shrink-0"
+                className="p-1 hover:bg-amber-100 rounded-full transition shrink-0"
                 type="button"
               >
-                <X className="w-4 h-4 md:w-5 md:h-5 text-viber-purple" />
+                <X className="w-4 h-4 md:w-5 md:h-5 text-amber-700" />
               </button>
             )}
           </div>
         )}
 
-        {/* Reply Preview */}
+        {/* Reply Preview - Matching the image design */}
         {replyTo && !editingMessage && (
-          <div className="mb-2 md:mb-3 flex items-center gap-2 p-3 bg-viber-purple/5 rounded-xl border-l-4 border-viber-purple shadow-sm">
+          <div className="mb-2 md:mb-3 flex items-center gap-2 p-3 bg-gray-50 rounded-lg border-l-4 border-viber-purple">
             <div className="flex-1 min-w-0">
+              {/* Sender name in purple */}
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs md:text-sm font-semibold text-viber-purple">Reply to</span>
+                <span className="text-xs md:text-sm font-semibold text-viber-purple">
+                  {/* This will be dynamic based on sender in real implementation */}
+                  Reply to
+                </span>
               </div>
+              {/* Message content in gray */}
               <p className="text-sm md:text-base text-gray-700 truncate">{replyTo.content}</p>
             </div>
             {onCancelReply && (
               <button
                 onClick={onCancelReply}
-                className="p-1.5 hover:bg-viber-purple/20 rounded-full transition shrink-0"
+                className="p-1 hover:bg-gray-200 rounded-full transition shrink-0"
                 type="button"
               >
-                <X className="w-4 h-4 md:w-5 md:h-5 text-viber-purple" />
+                <X className="w-4 h-4 md:w-5 md:h-5 text-gray-500" />
               </button>
             )}
           </div>
@@ -144,11 +149,11 @@ export function MessageInput({
           {/* Emoji Button (placeholder for future) */}
           <button
             type="button"
-            className="p-2 md:p-2.5 hover:bg-viber-purple/10 rounded-full transition mb-1 hidden sm:block"
+            className="p-2 md:p-2.5 hover:bg-gray-100 rounded-full transition mb-1 hidden sm:block"
             disabled={disabled}
             title="Add emoji (coming soon)"
           >
-            <Smile className="w-5 h-5 md:w-6 md:h-6 text-viber-purple/50" />
+            <Smile className="w-5 h-5 md:w-6 md:h-6 text-gray-400" />
           </button>
 
           {/* Textarea */}
@@ -160,7 +165,7 @@ export function MessageInput({
               onKeyDown={handleKeyDown}
               placeholder={placeholder}
               disabled={sending || disabled}
-              className="w-full px-3 md:px-4 py-2 md:py-2.5 text-sm md:text-base border-2 border-viber-purple/20 rounded-2xl focus:outline-none focus:ring-2 focus:ring-viber-purple/50 focus:border-viber-purple resize-none disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"
+              className="w-full px-3 md:px-4 py-2 md:py-2.5 text-sm md:text-base border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-viber-purple focus:border-transparent resize-none disabled:opacity-50 disabled:cursor-not-allowed transition"
               rows={1}
               style={{ minHeight: '44px', maxHeight: '120px' }}
             />
@@ -170,24 +175,24 @@ export function MessageInput({
           <Button
             onClick={handleSend}
             disabled={!content.trim() || sending || disabled || (editingMessage && content === editingMessage.content)}
-            className="bg-gradient-to-r from-viber-purple to-viber-purple-dark hover:from-viber-purple-dark hover:to-viber-purple text-white rounded-full px-4 md:px-6 h-11 md:h-12 transition-all duration-200 disabled:opacity-50 shadow-md hover:shadow-lg"
+            className="bg-viber-purple hover:bg-viber-purple-dark text-white rounded-full px-4 md:px-6 h-11 md:h-12 transition disabled:opacity-50"
             type="button"
           >
             {sending ? (
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
             ) : editingMessage ? (
-              <span className="text-sm md:text-base font-medium">Save</span>
+              <span className="text-sm md:text-base">Save</span>
             ) : (
               <>
                 <Send className="w-4 h-4 md:w-5 md:h-5 mr-0 md:mr-2" />
-                <span className="hidden md:inline text-base font-medium">Send</span>
+                <span className="hidden md:inline text-base">Send</span>
               </>
             )}
           </Button>
         </div>
 
         {/* Helper Text */}
-        <p className="text-xs md:text-sm text-viber-purple/50 mt-2 text-center hidden md:block">
+        <p className="text-xs md:text-sm text-gray-400 mt-2 text-center hidden md:block">
           Press Enter to send, Shift+Enter for new line
         </p>
       </div>

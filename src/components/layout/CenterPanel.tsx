@@ -97,13 +97,13 @@ export function CenterPanel() {
 
   return (
     <div className="h-full flex flex-col bg-white">
-      {/* Header with Gradient */}
-      <div className="p-3 md:p-4 bg-gradient-to-r from-viber-purple/5 to-viber-purple-light/5 border-b border-viber-purple/10 space-y-3">
+      {/* Header */}
+      <div className="p-3 md:p-4 border-b border-gray-200 space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-base md:text-lg lg:text-xl font-bold text-viber-purple">Messages</h2>
+          <h2 className="text-base md:text-lg lg:text-xl font-bold text-gray-900">Messages</h2>
           <button
             onClick={() => setShowNewConversation(true)}
-            className="p-2 hover:bg-viber-purple/10 rounded-lg transition-all duration-200 hover:scale-105"
+            className="p-2 hover:bg-gray-100 rounded-lg transition"
             title="New Conversation"
           >
             <MessageSquarePlus className="w-5 h-5 md:w-6 md:h-6 text-viber-purple" />
@@ -112,18 +112,18 @@ export function CenterPanel() {
 
         {/* Search Bar */}
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 md:w-5 md:h-5 text-viber-purple/50" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 md:w-5 md:h-5 text-gray-400" />
           <Input
             type="text"
             placeholder="Search conversations..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 md:pl-11 pr-10 border-viber-purple/20 focus:border-viber-purple focus:ring-viber-purple/20 text-sm md:text-base"
+            className="pl-10 md:pl-11 pr-10 text-sm md:text-base"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-viber-purple/50 hover:text-viber-purple transition"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition"
             >
               ✕
             </button>
@@ -132,20 +132,20 @@ export function CenterPanel() {
 
         {/* Navigation Tabs */}
         <div className="flex items-center gap-1.5 md:gap-2 pt-1">
-          <button className="flex items-center gap-1.5 md:gap-2 px-2.5 md:px-3 py-1.5 bg-viber-purple text-white rounded-full text-xs md:text-sm font-medium shadow-sm hover:bg-viber-purple-dark transition">
+          <button className="flex items-center gap-1.5 md:gap-2 px-2.5 md:px-3 py-1.5 bg-viber-purple text-white rounded-full text-xs md:text-sm font-medium">
             <span>All</span>
             <span className="bg-white/20 px-1.5 py-0.5 rounded-full text-xs">
               {conversations.length}
             </span>
           </button>
-          <button className="flex items-center gap-1.5 md:gap-2 px-2.5 md:px-3 py-1.5 bg-viber-purple/10 text-viber-purple rounded-full text-xs md:text-sm font-medium hover:bg-viber-purple/20 transition">
+          <button className="flex items-center gap-1.5 md:gap-2 px-2.5 md:px-3 py-1.5 bg-gray-100 text-gray-700 rounded-full text-xs md:text-sm font-medium hover:bg-gray-200 transition">
             <span>Unread</span>
-            <span className="bg-viber-purple/20 px-1.5 py-0.5 rounded-full text-xs">
+            <span className="bg-gray-300 px-1.5 py-0.5 rounded-full text-xs">
               {conversations.filter((c) => c.unreadCount > 0).length}
             </span>
           </button>
-          <button className="p-1.5 hover:bg-viber-purple/10 rounded-lg transition ml-auto">
-            <Filter className="w-4 h-4 md:w-5 md:h-5 text-viber-purple" />
+          <button className="p-1.5 hover:bg-gray-100 rounded-lg transition ml-auto">
+            <Filter className="w-4 h-4 md:w-5 md:h-5 text-gray-500" />
           </button>
         </div>
       </div>
