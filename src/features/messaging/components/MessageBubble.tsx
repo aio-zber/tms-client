@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, memo } from 'react';
 import { format } from 'date-fns';
 import { Check, CheckCheck, Reply, Edit, Trash2, Smile } from 'lucide-react';
 import type { Message } from '@/types/message';
@@ -27,7 +27,7 @@ interface ContextMenuPosition {
   y: number;
 }
 
-export function MessageBubble({
+export const MessageBubble = memo(function MessageBubble({
   message,
   isSent,
   showSender = false,
@@ -298,4 +298,4 @@ export function MessageBubble({
       )}
     </>
   );
-}
+});
