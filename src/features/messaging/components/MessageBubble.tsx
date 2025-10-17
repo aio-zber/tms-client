@@ -7,7 +7,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { Check, CheckCheck, Reply, Edit, Trash2 } from 'lucide-react';
+import { Check, CheckCheck, Reply, Edit, Trash2, Smile } from 'lucide-react';
 import type { Message } from '@/types/message';
 
 interface MessageBubbleProps {
@@ -18,6 +18,7 @@ interface MessageBubbleProps {
   onEdit?: (messageId: string) => void;
   onDelete?: (messageId: string) => void;
   onReply?: (message: Message) => void;
+  onReact?: (messageId: string, emoji: string) => void;
 }
 
 interface ContextMenuPosition {
@@ -33,9 +34,15 @@ export function MessageBubble({
   onEdit,
   onDelete,
   onReply,
+  onReact,
 }: MessageBubbleProps) {
   const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
+  
+  // Common emojis for quick reactions
+  const quickEmojis = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥'];
 
   // Close context menu when clicking outside
   useEffect(() => {
@@ -43,13 +50,17 @@ export function MessageBubble({
       if (contextMenuRef.current && !contextMenuRef.current.contains(event.target as Node)) {
         setContextMenu(null);
       }
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target as Node)) {
+        setShowEmojiPicker(false);
+      }
     };
 
     const handleScroll = () => {
       setContextMenu(null);
+      setShowEmojiPicker(false);
     };
 
-    if (contextMenu) {
+    if (contextMenu || showEmojiPicker) {
       document.addEventListener('mousedown', handleClickOutside);
       document.addEventListener('scroll', handleScroll, true);
       return () => {
@@ -57,7 +68,7 @@ export function MessageBubble({
         document.removeEventListener('scroll', handleScroll, true);
       };
     }
-  }, [contextMenu]);
+  }, [contextMenu, showEmojiPicker]);
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -70,6 +81,13 @@ export function MessageBubble({
   const handleMenuAction = (action: () => void) => {
     setContextMenu(null);
     action();
+  };
+
+  const handleReact = (emoji: string) => {
+    setShowEmojiPicker(false);
+    if (onReact) {
+      onReact(message.id, emoji);
+    }
   };
 
   const renderStatusIcon = () => {
@@ -185,6 +203,16 @@ export function MessageBubble({
             top: `${contextMenu.y}px`,
           }}
         >
+          <button
+            onClick={() => {
+              setContextMenu(null);
+              setShowEmojiPicker(true);
+            }}
+            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2 text-gray-700"
+          >
+            <Smile className="w-4 h-4" />
+            React
+          </button>
           {onReply && (
             <button
               onClick={() => handleMenuAction(() => onReply(message))}
@@ -212,6 +240,33 @@ export function MessageBubble({
               Delete
             </button>
           )}
+        </div>
+      )}
+
+      {/* Emoji Picker */}
+      {showEmojiPicker && (
+        <div
+          ref={emojiPickerRef}
+          className="fixed z-50 bg-white rounded-lg shadow-lg border border-gray-200 p-3"
+          style={{
+            left: isSent ? 'auto' : '50%',
+            right: isSent ? '20px' : 'auto',
+            top: '50%',
+            transform: isSent ? 'translateY(-50%)' : 'translate(-50%, -50%)',
+          }}
+        >
+          <div className="grid grid-cols-4 gap-2">
+            {quickEmojis.map((emoji) => (
+              <button
+                key={emoji}
+                onClick={() => handleReact(emoji)}
+                className="text-2xl hover:bg-gray-100 rounded p-2 transition"
+                title={emoji}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </>

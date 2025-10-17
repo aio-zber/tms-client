@@ -199,9 +199,27 @@ export function useMessages(
     // Listen for message edits
     const handleMessageEdited = (updatedMessage: Record<string, unknown>) => {
       console.log('[useMessages] Message edited via WebSocket:', updatedMessage);
+      
+      // Transform snake_case to camelCase to match API format
+      const transformedMessage: Message = {
+        id: updatedMessage.id as string,
+        conversationId: (updatedMessage.conversation_id || updatedMessage.conversationId) as string,
+        senderId: (updatedMessage.sender_id || updatedMessage.senderId) as string,
+        content: updatedMessage.content as string,
+        type: (updatedMessage.type || 'text') as 'text' | 'image' | 'file' | 'voice' | 'poll' | 'call',
+        status: (updatedMessage.status || 'sent') as 'sending' | 'sent' | 'delivered' | 'read' | 'failed',
+        createdAt: (updatedMessage.created_at || updatedMessage.createdAt) as string,
+        updatedAt: (updatedMessage.updated_at || updatedMessage.updatedAt) as string,
+        deletedAt: (updatedMessage.deleted_at || updatedMessage.deletedAt || undefined) as string | undefined,
+        isEdited: (updatedMessage.is_edited || updatedMessage.isEdited || false) as boolean,
+        replyToId: (updatedMessage.reply_to_id || updatedMessage.replyToId) as string | undefined,
+        metadata: (updatedMessage.metadata_json || updatedMessage.metadata) as MessageMetadata | undefined,
+        reactions: (updatedMessage.reactions || []) as MessageReaction[] | undefined,
+      };
+      
       setMessages((prev) =>
         prev.map((msg) =>
-          msg.id === (updatedMessage.id as string) ? (updatedMessage as unknown as Message) : msg
+          msg.id === transformedMessage.id ? transformedMessage : msg
         )
       );
     };
