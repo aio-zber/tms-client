@@ -55,9 +55,9 @@ export function useMessages(
       
       // Debug: Check for reply_to in messages
       response.data?.forEach((msg, idx) => {
-        if (msg.replyToId || msg.reply_to_id) {
-          console.log(`[useMessages] Message ${idx} has replyToId: ${msg.replyToId || msg.reply_to_id}`);
-          console.log(`[useMessages] Message ${idx} replyTo object:`, msg.replyTo || msg.reply_to);
+        if (msg.replyToId) {
+          console.log(`[useMessages] Message ${idx} has replyToId: ${msg.replyToId}`);
+          console.log(`[useMessages] Message ${idx} replyTo object:`, msg.replyTo);
           console.log(`[useMessages] Message ${idx} full data:`, msg);
         }
       });
