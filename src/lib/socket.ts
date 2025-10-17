@@ -141,13 +141,8 @@ class SocketClient {
     console.log('[Socket] Socket connected:', this.socket?.connected);
     
     if (this.socket) {
-      // Wrap callback with debug logging
-      const wrappedCallback = (message: Record<string, unknown>) => {
-        console.log('[Socket] 🔔 RAW new_message event received!', message);
-        callback(message);
-      };
-      
-      this.socket.on('new_message', wrappedCallback);
+      // Don't wrap - use callback directly so off() works
+      this.socket.on('new_message', callback);
       console.log('[Socket] ✅ new_message listener attached');
     } else {
       console.error('[Socket] ❌ Cannot attach new_message listener - socket not initialized');
