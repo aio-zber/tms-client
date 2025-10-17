@@ -239,6 +239,7 @@ export function useMessages(
       // Transform reaction to proper format
       const transformedReaction: MessageReaction = {
         id: reaction.id as string,
+        messageId: (reaction.message_id || reaction.messageId || messageId) as string,
         userId: (reaction.user_id || reaction.userId) as string,
         emoji: reaction.emoji as string,
         createdAt: (reaction.created_at || reaction.createdAt) as string,
