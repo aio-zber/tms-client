@@ -132,6 +132,15 @@ export async function searchMessages(
   return apiClient.post<MessageListResponse>(`${BASE_PATH}/search`, data);
 }
 
+/**
+ * Clear all messages in a conversation
+ */
+export async function clearConversation(conversationId: string): Promise<{ success: boolean; deleted_count: number }> {
+  return apiClient.delete<{ success: boolean; deleted_count: number }>(
+    `${BASE_PATH}/conversations/${conversationId}/clear`
+  );
+}
+
 // Export all functions as a service object
 export const messageService = {
   sendMessage,
@@ -145,6 +154,7 @@ export const messageService = {
   getConversationUnreadCount,
   getTotalUnreadCount,
   searchMessages,
+  clearConversation,
 };
 
 export default messageService;
