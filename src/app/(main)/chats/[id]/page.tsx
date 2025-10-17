@@ -7,7 +7,7 @@
 
 import { use, useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Menu, MoreVertical, Loader2, X } from 'lucide-react';
+import { Menu, MoreVertical, Loader2, X } from 'lucide-react';
 import { MessageList } from '@/features/messaging/components/MessageList';
 import { MessageInput } from '@/features/messaging/components/MessageInput';
 import { useMessages } from '@/features/messaging/hooks/useMessages';
