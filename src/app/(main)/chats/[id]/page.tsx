@@ -287,9 +287,6 @@ export default function ChatPage({ params }: ChatPageProps) {
         currentUserId={currentUserId || ''}
         onLoadMore={loadMore}
         onEdit={handleEditMessage}
-        onSaveEdit={handleSaveEdit}
-        onCancelEdit={handleCancelEdit}
-        editingMessageId={editingMessageId}
         onDelete={handleDeleteMessage}
         onReply={handleReply}
         onReact={handleReact}
@@ -304,6 +301,9 @@ export default function ChatPage({ params }: ChatPageProps) {
         sending={sending}
         replyTo={replyToMessage}
         onCancelReply={() => setReplyToMessage(undefined)}
+        editingMessage={editingMessageId ? messages.find(m => m.id === editingMessageId) : undefined}
+        onSaveEdit={handleSaveEdit}
+        onCancelEdit={handleCancelEdit}
       />
     </div>
   );

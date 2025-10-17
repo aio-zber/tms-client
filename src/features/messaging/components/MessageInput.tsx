@@ -16,6 +16,9 @@ interface MessageInputProps {
   sending: boolean;
   replyTo?: Message;
   onCancelReply?: () => void;
+  editingMessage?: Message;
+  onSaveEdit?: (messageId: string, content: string) => Promise<void>;
+  onCancelEdit?: () => void;
   placeholder?: string;
   disabled?: boolean;
 }
@@ -26,11 +29,23 @@ export function MessageInput({
   sending,
   replyTo,
   onCancelReply,
+  editingMessage,
+  onSaveEdit,
+  onCancelEdit,
   placeholder = 'Type a message...',
   disabled = false,
 }: MessageInputProps) {
   const [content, setContent] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Update content when editingMessage changes
+  useEffect(() => {
+    if (editingMessage) {
+      setContent(editingMessage.content);
+    } else {
+      setContent('');
+    }
+  }, [editingMessage]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -51,7 +66,13 @@ export function MessageInput({
     if (!trimmedContent || sending || disabled) return;
 
     try {
-      await onSend(trimmedContent, replyTo?.id);
+      if (editingMessage && onSaveEdit) {
+        // Edit mode
+        await onSaveEdit(editingMessage.id, trimmedContent);
+      } else {
+        // Send mode
+        await onSend(trimmedContent, replyTo?.id);
+      }
       setContent('');
 
       // Reset textarea height
@@ -59,7 +80,7 @@ export function MessageInput({
         textareaRef.current.style.height = 'auto';
       }
     } catch (error) {
-      console.error('Failed to send message:', error);
+      console.error('Failed to send/edit message:', error);
     }
   };
 
@@ -67,23 +88,49 @@ export function MessageInput({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    } else if (e.key === 'Escape' && editingMessage && onCancelEdit) {
+      e.preventDefault();
+      onCancelEdit();
     }
   };
 
   return (
     <div className="p-4 border-t border-gray-200 bg-white">
       <div className="max-w-4xl mx-auto">
-        {/* Reply Preview */}
-        {replyTo && (
-          <div className="mb-2 flex items-center gap-2 p-2 bg-gray-50 rounded-lg border-l-2 border-viber-purple">
+        {/* Edit Preview */}
+        {editingMessage && (
+          <div className="mb-2 flex items-center gap-2 p-3 bg-amber-50 rounded-lg border-l-4 border-amber-500">
             <div className="flex-1 min-w-0">
-              <p className="text-xs text-gray-600 mb-1">Replying to</p>
-              <p className="text-sm text-gray-800 truncate">{replyTo.content}</p>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-semibold text-amber-700">Edit message</span>
+              </div>
+              <p className="text-sm text-gray-700 truncate">{editingMessage.content}</p>
+            </div>
+            {onCancelEdit && (
+              <button
+                onClick={onCancelEdit}
+                className="p-1 hover:bg-amber-100 rounded-full transition shrink-0"
+                type="button"
+              >
+                <X className="w-4 h-4 text-amber-700" />
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Reply Preview */}
+        {replyTo && !editingMessage && (
+          <div className="mb-2 flex items-center gap-2 p-3 bg-gray-50 rounded-lg border-l-4 border-viber-purple">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-semibold text-viber-purple">Reply to</span>
+              </div>
+              <p className="text-sm text-gray-700 truncate">{replyTo.content}</p>
             </div>
             {onCancelReply && (
               <button
                 onClick={onCancelReply}
-                className="p-1 hover:bg-gray-200 rounded-full transition"
+                className="p-1 hover:bg-gray-200 rounded-full transition shrink-0"
                 type="button"
               >
                 <X className="w-4 h-4 text-gray-500" />
@@ -119,15 +166,19 @@ export function MessageInput({
             />
           </div>
 
-          {/* Send Button */}
+          {/* Send/Save Button */}
           <Button
             onClick={handleSend}
-            disabled={!content.trim() || sending || disabled}
+            disabled={!content.trim() || sending || disabled || (editingMessage && content === editingMessage.content)}
             className="bg-viber-purple hover:bg-viber-purple-dark text-white rounded-full px-6 h-11 transition disabled:opacity-50"
             type="button"
           >
             {sending ? (
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : editingMessage ? (
+              <>
+                Save
+              </>
             ) : (
               <>
                 <Send className="w-5 h-5 mr-2" />
