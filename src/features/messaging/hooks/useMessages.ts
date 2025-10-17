@@ -124,21 +124,39 @@ export function useMessages(
       return;
     }
 
+    let hasJoined = false;
+
     // Wait for connection before joining room
     const joinRoom = () => {
+      if (hasJoined) {
+        console.log('[useMessages] Already joined room, skipping');
+        return;
+      }
+
       if (socketClient.isConnected()) {
-        console.log('[useMessages] Joining conversation room:', conversationId);
+        console.log('[useMessages] Socket is connected, joining room:', conversationId);
         socketClient.joinConversation(conversationId);
+        hasJoined = true;
       } else {
-        console.log('[useMessages] Waiting for socket connection to join room...');
+        console.log('[useMessages] Socket not connected yet, will join when connected...');
       }
     };
 
     // Try to join immediately if already connected
-    joinRoom();
+    if (socketClient.isConnected()) {
+      console.log('[useMessages] Socket already connected, joining immediately');
+      joinRoom();
+    } else {
+      console.log('[useMessages] Socket not connected, waiting for connection event...');
+    }
 
     // Also listen for connection events in case we're not connected yet
-    socket.on('connect', joinRoom);
+    const handleConnect = () => {
+      console.log('[useMessages] Socket connected event fired, attempting to join room');
+      joinRoom();
+    };
+    
+    socket.on('connect', handleConnect);
 
     // Listen for new messages
     const handleNewMessage = (message: Record<string, unknown>) => {
@@ -178,11 +196,12 @@ export function useMessages(
 
     // Cleanup
     return () => {
+      console.log('[useMessages] Cleaning up, leaving room:', conversationId);
       socketClient.leaveConversation(conversationId);
       socketClient.off('new_message', handleNewMessage);
       socketClient.off('message_edited', handleMessageEdited);
       socketClient.off('message_deleted', handleMessageDeleted);
-      socket.off('connect', joinRoom);
+      socket.off('connect', handleConnect);
     };
   }, [conversationId]);
 
