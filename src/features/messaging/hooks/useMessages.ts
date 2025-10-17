@@ -52,7 +52,7 @@ export function useMessages(
       console.log('[useMessages] Received response:', response);
       console.log('[useMessages] Messages count:', response.data?.length);
       console.log('[useMessages] First message:', response.data?.[0]);
-      
+
       // Debug: Check for reply_to in messages
       response.data?.forEach((msg, idx) => {
         if (msg.replyToId) {
@@ -62,7 +62,9 @@ export function useMessages(
         }
       });
 
-      setMessages(response.data || []);
+      // REVERSE messages: Backend returns DESC (newest first), but chat should show ASC (oldest first)
+      // This makes newest messages appear at BOTTOM like WhatsApp/Telegram
+      setMessages((response.data || []).reverse());
       setHasMore(response.pagination?.has_more ?? false);
       setCursor(response.pagination?.next_cursor ?? undefined);
     } catch (err) {
@@ -85,9 +87,10 @@ export function useMessages(
         { limit, cursor }
       );
 
-      // PREPEND older messages to the START (not append to end)
-      // This preserves scroll position and keeps recent messages visible
-      setMessages((prev) => [...response.data, ...prev]);
+      // Backend returns DESC (newest first), but we need ASC (oldest first) for chat
+      // REVERSE the response, then PREPEND to the start (older messages go at top)
+      const olderMessages = (response.data || []).reverse();
+      setMessages((prev) => [...olderMessages, ...prev]);
       setHasMore(response.pagination?.has_more ?? false);
       setCursor(response.pagination?.next_cursor ?? undefined);
     } catch (err) {
