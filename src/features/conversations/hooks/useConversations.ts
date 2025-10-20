@@ -1,13 +1,16 @@
 /**
  * useConversations Hook
  * Manages conversation list fetching and state with real-time WebSocket updates
+ * Now uses TanStack Query for proper cache management and server state sync
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { conversationService } from '../services/conversationService';
+import { useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { socketClient } from '@/lib/socket';
 import { authService } from '@/features/auth/services/authService';
-import type { Conversation, ConversationType } from '@/types/conversation';
+import { queryKeys } from '@/lib/queryClient';
+import { useConversationsQuery } from './useConversationsQuery';
+import type { ConversationType } from '@/types/conversation';
 
 interface UseConversationsOptions {
   limit?: number;
@@ -15,85 +18,28 @@ interface UseConversationsOptions {
   autoLoad?: boolean;
 }
 
-interface UseConversationsReturn {
-  conversations: Conversation[];
-  loading: boolean;
-  error: Error | null;
-  hasMore: boolean;
-  loadConversations: () => Promise<void>;
-  loadMore: () => Promise<void>;
-  refresh: () => Promise<void>;
-}
-
 export function useConversations(
   options: UseConversationsOptions = {}
-): UseConversationsReturn {
+) {
   const { limit = 20, type, autoLoad = true } = options;
+  const queryClient = useQueryClient();
 
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const [hasMore, setHasMore] = useState(true);
-  const [offset, setOffset] = useState(0);
+  // Use TanStack Query infinite query
+  const {
+    conversations,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+    error,
+    refetch,
+  } = useConversationsQuery({
+    limit,
+    type,
+    enabled: autoLoad,
+  });
 
-  const loadConversations = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await conversationService.getConversations({
-        limit,
-        offset: 0,
-        type,
-      });
-
-      setConversations(response.data);
-      setHasMore(response.pagination.has_more ?? false);
-      setOffset(response.data.length);
-    } catch (err) {
-      setError(err as Error);
-      console.error('Failed to load conversations:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [limit, type]);
-
-  const loadMore = useCallback(async () => {
-    if (!hasMore || loading) return;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await conversationService.getConversations({
-        limit,
-        offset,
-        type,
-      });
-
-      setConversations((prev) => [...prev, ...response.data]);
-      setHasMore(response.pagination.has_more ?? false);
-      setOffset((prev) => prev + response.data.length);
-    } catch (err) {
-      setError(err as Error);
-      console.error('Failed to load more conversations:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [limit, offset, type, hasMore, loading]);
-
-  const refresh = useCallback(async () => {
-    setOffset(0);
-    await loadConversations();
-  }, [loadConversations]);
-
-  useEffect(() => {
-    if (autoLoad) {
-      loadConversations();
-    }
-  }, [autoLoad, loadConversations]);
-
-  // WebSocket: Real-time unread count updates
+  // WebSocket: Real-time query invalidation (server as source of truth)
   useEffect(() => {
     const socket = socketClient.getSocket();
     if (!socket) {
@@ -116,26 +62,31 @@ export function useConversations(
 
     initializeUser();
 
-    console.log('[useConversations] Setting up WebSocket listeners for unread count updates');
+    console.log('[useConversations] Setting up WebSocket listeners for query invalidation');
 
-    // Listen for new messages in any conversation
+    // Listen for new messages - invalidate unread count queries
     const handleNewMessage = (message: Record<string, unknown>) => {
       const conversationId = (message.conversation_id || message.conversationId) as string;
       const senderId = (message.sender_id || message.senderId) as string;
 
       console.log('[useConversations] New message received:', { conversationId, senderId, currentUserId });
 
-      // Only increment unread count if message is NOT from current user
+      // Invalidate unread count queries to refetch from server
+      // Server automatically excludes current user's messages
       if (senderId !== currentUserId) {
-        setConversations((prev) =>
-          prev.map((conv) =>
-            conv.id === conversationId
-              ? { ...conv, unreadCount: (conv.unreadCount || 0) + 1 }
-              : conv
-          )
-        );
-        console.log('[useConversations] Incremented unread count for conversation:', conversationId);
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.unreadCount.conversation(conversationId),
+        });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.unreadCount.total(),
+        });
+        console.log('[useConversations] Invalidated unread count queries for conversation:', conversationId);
       }
+
+      // Also invalidate conversations list to update last message preview
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.all,
+      });
     };
 
     // Listen for message status updates (when messages are read)
@@ -146,11 +97,15 @@ export function useConversations(
 
       console.log('[useConversations] Message status update:', { status, conversationId, userId, currentUserId });
 
-      // If current user marked message as read, refresh the conversation's unread count
+      // If current user marked message as read, invalidate unread count
       if (status === 'read' && userId === currentUserId && conversationId) {
-        // Optionally: Fetch fresh unread count from API for accuracy
-        // For now, we'll rely on the mark-as-read action resetting the count
-        console.log('[useConversations] Message marked as read by current user');
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.unreadCount.conversation(conversationId),
+        });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.unreadCount.total(),
+        });
+        console.log('[useConversations] Invalidated unread count after mark as read');
       }
     };
 
@@ -163,15 +118,15 @@ export function useConversations(
       socketClient.off('new_message', handleNewMessage);
       socketClient.off('message_status', handleMessageStatus);
     };
-  }, []); // Empty deps - set up listeners once
+  }, [queryClient]); // Include queryClient in deps
 
   return {
     conversations,
-    loading,
-    error,
-    hasMore,
-    loadConversations,
-    loadMore,
-    refresh,
+    loading: isLoading || isFetchingNextPage,
+    error: error as Error | null,
+    hasMore: hasNextPage ?? false,
+    loadConversations: refetch,
+    loadMore: fetchNextPage,
+    refresh: refetch,
   };
 }

@@ -84,7 +84,7 @@ function ConversationListContent() {
       <div className="p-4 text-center">
         <div className="text-red-500 mb-2">❌ {error}</div>
         <button
-          onClick={refresh}
+          onClick={() => refresh()}
           className="text-viber-purple hover:underline text-sm"
         >
           Try again

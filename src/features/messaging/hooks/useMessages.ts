@@ -1,12 +1,15 @@
 /**
  * useMessages Hook
  * Manages message fetching and state for a conversation
+ * Now uses TanStack Query for proper cache management and server state sync
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { messageService } from '../services/messageService';
+import { useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { socketClient } from '@/lib/socket';
-import type { Message, MessageMetadata, MessageReaction } from '@/types/message';
+import { queryKeys } from '@/lib/queryClient';
+import { useMessagesQuery } from './useMessagesQuery';
+import type { Message } from '@/types/message';
 
 interface UseMessagesOptions {
   limit?: number;
@@ -28,111 +31,53 @@ export function useMessages(
   conversationId: string,
   options: UseMessagesOptions = {}
 ): UseMessagesReturn {
-  const { limit = 10, autoLoad = true } = options;
+  const { limit = 50, autoLoad = true } = options;
+  const queryClient = useQueryClient();
 
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const [hasMore, setHasMore] = useState(true);
-  const [cursor, setCursor] = useState<string | undefined>(undefined);
-
-  const loadMessages = useCallback(async () => {
-    if (!conversationId) return;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      console.log('[useMessages] Fetching messages for conversation:', conversationId);
-      const response = await messageService.getConversationMessages(
-        conversationId,
-        { limit }
-      );
-
-      console.log('[useMessages] Received response:', response);
-      console.log('[useMessages] Messages count:', response.data?.length);
-      console.log('[useMessages] First message:', response.data?.[0]);
-
-      // Debug: Check for reply_to in messages
-      response.data?.forEach((msg, idx) => {
-        if (msg.replyToId) {
-          console.log(`[useMessages] Message ${idx} has replyToId: ${msg.replyToId}`);
-          console.log(`[useMessages] Message ${idx} replyTo object:`, msg.replyTo);
-          console.log(`[useMessages] Message ${idx} full data:`, msg);
-        }
-      });
-
-      // REVERSE messages: Backend returns DESC (newest first), but chat should show ASC (oldest first)
-      // This makes newest messages appear at BOTTOM like WhatsApp/Telegram
-      const reversedMessages = (response.data || []).reverse();
-      console.log('[useMessages] 🎯 SETTING MESSAGES TO STATE:', reversedMessages.length, 'messages');
-      console.log('[useMessages] 🎯 Message IDs being set:', reversedMessages.map(m => m.id));
-      console.log('[useMessages] 🎯 First 3 messages:', reversedMessages.slice(0, 3));
-      setMessages(reversedMessages);
-      setHasMore(response.pagination?.has_more ?? false);
-      setCursor(response.pagination?.next_cursor ?? undefined);
-    } catch (err) {
-      setError(err as Error);
-      console.error('[useMessages] Failed to load messages:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [conversationId, limit]);
-
-  const loadMore = useCallback(async () => {
-    if (!conversationId || !hasMore || loading || !cursor) return;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await messageService.getConversationMessages(
-        conversationId,
-        { limit, cursor }
-      );
-
-      // Backend returns DESC (newest first), but we need ASC (oldest first) for chat
-      // REVERSE the response, then PREPEND to the start (older messages go at top)
-      const olderMessages = (response.data || []).reverse();
-      setMessages((prev) => [...olderMessages, ...prev]);
-      setHasMore(response.pagination?.has_more ?? false);
-      setCursor(response.pagination?.next_cursor ?? undefined);
-    } catch (err) {
-      setError(err as Error);
-      console.error('Failed to load more messages:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [conversationId, limit, cursor, hasMore, loading]);
-
-  const refresh = useCallback(async () => {
-    setCursor(undefined);
-    await loadMessages();
-  }, [loadMessages]);
+  // Use TanStack Query infinite query
+  const {
+    messages,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+    error,
+    refetch,
+  } = useMessagesQuery({
+    conversationId,
+    limit,
+    enabled: autoLoad,
+  });
 
   // Add message optimistically (for sender's own messages)
   const addOptimisticMessage = useCallback((message: Message) => {
     console.log('[useMessages] Adding optimistic message:', message);
-    setMessages((prev) => {
-      // Check if message already exists (avoid duplicates)
-      const exists = prev.some((m) => m.id === message.id);
-      if (exists) {
-        console.log('[useMessages] Message already exists, skipping optimistic add');
-        return prev;
+
+    // Optimistically add to query cache
+    queryClient.setQueryData(
+      queryKeys.messages.list(conversationId, { limit }),
+      (oldData: unknown) => {
+        if (!oldData || typeof oldData !== 'object') return oldData;
+
+        const data = oldData as { pages: Array<{ data: Message[] }>; pageParams: unknown[] };
+
+        // Add message to the last page (most recent messages)
+        const newPages = [...data.pages];
+        const lastPage = newPages[newPages.length - 1];
+
+        if (lastPage) {
+          lastPage.data = [...lastPage.data, message];
+        }
+
+        return {
+          ...data,
+          pages: newPages,
+        };
       }
-      // Add new message at the end
-      console.log('[useMessages] Adding new message to state');
-      return [...prev, message];
-    });
-  }, []);
+    );
+  }, [queryClient, conversationId, limit]);
 
-  useEffect(() => {
-    if (autoLoad && conversationId) {
-      loadMessages();
-    }
-  }, [conversationId, autoLoad, loadMessages]);
-
-  // WebSocket: Real-time message updates
+  // WebSocket: Real-time message updates with query invalidation
   useEffect(() => {
     if (!conversationId) return;
 
@@ -167,182 +112,57 @@ export function useMessages(
     // Listen for connection events in case we're not connected yet
     const handleConnect = () => {
       console.log('[useMessages] Socket connect event fired!');
-      // When connect event fires, socket IS connected - join immediately
       if (!hasJoined) {
         joinRoom();
       }
     };
-    
+
     socket.on('connect', handleConnect);
 
-    // Listen for new messages
+    // Listen for new messages - invalidate query to refetch
     const handleNewMessage = (message: Record<string, unknown>) => {
-      console.log('[useMessages] 🔥🔥🔥 NEW MESSAGE HANDLER CALLED!');
       console.log('[useMessages] New message received via WebSocket:', message);
-      console.log('[useMessages] Message type:', typeof message);
-      console.log('[useMessages] Message keys:', Object.keys(message));
-      
-      // Transform snake_case to camelCase to match API format
-      const replyToData = message.reply_to || message.replyTo;
-      let replyTo: Message | undefined;
-      
-      // Transform replyTo message if present
-      if (replyToData && typeof replyToData === 'object') {
-        const replyMsg = replyToData as Record<string, unknown>;
-        replyTo = {
-          id: replyMsg.id as string,
-          conversationId: (replyMsg.conversation_id || replyMsg.conversationId) as string,
-          senderId: (replyMsg.sender_id || replyMsg.senderId) as string,
-          content: replyMsg.content as string,
-          type: (replyMsg.type || 'text') as 'text' | 'image' | 'file' | 'voice' | 'poll' | 'call',
-          status: (replyMsg.status || 'sent') as 'sending' | 'sent' | 'delivered' | 'read' | 'failed',
-          createdAt: (replyMsg.created_at || replyMsg.createdAt) as string,
-          updatedAt: (replyMsg.updated_at || replyMsg.updatedAt) as string,
-          deletedAt: (replyMsg.deleted_at || replyMsg.deletedAt || undefined) as string | undefined,
-          isEdited: (replyMsg.is_edited || replyMsg.isEdited || false) as boolean,
-          replyToId: (replyMsg.reply_to_id || replyMsg.replyToId) as string | undefined,
-          metadata: (replyMsg.metadata_json || replyMsg.metadata) as MessageMetadata | undefined,
-          reactions: (replyMsg.reactions || []) as MessageReaction[] | undefined,
-        };
-      }
-      
-      const transformedMessage: Message = {
-        id: message.id as string,
-        conversationId: (message.conversation_id || message.conversationId) as string,
-        senderId: (message.sender_id || message.senderId) as string,
-        content: message.content as string,
-        type: (message.type || 'text') as 'text' | 'image' | 'file' | 'voice' | 'poll' | 'call',
-        status: (message.status || 'sent') as 'sending' | 'sent' | 'delivered' | 'read' | 'failed',
-        createdAt: (message.created_at || message.createdAt) as string,
-        updatedAt: (message.updated_at || message.updatedAt) as string,
-        deletedAt: (message.deleted_at || message.deletedAt || undefined) as string | undefined,
-        isEdited: (message.is_edited || message.isEdited || false) as boolean,
-        replyToId: (message.reply_to_id || message.replyToId) as string | undefined,
-        replyTo,
-        metadata: (message.metadata_json || message.metadata) as MessageMetadata | undefined,
-        reactions: (message.reactions || []) as MessageReaction[] | undefined,
-      };
-      
-      console.log('[useMessages] Transformed message with camelCase:', transformedMessage);
-      
-      setMessages((prev) => {
-        // Check if message already exists (prevent duplicates from WebSocket)
-        const exists = prev.some((m) => m.id === transformedMessage.id);
-        if (exists) {
-          console.log('[useMessages] Message already in state (from optimistic update), skipping WebSocket duplicate');
-          return prev;
-        }
-        // Add new message
-        console.log('[useMessages] ✅ Adding message to state:', transformedMessage.id);
-        return [...prev, transformedMessage];
+
+      // Invalidate messages query to refetch from server
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.messages.list(conversationId, { limit }),
       });
     };
 
-    // Listen for message edits
+    // Listen for message edits - invalidate query
     const handleMessageEdited = (updatedMessage: Record<string, unknown>) => {
       console.log('[useMessages] Message edited via WebSocket:', updatedMessage);
-      
-      // Transform snake_case to camelCase to match API format
-      const replyToData = updatedMessage.reply_to || updatedMessage.replyTo;
-      let replyTo: Message | undefined;
-      
-      // Transform replyTo message if present
-      if (replyToData && typeof replyToData === 'object') {
-        const replyMsg = replyToData as Record<string, unknown>;
-        replyTo = {
-          id: replyMsg.id as string,
-          conversationId: (replyMsg.conversation_id || replyMsg.conversationId) as string,
-          senderId: (replyMsg.sender_id || replyMsg.senderId) as string,
-          content: replyMsg.content as string,
-          type: (replyMsg.type || 'text') as 'text' | 'image' | 'file' | 'voice' | 'poll' | 'call',
-          status: (replyMsg.status || 'sent') as 'sending' | 'sent' | 'delivered' | 'read' | 'failed',
-          createdAt: (replyMsg.created_at || replyMsg.createdAt) as string,
-          updatedAt: (replyMsg.updated_at || replyMsg.updatedAt) as string,
-          deletedAt: (replyMsg.deleted_at || replyMsg.deletedAt || undefined) as string | undefined,
-          isEdited: (replyMsg.is_edited || replyMsg.isEdited || false) as boolean,
-          replyToId: (replyMsg.reply_to_id || replyMsg.replyToId) as string | undefined,
-          metadata: (replyMsg.metadata_json || replyMsg.metadata) as MessageMetadata | undefined,
-          reactions: (replyMsg.reactions || []) as MessageReaction[] | undefined,
-        };
-      }
-      
-      const transformedMessage: Message = {
-        id: updatedMessage.id as string,
-        conversationId: (updatedMessage.conversation_id || updatedMessage.conversationId) as string,
-        senderId: (updatedMessage.sender_id || updatedMessage.senderId) as string,
-        content: updatedMessage.content as string,
-        type: (updatedMessage.type || 'text') as 'text' | 'image' | 'file' | 'voice' | 'poll' | 'call',
-        status: (updatedMessage.status || 'sent') as 'sending' | 'sent' | 'delivered' | 'read' | 'failed',
-        createdAt: (updatedMessage.created_at || updatedMessage.createdAt) as string,
-        updatedAt: (updatedMessage.updated_at || updatedMessage.updatedAt) as string,
-        deletedAt: (updatedMessage.deleted_at || updatedMessage.deletedAt || undefined) as string | undefined,
-        isEdited: (updatedMessage.is_edited || updatedMessage.isEdited || false) as boolean,
-        replyToId: (updatedMessage.reply_to_id || updatedMessage.replyToId) as string | undefined,
-        replyTo,
-        metadata: (updatedMessage.metadata_json || updatedMessage.metadata) as MessageMetadata | undefined,
-        reactions: (updatedMessage.reactions || []) as MessageReaction[] | undefined,
-      };
-      
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === transformedMessage.id ? transformedMessage : msg
-        )
-      );
+
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.messages.list(conversationId, { limit }),
+      });
     };
 
-    // Listen for message deletions
+    // Listen for message deletions - invalidate query
     const handleMessageDeleted = (data: Record<string, unknown>) => {
       console.log('[useMessages] Message deleted via WebSocket:', data);
-      setMessages((prev) => prev.filter((msg) => msg.id !== (data.message_id as string)));
+
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.messages.list(conversationId, { limit }),
+      });
     };
 
-    // Listen for reactions added
+    // Listen for reactions added - invalidate query
     const handleReactionAdded = (data: Record<string, unknown>) => {
       console.log('[useMessages] Reaction added via WebSocket:', data);
-      const messageId = data.message_id as string;
-      const reaction = data.reaction as Record<string, unknown>;
-      
-      // Transform reaction to proper format
-      const transformedReaction: MessageReaction = {
-        id: reaction.id as string,
-        messageId: (reaction.message_id || reaction.messageId || messageId) as string,
-        userId: (reaction.user_id || reaction.userId) as string,
-        emoji: reaction.emoji as string,
-        createdAt: (reaction.created_at || reaction.createdAt) as string,
-      };
-      
-      setMessages((prev) =>
-        prev.map((msg) => {
-          if (msg.id === messageId) {
-            const reactions = msg.reactions || [];
-            return {
-              ...msg,
-              reactions: [...reactions, transformedReaction],
-            };
-          }
-          return msg;
-        })
-      );
+
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.messages.list(conversationId, { limit }),
+      });
     };
 
-    // Listen for reactions removed
+    // Listen for reactions removed - invalidate query
     const handleReactionRemoved = (data: Record<string, unknown>) => {
       console.log('[useMessages] Reaction removed via WebSocket:', data);
-      const messageId = data.message_id as string;
-      const reactionId = data.reaction_id as string;
-      
-      setMessages((prev) =>
-        prev.map((msg) => {
-          if (msg.id === messageId) {
-            const reactions = msg.reactions || [];
-            return {
-              ...msg,
-              reactions: reactions.filter((r: MessageReaction) => r.id !== reactionId),
-            };
-          }
-          return msg;
-        })
-      );
+
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.messages.list(conversationId, { limit }),
+      });
     };
 
     socketClient.onNewMessage(handleNewMessage);
@@ -362,16 +182,16 @@ export function useMessages(
       socketClient.off('reaction_removed', handleReactionRemoved);
       socket.off('connect', handleConnect);
     };
-  }, [conversationId]);
+  }, [conversationId, queryClient, limit]);
 
   return {
     messages,
-    loading,
-    error,
-    hasMore,
-    loadMessages,
-    loadMore,
-    refresh,
+    loading: isLoading || isFetchingNextPage,
+    error: error as Error | null,
+    hasMore: hasNextPage ?? false,
+    loadMessages: async () => { await refetch(); },
+    loadMore: async () => { await fetchNextPage(); },
+    refresh: async () => { await refetch(); },
     addOptimisticMessage,
   };
 }

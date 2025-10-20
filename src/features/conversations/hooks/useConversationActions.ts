@@ -1,10 +1,13 @@
 /**
  * useConversationActions Hook
  * Handles conversation CRUD operations and member management
+ * Now with TanStack Query optimistic updates for markAsRead
  */
 
 import { useState, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { conversationService } from '../services/conversationService';
+import { queryKeys } from '@/lib/queryClient';
 import type {
   Conversation,
   CreateConversationRequest,
@@ -33,6 +36,7 @@ interface UseConversationActionsReturn {
 export function useConversationActions(): UseConversationActionsReturn {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const queryClient = useQueryClient();
 
   const createConversation = useCallback(
     async (data: CreateConversationRequest) => {
@@ -159,15 +163,44 @@ export function useConversationActions(): UseConversationActionsReturn {
   const markAsRead = useCallback(async (conversationId: string) => {
     setError(null);
 
+    // Optimistic update: immediately set unread count to 0
+    const previousData = queryClient.getQueryData(
+      queryKeys.unreadCount.conversation(conversationId)
+    );
+
+    // Optimistically update to 0
+    queryClient.setQueryData(
+      queryKeys.unreadCount.conversation(conversationId),
+      { unread_count: 0, conversation_id: conversationId }
+    );
+
     try {
       await conversationService.markConversationAsRead(conversationId);
+
+      // On success, invalidate to refetch actual count from server
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.unreadCount.conversation(conversationId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.unreadCount.total(),
+      });
+
       return true;
     } catch (err) {
       setError(err as Error);
       console.error('Failed to mark conversation as read:', err);
+
+      // Rollback on error
+      if (previousData) {
+        queryClient.setQueryData(
+          queryKeys.unreadCount.conversation(conversationId),
+          previousData
+        );
+      }
+
       return false;
     }
-  }, []);
+  }, [queryClient]);
 
   return {
     createConversation,
