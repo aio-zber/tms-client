@@ -5,12 +5,11 @@
 
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Send, MoreVertical, Phone, Video, Search, Settings, Edit2, Users, LogOut } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,9 +17,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import Message from './Message';
 import toast from 'react-hot-toast';
 import { useMessages, useSendMessage } from '@/features/messaging';
+import { MessageList } from '@/features/messaging/components/MessageList';
 import { useConversation, useConversationActions } from '@/features/conversations';
 import MessageSearchDialog from '@/features/messaging/components/MessageSearchDialog';
 import EditConversationDialog from '@/features/conversations/components/EditConversationDialog';
@@ -36,12 +35,11 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
   const [showSearchDialog, setShowSearchDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
   // Use custom hooks for API integration
   const { conversation, loading: conversationLoading, refresh: refreshConversation } = useConversation(conversationId);
-  const { messages, loading: messagesLoading } = useMessages(conversationId);
+  const { messages, loading: messagesLoading, hasMore, loadMore } = useMessages(conversationId);
   const { sendMessage: sendMsg, sending } = useSendMessage();
   const { markAsRead, leaveConversation } = useConversationActions();
 
@@ -57,14 +55,6 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
     }
   }, [conversationId, isLoading, markAsRead]);
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
   const sendMessage = async () => {
     if (!newMessage.trim() || sending) return;
 
@@ -78,7 +68,6 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
       if (message) {
         setNewMessage('');
         // Message will appear via WebSocket broadcast automatically
-        scrollToBottom();
         toast.success('Message sent');
       } else {
         toast.error('Failed to send message');
@@ -231,52 +220,15 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
         </div>
       </header>
 
-      {/* Messages Area */}
-      <ScrollArea className="flex-1 p-6">
-        <div className="space-y-4">
-          {messages.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-gray-500">No messages yet</p>
-              <p className="text-gray-400 text-sm mt-1">
-                Start the conversation by sending a message
-              </p>
-            </div>
-          ) : (
-            messages.map((message, index) => {
-              // Map camelCase to snake_case for Message component
-              const msgProps = {
-                id: message.id,
-                content: message.content,
-                sender_id: message.senderId,
-                sender_name: message.senderId, // TODO: Get actual user name
-                sender_avatar: undefined,
-                type: message.type as 'text' | 'image' | 'file',
-                created_at: message.createdAt,
-                is_edited: message.isEdited,
-                reactions: message.reactions?.map(r => ({
-                  user_id: r.userId,
-                  emoji: r.emoji,
-                  count: 1
-                }))
-              };
-
-              return (
-                <Message
-                  key={message.id}
-                  message={msgProps}
-                  isOwnMessage={message.senderId === currentUserId}
-                  showAvatar={
-                    index === 0 ||
-                    messages[index - 1].senderId !== message.senderId
-                  }
-                  currentUserId={currentUserId}
-                />
-              );
-            })
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-      </ScrollArea>
+      {/* Messages Area with scroll memory and pagination */}
+      <MessageList
+        messages={messages}
+        loading={messagesLoading}
+        hasMore={hasMore}
+        currentUserId={currentUserId}
+        onLoadMore={loadMore}
+        isGroupChat={conversation.type === 'group'}
+      />
 
       {/* Message Input */}
       <div className="px-6 py-4 border-t border-gray-200 bg-white">
