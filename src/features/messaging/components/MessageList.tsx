@@ -23,6 +23,8 @@ interface MessageListProps {
   onReact?: (messageId: string, emoji: string) => void;
   getUserName?: (userId: string) => string;
   isGroupChat?: boolean;
+  highlightedMessageId?: string | null;
+  registerMessageRef?: (messageId: string, element: HTMLElement | null) => void;
 }
 
 interface MessageGroup {
@@ -42,6 +44,8 @@ export function MessageList({
   onReact,
   getUserName,
   isGroupChat = false,
+  highlightedMessageId = null,
+  registerMessageRef,
 }: MessageListProps) {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -262,19 +266,30 @@ export function MessageList({
                   !isSent &&
                   (!previousMessage || previousMessage.senderId !== message.senderId);
 
+                const isHighlighted = highlightedMessageId === message.id;
+
                 return (
-                  <MessageBubble
+                  <div
                     key={message.id}
-                    message={message}
-                    isSent={isSent}
-                    showSender={showSender}
-                    senderName={getUserName ? getUserName(message.senderId) : undefined}
-                    onEdit={isSent ? onEdit : undefined}
-                    onDelete={isSent ? onDelete : undefined}
-                    onReply={onReply}
-                    onReact={onReact}
-                    getUserName={getUserName}
-                  />
+                    ref={(el) => registerMessageRef?.(message.id, el)}
+                    className={`transition-all duration-300 ${
+                      isHighlighted
+                        ? 'bg-yellow-100 rounded-lg p-2 -m-2 animate-pulse'
+                        : ''
+                    }`}
+                  >
+                    <MessageBubble
+                      message={message}
+                      isSent={isSent}
+                      showSender={showSender}
+                      senderName={getUserName ? getUserName(message.senderId) : undefined}
+                      onEdit={isSent ? onEdit : undefined}
+                      onDelete={isSent ? onDelete : undefined}
+                      onReply={onReply}
+                      onReact={onReact}
+                      getUserName={getUserName}
+                    />
+                  </div>
                 );
               })}
             </div>
