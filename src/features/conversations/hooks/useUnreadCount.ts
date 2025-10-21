@@ -44,10 +44,10 @@ export function useUnreadCount(options: UseUnreadCountOptions = {}) {
       }
     },
     enabled,
-    // Refetch every 30 seconds to keep count fresh
-    refetchInterval: 30000,
-    // Consider data stale after 10 seconds
-    staleTime: 10000,
+    // Refetch every 10 seconds to keep count fresh (reduced from 30s)
+    refetchInterval: 10000,
+    // Consider data stale after 5 seconds (reduced from 10s)
+    staleTime: 5000,
   });
 
   return {

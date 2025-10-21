@@ -7,12 +7,14 @@
 
 import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { MessageCircle, Search, Plus } from 'lucide-react';
+import { MessageCircle, Search, Plus, FileText } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { formatDistanceToNow } from 'date-fns';
 import { useConversations } from '@/features/conversations';
+import { useUnifiedSearch } from '@/features/messaging/hooks/useUnifiedSearch';
+import { useDebounce } from '@/hooks/useDebounce';
 import NewConversationDialog from '@/features/conversations/components/NewConversationDialog';
 
 function ConversationListContent() {
@@ -30,6 +32,15 @@ function ConversationListContent() {
     error: fetchError,
     refresh,
   } = useConversations();
+
+  // Debounce search query to reduce API calls
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+
+  // Search messages when query is present
+  const { messages: searchMessages, isSearching } = useUnifiedSearch({
+    query: debouncedSearchQuery,
+    enabled: debouncedSearchQuery.length >= 2,
+  });
 
   const error = fetchError ? fetchError.message : null;
 
@@ -111,7 +122,7 @@ function ConversationListContent() {
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
             <Input
               type="text"
-              placeholder="Search conversations..."
+              placeholder="Search conversations and messages..."
               className="pl-9"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -121,17 +132,59 @@ function ConversationListContent() {
 
       {/* Conversation List */}
       <div className="flex-1 overflow-y-auto">
-        {filteredConversations.length === 0 ? (
+        {/* Show message search results if searching */}
+        {debouncedSearchQuery.length >= 2 && searchMessages.length > 0 && (
+          <div className="border-b border-gray-200 bg-gray-50">
+            <div className="p-2 px-3">
+              <div className="flex items-center text-xs text-gray-600 mb-2">
+                <FileText className="w-3 h-3 mr-1" />
+                <span className="font-medium">Messages ({searchMessages.length})</span>
+                {isSearching && <span className="ml-2 text-gray-400">Searching...</span>}
+              </div>
+              <div className="space-y-1">
+                {searchMessages.slice(0, 5).map((message) => (
+                  <button
+                    key={message.id}
+                    onClick={() => handleConversationClick(message.conversation_id)}
+                    className="w-full flex items-start space-x-2 p-2 rounded hover:bg-white transition-colors text-left"
+                  >
+                    <MessageCircle className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-gray-500 mb-0.5 truncate">
+                        {message.conversation_name || 'Unknown Chat'}
+                      </p>
+                      <p className="text-sm text-gray-900 line-clamp-2">
+                        {message.content}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {filteredConversations.length === 0 && searchMessages.length === 0 && debouncedSearchQuery ? (
           <div className="p-8 text-center">
             <MessageCircle className="mx-auto h-12 w-12 text-gray-300 mb-3" />
             <p className="text-gray-500 text-sm">
-              {searchQuery ? 'No conversations found' : 'No conversations yet'}
+              No results found
             </p>
             <p className="text-gray-400 text-xs mt-1">
-              {searchQuery ? 'Try a different search' : 'Start a new conversation'}
+              Try a different search term
             </p>
           </div>
-        ) : (
+        ) : filteredConversations.length === 0 && !searchQuery ? (
+          <div className="p-8 text-center">
+            <MessageCircle className="mx-auto h-12 w-12 text-gray-300 mb-3" />
+            <p className="text-gray-500 text-sm">
+              No conversations yet
+            </p>
+            <p className="text-gray-400 text-xs mt-1">
+              Start a new conversation
+            </p>
+          </div>
+        ) : filteredConversations.length > 0 ? (
           <div className="p-2 space-y-1">
             {filteredConversations.map((conversation) => (
               <button
@@ -186,7 +239,7 @@ function ConversationListContent() {
               </button>
             ))}
           </div>
-        )}
+        ) : null}
       </div>
     </div>
 

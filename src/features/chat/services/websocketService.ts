@@ -211,6 +211,14 @@ class WebSocketService {
   }
 
   /**
+   * Listen for messages being marked as read (by any user)
+   */
+  onMessageRead(callback: (data: { message_id: string; conversation_id: string; user_id: string; }) => void): void {
+    if (!this.socket) return;
+    this.socket.on('message_read', callback);
+  }
+
+  /**
    * Send message read receipt
    */
   emitMessageRead(messageId: string, conversationId: string): void {
@@ -247,6 +255,22 @@ class WebSocketService {
    */
   isConnected(): boolean {
     return this.socket?.connected || false;
+  }
+
+  /**
+   * Get the underlying socket instance (for advanced usage like .off())
+   */
+  getSocket(): Socket | null {
+    return this.socket;
+  }
+
+  /**
+   * Remove specific event listener
+   */
+  off(event: string, callback?: (...args: unknown[]) => void): void {
+    if (this.socket) {
+      this.socket.off(event, callback);
+    }
   }
 }
 

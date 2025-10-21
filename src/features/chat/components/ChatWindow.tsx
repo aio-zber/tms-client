@@ -21,6 +21,7 @@ import toast from 'react-hot-toast';
 import { useMessages, useSendMessage } from '@/features/messaging';
 import { MessageList } from '@/features/messaging/components/MessageList';
 import { useConversation, useConversationActions } from '@/features/conversations';
+import { useUnreadCountSync } from '@/features/conversations/hooks/useUnreadCountSync';
 import MessageSearchDialog from '@/features/messaging/components/MessageSearchDialog';
 import EditConversationDialog from '@/features/conversations/components/EditConversationDialog';
 import ConversationSettingsDialog from '@/features/conversations/components/ConversationSettingsDialog';
@@ -39,9 +40,12 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
 
   // Use custom hooks for API integration
   const { conversation, loading: conversationLoading, refresh: refreshConversation } = useConversation(conversationId);
-  const { messages, loading: messagesLoading, hasMore, loadMore } = useMessages(conversationId);
+  const { messages, loading: messagesLoading, isFetchingNextPage, hasMore, loadMore } = useMessages(conversationId);
   const { sendMessage: sendMsg, sending } = useSendMessage();
   const { markAsRead, leaveConversation } = useConversationActions();
+
+  // Sync unread counts with WebSocket events
+  useUnreadCountSync();
 
   const isLoading = conversationLoading || messagesLoading;
 
@@ -224,6 +228,7 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
       <MessageList
         messages={messages}
         loading={messagesLoading}
+        isFetchingNextPage={isFetchingNextPage}
         hasMore={hasMore}
         currentUserId={currentUserId}
         onLoadMore={loadMore}
