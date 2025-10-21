@@ -154,7 +154,7 @@ export function useMessageVisibility({
  * Hook for batched message visibility tracking
  * Use this for lists to batch mark-as-read requests
  */
-export function useMessageVisibilityBatch(conversationId: string, currentUserId?: string) {
+export function useMessageVisibilityBatch(conversationId: string, _currentUserId?: string) {
   const queryClient = useQueryClient();
   const batchRef = useRef<Set<string>>(new Set());
   const timeoutRef = useRef<NodeJS.Timeout>();

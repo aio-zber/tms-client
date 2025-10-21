@@ -37,7 +37,7 @@ export function useUnreadCount(
         ? await messageService.getConversationUnreadCount(conversationId)
         : await messageService.getTotalUnreadCount();
 
-      setUnreadCount(response.unread_count);
+      setUnreadCount(response.unread_count ?? 0);
     } catch (err) {
       setError(err as Error);
       console.error('Failed to load unread count:', err);

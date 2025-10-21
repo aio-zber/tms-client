@@ -63,7 +63,7 @@ export function MessageList({
   const wasFetchingNextPageRef = useRef(false);
 
   // Auto-mark-read with batched Intersection Observer (Telegram/Messenger pattern)
-  const { trackMessage, isMarking, pendingCount } = useMessageVisibilityBatch(
+  const { trackMessage } = useMessageVisibilityBatch(
     conversationId || '',
     currentUserId
   );

@@ -64,7 +64,7 @@ export function useUnreadCountSync() {
     const handleMessageStatus = (data: Record<string, unknown>) => {
       console.log('[useUnreadCountSync] Message status event received:', data);
 
-      const { status, conversation_id, user_id } = data as {
+      const { status, conversation_id } = data as {
         status: string;
         conversation_id?: string;
         user_id?: string;
