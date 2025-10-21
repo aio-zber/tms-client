@@ -175,6 +175,13 @@ class SocketClient {
   }
 
   /**
+   * Listen for messages being marked as read
+   */
+  onMessageRead(callback: (data: Record<string, unknown>) => void) {
+    this.socket?.on('message_read', callback);
+  }
+
+  /**
    * Listen for typing indicators
    */
   onUserTyping(callback: (data: Record<string, unknown>) => void) {

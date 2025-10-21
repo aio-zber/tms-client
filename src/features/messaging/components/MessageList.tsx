@@ -14,6 +14,7 @@ import type { Message } from '@/types/message';
 interface MessageListProps {
   messages: Message[];
   loading: boolean;
+  isFetchingNextPage?: boolean;
   hasMore: boolean;
   currentUserId: string;
   onLoadMore?: () => void;
@@ -35,6 +36,7 @@ interface MessageGroup {
 export function MessageList({
   messages,
   loading,
+  isFetchingNextPage = false,
   hasMore,
   currentUserId,
   onLoadMore,
@@ -52,7 +54,7 @@ export function MessageList({
   const [autoScroll, setAutoScroll] = useState(true);
   const previousMessageCountRef = useRef(messages?.length || 0);
   const previousScrollHeightRef = useRef(0);
-  const isLoadingMoreRef = useRef(false);
+  const wasFetchingNextPageRef = useRef(false);
 
   // Debug logging
   console.log('[MessageList] Props received:', { 
@@ -124,26 +126,27 @@ export function MessageList({
     const messageCount = messages?.length || 0;
     const previousCount = previousMessageCountRef.current;
 
-    // If we're loading more (message count increased but we're not at bottom)
-    if (isLoadingMoreRef.current && messageCount > previousCount) {
+    // If we just finished loading more messages (pagination from top)
+    if (wasFetchingNextPageRef.current && !isFetchingNextPage && messageCount > previousCount) {
       const currentScrollHeight = scrollArea.scrollHeight;
       const previousScrollHeight = previousScrollHeightRef.current;
       const scrollHeightDiff = currentScrollHeight - previousScrollHeight;
 
       // Restore scroll position (keep visual position stable)
       scrollArea.scrollTop = scrollArea.scrollTop + scrollHeightDiff;
-      
-      isLoadingMoreRef.current = false;
+
       console.log('[MessageList] Preserved scroll position after loading more');
-    } 
-    // If we're at bottom and new messages arrive (normal chat)
-    else if (autoScroll && messageCount > previousCount) {
+    }
+    // If we're at bottom and new messages arrive (normal chat) - but NOT during pagination
+    else if (!isFetchingNextPage && !wasFetchingNextPageRef.current && autoScroll && messageCount > previousCount) {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
 
+    // Track previous pagination state
+    wasFetchingNextPageRef.current = isFetchingNextPage;
     previousMessageCountRef.current = messageCount;
     previousScrollHeightRef.current = scrollArea.scrollHeight;
-  }, [messages?.length, autoScroll, messages]);
+  }, [messages?.length, autoScroll, messages, isFetchingNextPage]);
 
   // Scroll to bottom on initial load
   useEffect(() => {
@@ -164,11 +167,10 @@ export function MessageList({
     const isAtBottom = scrollHeight - scrollTop - clientHeight < 100;
     setAutoScroll(isAtBottom);
 
-    // Load more when scrolling to top
-    if (scrollTop < 100 && hasMore && !loading && onLoadMore) {
+    // Load more when scrolling to top (only if not already loading)
+    if (scrollTop < 100 && hasMore && !loading && !isFetchingNextPage && onLoadMore) {
       // Save scroll height before loading more
       previousScrollHeightRef.current = scrollArea.scrollHeight;
-      isLoadingMoreRef.current = true;
       console.log('[MessageList] Loading more messages, saving scroll position');
       onLoadMore();
     }
@@ -217,15 +219,14 @@ export function MessageList({
                 if (scrollArea && onLoadMore) {
                   // Save scroll height before loading more
                   previousScrollHeightRef.current = scrollArea.scrollHeight;
-                  isLoadingMoreRef.current = true;
                   console.log('[MessageList] Load More button clicked, saving scroll position');
                   onLoadMore();
                 }
               }}
-              disabled={loading}
+              disabled={loading || isFetchingNextPage}
               className="px-4 py-2 text-sm text-viber-purple hover:bg-viber-purple/10 rounded-full transition disabled:opacity-50"
             >
-              {loading ? (
+              {isFetchingNextPage ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
                   Loading...

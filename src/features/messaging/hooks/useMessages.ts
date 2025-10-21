@@ -19,6 +19,7 @@ interface UseMessagesOptions {
 interface UseMessagesReturn {
   messages: Message[];
   loading: boolean;
+  isFetchingNextPage: boolean;
   error: Error | null;
   hasMore: boolean;
   loadMessages: () => Promise<void>;
@@ -186,7 +187,8 @@ export function useMessages(
 
   return {
     messages,
-    loading: isLoading || isFetchingNextPage,
+    loading: isLoading,
+    isFetchingNextPage,
     error: error as Error | null,
     hasMore: hasNextPage ?? false,
     loadMessages: async () => { await refetch(); },
