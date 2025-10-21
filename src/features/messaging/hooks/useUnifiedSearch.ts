@@ -45,7 +45,7 @@ export function useUnifiedSearch(options: UseUnifiedSearchOptions) {
 
       return {
         messages: response.data as MessageSearchResult[],
-        messageCount: response.total || response.data.length,
+        messageCount: response.data.length,
       };
     },
     enabled: enabled && !!query && query.trim().length >= 2,
