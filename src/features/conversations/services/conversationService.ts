@@ -108,6 +108,17 @@ export async function markConversationAsRead(
   return apiClient.post<void>(`${BASE_PATH}/${conversationId}/mark-read`);
 }
 
+/**
+ * Search conversations by name or member names
+ * Implements Telegram/Messenger-style fuzzy search
+ */
+export async function searchConversations(params: {
+  q: string;
+  limit?: number;
+}): Promise<ConversationListResponse> {
+  return apiClient.get<ConversationListResponse>(`${BASE_PATH}/search`, params);
+}
+
 // Export all functions as a service object
 export const conversationService = {
   createConversation,
@@ -119,6 +130,7 @@ export const conversationService = {
   leaveConversation,
   updateConversationSettings,
   markConversationAsRead,
+  searchConversations,
 };
 
 export default conversationService;

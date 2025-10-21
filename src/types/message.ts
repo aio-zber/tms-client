@@ -76,7 +76,13 @@ export interface AddReactionRequest {
 }
 
 export interface MarkMessagesReadRequest {
+  conversation_id: string;
   message_ids: string[];
+}
+
+export interface MarkMessagesDeliveredRequest {
+  conversation_id: string;
+  message_ids?: string[];
 }
 
 export interface SearchMessagesRequest {
@@ -100,5 +106,8 @@ export interface MessageListResponse {
 }
 
 export interface UnreadCountResponse {
-  unread_count: number;
+  unread_count?: number;
+  conversation_id?: string;
+  total_unread_count?: number;
+  conversations?: Record<string, number>;
 }

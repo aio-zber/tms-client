@@ -10,6 +10,8 @@ import { format, isToday, isYesterday } from 'date-fns';
 import { MessageBubble } from './MessageBubble';
 import { Loader2 } from 'lucide-react';
 import type { Message } from '@/types/message';
+import { useMessageVisibilityBatch } from '../hooks/useMessageVisibility';
+import { useInView } from 'react-intersection-observer';
 
 interface MessageListProps {
   messages: Message[];
@@ -17,6 +19,7 @@ interface MessageListProps {
   isFetchingNextPage?: boolean;
   hasMore: boolean;
   currentUserId: string;
+  conversationId?: string; // Added for auto-mark-read
   onLoadMore?: () => void;
   onEdit?: (messageId: string) => void;
   onDelete?: (messageId: string) => void;
@@ -26,6 +29,7 @@ interface MessageListProps {
   isGroupChat?: boolean;
   highlightedMessageId?: string | null;
   registerMessageRef?: (messageId: string, element: HTMLElement | null) => void;
+  enableAutoRead?: boolean; // Toggle for auto-mark-read feature
 }
 
 interface MessageGroup {
@@ -39,6 +43,7 @@ export function MessageList({
   isFetchingNextPage = false,
   hasMore,
   currentUserId,
+  conversationId,
   onLoadMore,
   onEdit,
   onDelete,
@@ -48,6 +53,7 @@ export function MessageList({
   isGroupChat = false,
   highlightedMessageId = null,
   registerMessageRef,
+  enableAutoRead = true,
 }: MessageListProps) {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -55,6 +61,12 @@ export function MessageList({
   const previousMessageCountRef = useRef(messages?.length || 0);
   const previousScrollHeightRef = useRef(0);
   const wasFetchingNextPageRef = useRef(false);
+
+  // Auto-mark-read with batched Intersection Observer (Telegram/Messenger pattern)
+  const { trackMessage, isMarking, pendingCount } = useMessageVisibilityBatch(
+    conversationId || '',
+    currentUserId
+  );
 
   // Debug logging
   console.log('[MessageList] Props received:', { 
@@ -269,27 +281,58 @@ export function MessageList({
 
                 const isHighlighted = highlightedMessageId === message.id;
 
+                // Helper component to track visibility
+                const MessageWithVisibility = () => {
+                  const { ref, inView } = useInView({
+                    threshold: 0.5, // 50% visible
+                    triggerOnce: false,
+                  });
+
+                  // Track visibility after 1 second delay
+                  useEffect(() => {
+                    if (!enableAutoRead || !conversationId || isSent || message.status === 'read') {
+                      return;
+                    }
+
+                    if (inView) {
+                      const timer = setTimeout(() => {
+                        // Double-check still visible after delay
+                        if (inView) {
+                          trackMessage(message.id);
+                        }
+                      }, 1000); // 1 second delay (Telegram/Messenger pattern)
+
+                      return () => clearTimeout(timer);
+                    }
+                  }, [inView, isSent, message.status]);
+
+                  return (
+                    <div
+                      ref={ref}
+                      className={`transition-all duration-300 ${
+                        isHighlighted
+                          ? 'bg-yellow-100 rounded-lg p-2 -m-2 animate-pulse'
+                          : ''
+                      }`}
+                    >
+                      <MessageBubble
+                        message={message}
+                        isSent={isSent}
+                        showSender={showSender}
+                        senderName={getUserName ? getUserName(message.senderId) : undefined}
+                        onEdit={isSent ? onEdit : undefined}
+                        onDelete={isSent ? onDelete : undefined}
+                        onReply={onReply}
+                        onReact={onReact}
+                        getUserName={getUserName}
+                      />
+                    </div>
+                  );
+                };
+
                 return (
-                  <div
-                    key={message.id}
-                    ref={(el) => registerMessageRef?.(message.id, el)}
-                    className={`transition-all duration-300 ${
-                      isHighlighted
-                        ? 'bg-yellow-100 rounded-lg p-2 -m-2 animate-pulse'
-                        : ''
-                    }`}
-                  >
-                    <MessageBubble
-                      message={message}
-                      isSent={isSent}
-                      showSender={showSender}
-                      senderName={getUserName ? getUserName(message.senderId) : undefined}
-                      onEdit={isSent ? onEdit : undefined}
-                      onDelete={isSent ? onDelete : undefined}
-                      onReply={onReply}
-                      onReact={onReact}
-                      getUserName={getUserName}
-                    />
+                  <div key={message.id} ref={(el) => registerMessageRef?.(message.id, el)}>
+                    <MessageWithVisibility />
                   </div>
                 );
               })}

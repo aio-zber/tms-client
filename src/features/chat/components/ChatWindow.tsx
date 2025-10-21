@@ -22,6 +22,8 @@ import { useMessages, useSendMessage } from '@/features/messaging';
 import { MessageList } from '@/features/messaging/components/MessageList';
 import { useConversation, useConversationActions } from '@/features/conversations';
 import { useUnreadCountSync } from '@/features/conversations/hooks/useUnreadCountSync';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { messageService } from '@/features/messaging/services/messageService';
 import MessageSearchDialog from '@/features/messaging/components/MessageSearchDialog';
 import EditConversationDialog from '@/features/conversations/components/EditConversationDialog';
 import ConversationSettingsDialog from '@/features/conversations/components/ConversationSettingsDialog';
@@ -43,6 +45,7 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
   const { messages, loading: messagesLoading, isFetchingNextPage, hasMore, loadMore } = useMessages(conversationId);
   const { sendMessage: sendMsg, sending } = useSendMessage();
   const { markAsRead, leaveConversation } = useConversationActions();
+  const queryClient = useQueryClient();
 
   // Sync unread counts with WebSocket events
   useUnreadCountSync();
@@ -52,12 +55,35 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
   // TODO: Get current user ID from auth context/store
   const currentUserId = 'current-user-id'; // Placeholder
 
-  // Mark conversation as read when opened
+  // Auto-mark messages as DELIVERED when conversation opens (Telegram/Messenger pattern)
+  const markDeliveredMutation = useMutation({
+    mutationFn: async (convId: string) => {
+      await messageService.markMessagesAsDelivered({
+        conversation_id: convId,
+        // No message_ids = marks ALL SENT messages as DELIVERED
+      });
+    },
+    onSuccess: () => {
+      // Refresh messages to show updated status
+      queryClient.invalidateQueries({
+        queryKey: ['messages', conversationId],
+      });
+    },
+    onError: (error) => {
+      console.error('Failed to mark messages as delivered:', error);
+    },
+  });
+
+  // Mark messages as DELIVERED when conversation opens
   useEffect(() => {
     if (conversationId && !isLoading) {
+      // Mark as delivered (SENT → DELIVERED)
+      markDeliveredMutation.mutate(conversationId);
+
+      // Also mark conversation as read for unread count
       markAsRead(conversationId);
     }
-  }, [conversationId, isLoading, markAsRead]);
+  }, [conversationId, isLoading]);
 
   const sendMessage = async () => {
     if (!newMessage.trim() || sending) return;
@@ -231,8 +257,10 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
         isFetchingNextPage={isFetchingNextPage}
         hasMore={hasMore}
         currentUserId={currentUserId}
+        conversationId={conversationId} // For auto-mark-read
         onLoadMore={loadMore}
         isGroupChat={conversation.type === 'group'}
+        enableAutoRead={true} // Enable Telegram/Messenger-style auto-read
       />
 
       {/* Message Input */}

@@ -166,11 +166,84 @@ export function useMessages(
       });
     };
 
+    // Listen for message status updates (Telegram/Messenger pattern)
+    const handleMessageStatus = (data: Record<string, unknown>) => {
+      console.log('[useMessages] Message status update via WebSocket:', data);
+
+      const { message_id, status, conversation_id } = data as {
+        message_id: string;
+        status: string;
+        conversation_id: string;
+      };
+
+      // Only handle status updates for this conversation
+      if (conversation_id !== conversationId) {
+        return;
+      }
+
+      // Optimistic update in cache
+      queryClient.setQueryData(
+        queryKeys.messages.list(conversationId, { limit }),
+        (oldData: unknown) => {
+          if (!oldData || typeof oldData !== 'object') return oldData;
+
+          const data = oldData as { pages: Array<{ data: Message[] }>; pageParams: unknown[] };
+
+          // Update message status in all pages
+          const newPages = data.pages.map((page) => ({
+            ...page,
+            data: page.data.map((msg) =>
+              msg.id === message_id ? { ...msg, status: status as Message['status'] } : msg
+            ),
+          }));
+
+          return {
+            ...data,
+            pages: newPages,
+          };
+        }
+      );
+
+      // If status is READ, invalidate unread count
+      if (status === 'read') {
+        console.log('[useMessages] Message marked as READ, invalidating unread counts');
+        queryClient.invalidateQueries({
+          queryKey: ['unreadCount', conversationId],
+        });
+        queryClient.invalidateQueries({
+          queryKey: ['totalUnreadCount'],
+        });
+      }
+    };
+
+    // Listen for bulk messages delivered event
+    const handleMessagesDelivered = (data: Record<string, unknown>) => {
+      console.log('[useMessages] Bulk messages delivered via WebSocket:', data);
+
+      const { conversation_id, count } = data as {
+        conversation_id: string;
+        count: number;
+      };
+
+      // Only handle for this conversation
+      if (conversation_id === conversationId) {
+        console.log(`[useMessages] ${count} messages marked as DELIVERED`);
+        // Refresh messages to update status
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.messages.list(conversationId, { limit }),
+        });
+      }
+    };
+
     socketClient.onNewMessage(handleNewMessage);
     socketClient.onMessageEdited(handleMessageEdited);
     socketClient.onMessageDeleted(handleMessageDeleted);
     socketClient.onReactionAdded(handleReactionAdded);
     socketClient.onReactionRemoved(handleReactionRemoved);
+    socketClient.onMessageStatus(handleMessageStatus); // Real-time status updates
+
+    // Listen for bulk delivered events
+    socket.on('messages_delivered', handleMessagesDelivered);
 
     // Cleanup
     return () => {
@@ -181,6 +254,8 @@ export function useMessages(
       socketClient.off('message_deleted', handleMessageDeleted);
       socketClient.off('reaction_added', handleReactionAdded);
       socketClient.off('reaction_removed', handleReactionRemoved);
+      socketClient.off('message_status', handleMessageStatus); // Remove status listener
+      socket.off('messages_delivered', handleMessagesDelivered); // Remove bulk delivered listener
       socket.off('connect', handleConnect);
     };
   }, [conversationId, queryClient, limit]);

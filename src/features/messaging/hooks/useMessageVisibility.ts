@@ -1,0 +1,230 @@
+/**
+ * useMessageVisibility Hook
+ *
+ * Implements Telegram/Messenger-style automatic message read detection using Intersection Observer:
+ * - Detects when messages are 50%+ visible for 1+ second
+ * - Batches mark-as-read requests (max 1 request per 2 seconds)
+ * - Limits batch size to 50 messages
+ * - Prevents spam and optimizes network usage
+ */
+
+import { useCallback, useRef, useEffect } from 'react';
+import { useInView } from 'react-intersection-observer';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { messageService } from '../services/messageService';
+import type { Message } from '@/types/message';
+
+interface UseMessageVisibilityOptions {
+  /**
+   * Message to track
+   */
+  message: Message;
+
+  /**
+   * Conversation ID
+   */
+  conversationId: string;
+
+  /**
+   * Current user ID (to skip marking own messages)
+   */
+  currentUserId?: string;
+
+  /**
+   * Whether to enable visibility tracking
+   */
+  enabled?: boolean;
+
+  /**
+   * Visibility threshold (default: 0.5 = 50%)
+   */
+  threshold?: number;
+
+  /**
+   * Delay before marking as read in ms (default: 1000ms)
+   */
+  delayMs?: number;
+}
+
+/**
+ * Hook to track message visibility and auto-mark as read
+ *
+ * @example
+ * ```tsx
+ * const { ref, isVisible } = useMessageVisibility({
+ *   message,
+ *   conversationId,
+ *   currentUserId,
+ *   enabled: message.status !== 'read'
+ * });
+ *
+ * return <div ref={ref}>{message.content}</div>;
+ * ```
+ */
+export function useMessageVisibility({
+  message,
+  conversationId,
+  currentUserId,
+  enabled = true,
+  threshold = 0.5,
+  delayMs = 1000,
+}: UseMessageVisibilityOptions) {
+  const queryClient = useQueryClient();
+  const timeoutRef = useRef<NodeJS.Timeout>();
+
+  // Don't track if:
+  // - Disabled
+  // - Message is from current user
+  // - Already marked as read
+  const shouldTrack =
+    enabled &&
+    message.senderId !== currentUserId &&
+    message.status !== 'read';
+
+  // Intersection Observer hook (50% visible threshold)
+  const { ref, inView, entry } = useInView({
+    threshold,
+    triggerOnce: false, // Keep tracking
+    skip: !shouldTrack,
+  });
+
+  // Mutation for marking messages as read
+  const markReadMutation = useMutation({
+    mutationFn: async (messageIds: string[]) => {
+      await messageService.markMessagesAsRead({
+        conversation_id: conversationId,
+        message_ids: messageIds,
+      });
+    },
+    onSuccess: () => {
+      // Invalidate messages query to refresh status
+      queryClient.invalidateQueries({
+        queryKey: ['messages', conversationId],
+      });
+
+      // Invalidate unread count
+      queryClient.invalidateQueries({
+        queryKey: ['unreadCount', conversationId],
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: ['totalUnreadCount'],
+      });
+    },
+  });
+
+  // Handle visibility changes
+  useEffect(() => {
+    if (!shouldTrack || !inView) {
+      // Clear timeout if not visible
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = undefined;
+      }
+      return;
+    }
+
+    // Check intersection ratio (must be >= threshold)
+    const ratio = entry?.intersectionRatio ?? 0;
+    if (ratio < threshold) {
+      return;
+    }
+
+    // Message is visible! Wait for delay before marking as read
+    timeoutRef.current = setTimeout(() => {
+      // Mark this single message as read
+      markReadMutation.mutate([message.id]);
+    }, delayMs);
+
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, [inView, shouldTrack, entry?.intersectionRatio, threshold, delayMs, message.id]);
+
+  return {
+    ref,
+    isVisible: inView && (entry?.intersectionRatio ?? 0) >= threshold,
+    isMarking: markReadMutation.isPending,
+  };
+}
+
+/**
+ * Hook for batched message visibility tracking
+ * Use this for lists to batch mark-as-read requests
+ */
+export function useMessageVisibilityBatch(conversationId: string, currentUserId?: string) {
+  const queryClient = useQueryClient();
+  const batchRef = useRef<Set<string>>(new Set());
+  const timeoutRef = useRef<NodeJS.Timeout>();
+
+  const markReadMutation = useMutation({
+    mutationFn: async (messageIds: string[]) => {
+      if (messageIds.length === 0) return;
+
+      await messageService.markMessagesAsRead({
+        conversation_id: conversationId,
+        message_ids: messageIds,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['messages', conversationId],
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: ['unreadCount', conversationId],
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: ['totalUnreadCount'],
+      });
+
+      // Clear batch
+      batchRef.current.clear();
+    },
+  });
+
+  const scheduleBatchMarkAsRead = useCallback(() => {
+    // Clear existing timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+
+    // Schedule batch processing
+    timeoutRef.current = setTimeout(() => {
+      const messages = Array.from(batchRef.current);
+      if (messages.length > 0) {
+        // Limit to 50 messages per batch
+        const batch = messages.slice(0, 50);
+        markReadMutation.mutate(batch);
+      }
+    }, 2000); // 2 second debounce
+  }, [markReadMutation]);
+
+  const trackMessage = useCallback(
+    (messageId: string) => {
+      batchRef.current.add(messageId);
+      scheduleBatchMarkAsRead();
+    },
+    [scheduleBatchMarkAsRead]
+  );
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
+  return {
+    trackMessage,
+    isMarking: markReadMutation.isPending,
+    pendingCount: batchRef.current.size,
+  };
+}
+
+export default useMessageVisibility;
