@@ -65,7 +65,6 @@ export function useUnreadCountSync() {
       console.log('[useUnreadCountSync] Message status event received:', data);
 
       const status = data.status as string;
-      const messageId = data.message_id as string;
 
       // If message is marked as READ, invalidate counts
       if (status === 'READ' || status === 'read') {
