@@ -60,16 +60,56 @@ export function useUnreadCountSync() {
       });
     };
 
-    // Listen for message_status events
+    // Listen for message_status events (Telegram/Messenger pattern)
     const handleMessageStatus = (data: Record<string, unknown>) => {
       console.log('[useUnreadCountSync] Message status event received:', data);
 
-      const status = data.status as string;
+      const { status, conversation_id, user_id } = data as {
+        status: string;
+        conversation_id?: string;
+        user_id?: string;
+      };
 
-      // If message is marked as READ, invalidate counts
+      // If message is marked as READ, decrement unread count
       if (status === 'READ' || status === 'read') {
-        // We need conversation_id to invalidate specific conversation
-        // For now, invalidate total count (backend should provide conversation_id)
+        console.log('[useUnreadCountSync] Message marked as READ - updating unread counts');
+
+        // Optimistically decrement unread count for this conversation
+        if (conversation_id) {
+          queryClient.setQueryData(
+            queryKeys.unreadCount.conversation(conversation_id),
+            (old: unknown) => {
+              if (!old || typeof old !== 'object') return old;
+              const oldData = old as { unread_count?: number };
+              const currentCount = oldData.unread_count ?? 0;
+              return {
+                ...oldData,
+                unread_count: Math.max(0, currentCount - 1), // Don't go below 0
+              };
+            }
+          );
+
+          // Invalidate to refetch accurate count
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.unreadCount.conversation(conversation_id),
+          });
+        }
+
+        // Optimistically decrement total unread count
+        queryClient.setQueryData(
+          queryKeys.unreadCount.total(),
+          (old: unknown) => {
+            if (!old || typeof old !== 'object') return old;
+            const oldData = old as { total_unread_count?: number };
+            const currentTotal = oldData.total_unread_count ?? 0;
+            return {
+              ...oldData,
+              total_unread_count: Math.max(0, currentTotal - 1), // Don't go below 0
+            };
+          }
+        );
+
+        // Invalidate total unread count to refetch
         queryClient.invalidateQueries({
           queryKey: queryKeys.unreadCount.total(),
         });

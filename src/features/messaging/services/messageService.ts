@@ -10,6 +10,7 @@ import type {
   EditMessageRequest,
   AddReactionRequest,
   MarkMessagesReadRequest,
+  MarkMessagesDeliveredRequest,
   SearchMessagesRequest,
   MessageListResponse,
   UnreadCountResponse,
@@ -106,6 +107,16 @@ export async function markMessagesAsRead(
 }
 
 /**
+ * Mark messages as delivered (Telegram/Messenger pattern)
+ * Automatically called when user opens a conversation
+ */
+export async function markMessagesAsDelivered(
+  data: MarkMessagesDeliveredRequest
+): Promise<void> {
+  return apiClient.post<void>(`${BASE_PATH}/mark-delivered`, data);
+}
+
+/**
  * Get unread message count for a conversation
  */
 export async function getConversationUnreadCount(
@@ -151,6 +162,7 @@ export const messageService = {
   removeReaction,
   getConversationMessages,
   markMessagesAsRead,
+  markMessagesAsDelivered,
   getConversationUnreadCount,
   getTotalUnreadCount,
   searchMessages,

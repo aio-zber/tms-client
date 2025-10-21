@@ -12,7 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { formatDistanceToNow } from 'date-fns';
-import { useConversations } from '@/features/conversations';
+import { useConversations, useConversationSearch } from '@/features/conversations';
 import { useUnifiedSearch } from '@/features/messaging/hooks/useUnifiedSearch';
 import { useDebounce } from '@/hooks/useDebounce';
 import NewConversationDialog from '@/features/conversations/components/NewConversationDialog';
@@ -33,16 +33,28 @@ function ConversationListContent() {
     refresh,
   } = useConversations();
 
-  // Debounce search query to reduce API calls
+  // Debounce search query to reduce API calls (for message search)
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
+  // Conversation search (Telegram/Messenger pattern: fuzzy + backend)
+  const {
+    conversations: searchedConversations,
+    isSearching: isSearchingConversations,
+    isSearchActive,
+  } = useConversationSearch({
+    query: searchQuery, // Not debounced - hook handles debouncing internally
+    limit: 20,
+    enabled: true,
+  });
+
   // Search messages when query is present
-  const { messages: searchMessages, isSearching } = useUnifiedSearch({
+  const { messages: searchMessages, isSearching: isSearchingMessages } = useUnifiedSearch({
     query: debouncedSearchQuery,
     enabled: debouncedSearchQuery.length >= 2,
   });
 
   const error = fetchError ? fetchError.message : null;
+  const isSearching = isSearchingConversations || isSearchingMessages;
 
   const handleConversationCreated = (conversationId: string) => {
     refresh();
@@ -70,9 +82,18 @@ function ConversationListContent() {
     }
   };
 
-  const filteredConversations = conversations.filter(conv =>
-    (conv.name || '').toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Hybrid search strategy (Telegram/Messenger pattern):
+  // - Query < 2 chars: Client-side filter (instant)
+  // - Query >= 2 chars: Backend search (accurate + fuzzy)
+  const displayConversations = isSearchActive
+    ? searchedConversations // Backend search with fuzzy matching
+    : searchQuery.length > 0 && searchQuery.length < 2
+    ? conversations.filter(conv =>
+        (conv.name || '').toLowerCase().includes(searchQuery.toLowerCase())
+      ) // Client-side filter for 1 char
+    : conversations; // No search - show all
+
+  const filteredConversations = displayConversations;
 
   if (isLoading) {
     return (
