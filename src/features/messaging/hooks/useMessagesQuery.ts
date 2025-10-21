@@ -52,14 +52,11 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
     refetchOnWindowFocus: true,
     // Consider stale after 30 seconds
     staleTime: 30000,
-    // Reverse the pages when flattening (oldest page first)
-    select: (data) => ({
-      pages: [...data.pages].reverse(),
-      pageParams: [...data.pageParams].reverse(),
-    }),
   });
 
-  // Flatten pages into a single array (oldest messages first)
+  // Flatten pages into a single array
+  // Backend returns DESC (newest first), but each page is already reversed to ASC
+  // So when we flatten, we get oldest to newest order for chat display
   const messages: Message[] = query.data?.pages.flatMap((page) => page.data) ?? [];
 
   return {
