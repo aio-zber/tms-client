@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { format, isToday, isYesterday } from 'date-fns';
 import { MessageBubble } from './MessageBubble';
 import { Loader2 } from 'lucide-react';
@@ -131,7 +131,9 @@ export function MessageList({
   };
 
   // Preserve scroll position when loading more messages (prepending to top)
-  useEffect(() => {
+  // Using useLayoutEffect to run synchronously after DOM updates but before browser paint
+  // This prevents visual flickering and ensures accurate scroll position preservation
+  useLayoutEffect(() => {
     const scrollArea = scrollAreaRef.current;
     if (!scrollArea) return;
 
@@ -144,10 +146,17 @@ export function MessageList({
       const previousScrollHeight = previousScrollHeightRef.current;
       const scrollHeightDiff = currentScrollHeight - previousScrollHeight;
 
-      // Restore scroll position (keep visual position stable)
-      scrollArea.scrollTop = scrollArea.scrollTop + scrollHeightDiff;
-
-      console.log('[MessageList] Preserved scroll position after loading more');
+      if (scrollHeightDiff > 0) {
+        // Restore scroll position (keep visual position stable)
+        // Add the height difference to maintain the same visual position
+        scrollArea.scrollTop = scrollArea.scrollTop + scrollHeightDiff;
+        console.log('[MessageList] ✅ Preserved scroll position after loading more:', {
+          previousHeight: previousScrollHeight,
+          currentHeight: currentScrollHeight,
+          diff: scrollHeightDiff,
+          newScrollTop: scrollArea.scrollTop
+        });
+      }
     }
     // If we're at bottom and new messages arrive (normal chat) - but NOT during pagination
     else if (!isFetchingNextPage && !wasFetchingNextPageRef.current && autoScroll && messageCount > previousCount) {
@@ -158,7 +167,7 @@ export function MessageList({
     wasFetchingNextPageRef.current = isFetchingNextPage;
     previousMessageCountRef.current = messageCount;
     previousScrollHeightRef.current = scrollArea.scrollHeight;
-  }, [messages?.length, autoScroll, messages, isFetchingNextPage]);
+  }, [messages, isFetchingNextPage, autoScroll]);
 
   // Scroll to bottom on initial load
   useEffect(() => {
