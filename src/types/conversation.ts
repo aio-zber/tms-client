@@ -10,6 +10,7 @@ export interface Conversation {
   id: string;
   type: ConversationType;
   name?: string; // Only for group conversations
+  display_name?: string; // Computed display name: for DMs = other user's name, for groups = group name
   avatarUrl?: string;
   members: ConversationMember[];
   lastMessage?: {

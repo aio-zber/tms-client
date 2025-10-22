@@ -220,7 +220,7 @@ function ConversationListContent() {
                   <Avatar className="w-12 h-12">
                     <AvatarImage src={conversation.avatarUrl} />
                     <AvatarFallback className="bg-viber-purple text-white">
-                      {getInitials(conversation.name || 'Chat')}
+                      {getInitials(conversation.display_name || conversation.name || 'Chat')}
                     </AvatarFallback>
                   </Avatar>
                   {conversation.unreadCount && conversation.unreadCount > 0 && (
@@ -234,7 +234,7 @@ function ConversationListContent() {
                 <div className="flex-1 min-w-0 text-left">
                   <div className="flex items-baseline justify-between mb-1">
                     <h3 className="font-semibold text-gray-900 truncate">
-                      {conversation.name || 'Direct Message'}
+                      {conversation.display_name || conversation.name || 'Direct Message'}
                     </h3>
                     {conversation.lastMessage && (
                       <span className="text-xs text-gray-500 ml-2 flex-shrink-0">
