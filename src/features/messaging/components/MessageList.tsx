@@ -61,6 +61,8 @@ export function MessageList({
   const previousMessageCountRef = useRef(messages?.length || 0);
   const previousScrollHeightRef = useRef(0);
   const wasFetchingNextPageRef = useRef(false);
+  const isLoadingMoreRef = useRef(false); // Prevent infinite scroll loop
+  const initialLoadRef = useRef(true); // Track initial conversation load
 
   // Auto-mark-read with batched Intersection Observer (Telegram/Messenger pattern)
   const { trackMessage } = useMessageVisibilityBatch(
@@ -169,15 +171,33 @@ export function MessageList({
     previousScrollHeightRef.current = scrollArea.scrollHeight;
   }, [messages, isFetchingNextPage, autoScroll]);
 
-  // Scroll to bottom on initial load
+  // Scroll to bottom ONLY on initial load (not on pagination)
   useEffect(() => {
     const hasMessages = (messages?.length || 0) > 0;
-    if (hasMessages && !loading) {
+
+    // Only scroll to bottom on INITIAL load, not when loading more messages
+    if (hasMessages && !loading && initialLoadRef.current) {
       setTimeout(() => {
         bottomRef.current?.scrollIntoView({ behavior: 'auto' });
+        initialLoadRef.current = false; // Mark as initially loaded
+        console.log('[MessageList] ✅ Initial load complete, scrolled to bottom');
       }, 100);
     }
   }, [messages?.length, loading]);
+
+  // Reset initial load flag when conversation changes
+  useEffect(() => {
+    initialLoadRef.current = true;
+    console.log('[MessageList] 🔄 Conversation changed, resetting initial load flag');
+  }, [conversationId]);
+
+  // Reset loading flag when pagination completes
+  useEffect(() => {
+    if (!isFetchingNextPage && isLoadingMoreRef.current) {
+      isLoadingMoreRef.current = false;
+      console.log('[MessageList] ✅ Pagination complete, resetting loading flag');
+    }
+  }, [isFetchingNextPage]);
 
   // Detect manual scroll
   const handleScroll = () => {
@@ -189,10 +209,14 @@ export function MessageList({
     setAutoScroll(isAtBottom);
 
     // Load more when scrolling to top (only if not already loading)
-    if (scrollTop < 100 && hasMore && !loading && !isFetchingNextPage && onLoadMore) {
+    // Prevent infinite loop by checking isLoadingMoreRef flag
+    if (scrollTop < 100 && hasMore && !loading && !isFetchingNextPage
+        && onLoadMore && !isLoadingMoreRef.current) {
+      // Set flag BEFORE calling onLoadMore to prevent multiple calls
+      isLoadingMoreRef.current = true;
       // Save scroll height before loading more
       previousScrollHeightRef.current = scrollArea.scrollHeight;
-      console.log('[MessageList] Loading more messages, saving scroll position');
+      console.log('[MessageList] 🔄 Loading more messages (scroll triggered)');
       onLoadMore();
     }
   };
@@ -237,14 +261,16 @@ export function MessageList({
             <button
               onClick={() => {
                 const scrollArea = scrollAreaRef.current;
-                if (scrollArea && onLoadMore) {
+                if (scrollArea && onLoadMore && !isLoadingMoreRef.current) {
+                  // Set flag to prevent multiple loads
+                  isLoadingMoreRef.current = true;
                   // Save scroll height before loading more
                   previousScrollHeightRef.current = scrollArea.scrollHeight;
-                  console.log('[MessageList] Load More button clicked, saving scroll position');
+                  console.log('[MessageList] 🔄 Loading more messages (button clicked)');
                   onLoadMore();
                 }
               }}
-              disabled={loading || isFetchingNextPage}
+              disabled={loading || isFetchingNextPage || isLoadingMoreRef.current}
               className="px-4 py-2 text-sm text-viber-purple hover:bg-viber-purple/10 rounded-full transition disabled:opacity-50"
             >
               {isFetchingNextPage ? (
