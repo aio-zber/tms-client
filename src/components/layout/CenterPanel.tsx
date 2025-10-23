@@ -77,17 +77,48 @@ export function CenterPanel() {
   }, []);
 
   // Filter conversations based on search
-  // For DMs without names, we still want to show them when no search query
+  // Searches conversation names AND member names (backend provides enriched user data)
   const filteredConversations = conversations.filter((conv) => {
     if (!searchQuery) return true; // Show all when no search
 
+    const query = searchQuery.toLowerCase();
+
     // Search by conversation name (for groups)
-    if (conv.name?.toLowerCase().includes(searchQuery.toLowerCase())) {
+    if (conv.name?.toLowerCase().includes(query)) {
       return true;
     }
 
-    // For DMs, search by member names or user IDs
-    // TODO: Once we have user names enriched, search by those
+    // Search by display_name if backend provides it
+    if (conv.display_name?.toLowerCase().includes(query)) {
+      return true;
+    }
+
+    // Search by member names (for DMs and groups)
+    // Backend enriches conversations with user data, so we can search by names
+    if (conv.members && conv.members.length > 0) {
+      return conv.members.some((member) => {
+        const memberData = member as unknown as Record<string, unknown>;
+        const userData = memberData.user as Record<string, unknown> | undefined;
+
+        if (userData) {
+          // Search in various name fields
+          const firstName = String(userData.firstName || userData.first_name || '').toLowerCase();
+          const lastName = String(userData.lastName || userData.last_name || '').toLowerCase();
+          const fullName = String(userData.name || '').toLowerCase();
+          const email = String(userData.email || '').toLowerCase();
+
+          return (
+            firstName.includes(query) ||
+            lastName.includes(query) ||
+            fullName.includes(query) ||
+            email.includes(query)
+          );
+        }
+
+        return false;
+      });
+    }
+
     return false;
   });
 
