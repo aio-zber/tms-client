@@ -360,6 +360,7 @@ export default function ChatPage({ params }: ChatPageProps) {
         loading={loading}
         hasMore={hasMore}
         currentUserId={currentUserId || ''}
+        conversationId={conversationId}
         onLoadMore={loadMore}
         onEdit={handleEditMessage}
         onDelete={handleDeleteMessage}
