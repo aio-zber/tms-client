@@ -12,6 +12,7 @@ import { useCallback, useRef, useEffect } from 'react';
 import { useInView } from 'react-intersection-observer';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { messageService } from '../services/messageService';
+import { queryKeys } from '@/lib/queryClient';
 import type { Message } from '@/types/message';
 
 interface UseMessageVisibilityOptions {
@@ -102,13 +103,13 @@ export function useMessageVisibility({
         queryKey: ['messages', conversationId],
       });
 
-      // Invalidate unread count
+      // Invalidate unread count (standardized query keys)
       queryClient.invalidateQueries({
-        queryKey: ['unreadCount', conversationId],
+        queryKey: queryKeys.unreadCount.conversation(conversationId),
       });
 
       queryClient.invalidateQueries({
-        queryKey: ['totalUnreadCount'],
+        queryKey: queryKeys.unreadCount.total(),
       });
     },
   });
@@ -176,12 +177,13 @@ export function useMessageVisibilityBatch(conversationId: string, _currentUserId
         queryKey: ['messages', conversationId],
       });
 
+      // Invalidate unread count (standardized query keys)
       queryClient.invalidateQueries({
-        queryKey: ['unreadCount', conversationId],
+        queryKey: queryKeys.unreadCount.conversation(conversationId),
       });
 
       queryClient.invalidateQueries({
-        queryKey: ['totalUnreadCount'],
+        queryKey: queryKeys.unreadCount.total(),
       });
 
       // Clear batch
