@@ -18,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import toast from 'react-hot-toast';
+import { useCurrentUser } from '@/features/users/hooks/useCurrentUser';
 import { useMessages, useSendMessage } from '@/features/messaging';
 import { MessageList } from '@/features/messaging/components/MessageList';
 import { useConversation, useConversationActions } from '@/features/conversations';
@@ -40,6 +41,13 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
   const router = useRouter();
 
+  // Get current user from hook
+  const { user: currentUser } = useCurrentUser();
+  const currentUserId = currentUser?.id || '';
+
+  console.log('[ChatWindow] Current user ID:', currentUserId);
+  console.log('[ChatWindow] Current user:', currentUser);
+
   // Use custom hooks for API integration
   const { conversation, loading: conversationLoading, refresh: refreshConversation } = useConversation(conversationId);
   const { messages, loading: messagesLoading, isFetchingNextPage, hasMore, loadMore } = useMessages(conversationId);
@@ -51,9 +59,6 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
   useUnreadCountSync();
 
   const isLoading = conversationLoading || messagesLoading;
-
-  // TODO: Get current user ID from auth context/store
-  const currentUserId = 'current-user-id'; // Placeholder
 
   // Auto-mark messages as DELIVERED when conversation opens (Telegram/Messenger pattern)
   const markDeliveredMutation = useMutation({

@@ -51,6 +51,11 @@ class SocketClient {
 
     this.setupEventHandlers();
 
+    // Log connection status immediately
+    console.log('[SocketClient] Socket created, connecting...');
+    console.log('[SocketClient] Socket ID:', this.socket.id);
+    console.log('[SocketClient] Connected:', this.socket.connected);
+
     return this.socket;
   }
 

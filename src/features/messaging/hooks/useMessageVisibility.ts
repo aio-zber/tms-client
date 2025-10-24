@@ -87,6 +87,18 @@ export function useMessageVisibility({
     threshold,
     triggerOnce: false, // Keep tracking
     skip: !shouldTrack,
+    onChange: (inView, entry) => {
+      console.log('[useMessageVisibility] InView changed:', {
+        messageId: message.id,
+        inView,
+        ratio: entry.intersectionRatio,
+        shouldTrack,
+        enabled,
+        currentUserId,
+        senderId: message.senderId,
+        status: message.status,
+      });
+    },
   });
 
   // Mutation for marking messages as read
