@@ -325,14 +325,31 @@ export function MessageList({
 
                   // Track visibility after 1 second delay
                   useEffect(() => {
+                    console.log('[MessageVisibility] Effect triggered:', {
+                      messageId: message.id,
+                      inView,
+                      isSent,
+                      messageStatus: message.status,
+                      enableAutoRead,
+                      hasConversationId: !!conversationId
+                    });
+
                     if (!enableAutoRead || !conversationId || isSent || message.status === 'read') {
+                      console.log('[MessageVisibility] Skipping mark-as-read:', {
+                        reason: !enableAutoRead ? 'autoRead disabled' :
+                                !conversationId ? 'no conversationId' :
+                                isSent ? 'user sent this message' :
+                                'already read'
+                      });
                       return;
                     }
 
                     if (inView) {
+                      console.log('[MessageVisibility] Message visible, scheduling mark-as-read in 1s:', message.id);
                       const timer = setTimeout(() => {
                         // Double-check still visible after delay
                         if (inView) {
+                          console.log('[MessageVisibility] ✅ Calling trackMessage for:', message.id);
                           trackMessage(message.id);
                         }
                       }, 1000); // 1 second delay (Telegram/Messenger pattern)

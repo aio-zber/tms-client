@@ -163,12 +163,15 @@ export function useMessageVisibilityBatch(conversationId: string, _currentUserId
     mutationFn: async (messageIds: string[]) => {
       if (messageIds.length === 0) return;
 
+      console.log('[useMessageVisibilityBatch] 🚀 Making API call to mark messages as read:', messageIds);
       await messageService.markMessagesAsRead({
         conversation_id: conversationId,
         message_ids: messageIds,
       });
+      console.log('[useMessageVisibilityBatch] ✅ API call succeeded');
     },
     onSuccess: () => {
+      console.log('[useMessageVisibilityBatch] Invalidating queries after successful mark-as-read');
       queryClient.invalidateQueries({
         queryKey: ['messages', conversationId],
       });
@@ -183,6 +186,10 @@ export function useMessageVisibilityBatch(conversationId: string, _currentUserId
 
       // Clear batch
       batchRef.current.clear();
+      console.log('[useMessageVisibilityBatch] Batch cleared, queries invalidated');
+    },
+    onError: (error) => {
+      console.error('[useMessageVisibilityBatch] ❌ Failed to mark messages as read:', error);
     },
   });
 
@@ -195,9 +202,11 @@ export function useMessageVisibilityBatch(conversationId: string, _currentUserId
     // Schedule batch processing
     timeoutRef.current = setTimeout(() => {
       const messages = Array.from(batchRef.current);
+      console.log('[useMessageVisibilityBatch] Batch timeout fired, messages to mark:', messages.length);
       if (messages.length > 0) {
         // Limit to 50 messages per batch
         const batch = messages.slice(0, 50);
+        console.log('[useMessageVisibilityBatch] Triggering mutation for batch:', batch);
         markReadMutation.mutate(batch);
       }
     }, 2000); // 2 second debounce
@@ -205,7 +214,10 @@ export function useMessageVisibilityBatch(conversationId: string, _currentUserId
 
   const trackMessage = useCallback(
     (messageId: string) => {
+      console.log('[useMessageVisibilityBatch] trackMessage called for:', messageId);
+      console.log('[useMessageVisibilityBatch] Current batch size:', batchRef.current.size);
       batchRef.current.add(messageId);
+      console.log('[useMessageVisibilityBatch] New batch size:', batchRef.current.size);
       scheduleBatchMarkAsRead();
     },
     [scheduleBatchMarkAsRead]
