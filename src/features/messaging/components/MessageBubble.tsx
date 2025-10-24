@@ -100,19 +100,21 @@ export const MessageBubble = memo(function MessageBubble({
   const renderStatusIcon = () => {
     if (!isSent) return null;
 
+    // Telegram/Messenger pattern: Use white icons on colored background
+    // Opacity shows progression: sent (60%) → delivered (60%) → read (100% bright)
     switch (message.status) {
       case 'sent':
-        return <Check className="w-3 h-3" />;
+        return <Check className="w-3 h-3 text-white/60" />; // Single checkmark, dimmed
       case 'delivered':
-        return <CheckCheck className="w-3 h-3 text-gray-400" />;
+        return <CheckCheck className="w-3 h-3 text-white/60" />; // Double checkmark, dimmed
       case 'read':
-        return <CheckCheck className="w-3 h-3 text-viber-purple" />;
+        return <CheckCheck className="w-3 h-3 text-white" />; // Double checkmark, bright (emphasizes "read")
       case 'sending':
         return (
           <div className="w-3 h-3 border-2 border-white/50 border-t-white rounded-full animate-spin" />
         );
       case 'failed':
-        return <span className="text-red-500 text-xs">Failed</span>;
+        return <span className="text-red-300 text-xs">Failed</span>; // Lighter red for visibility
       default:
         return null;
     }

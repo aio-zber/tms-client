@@ -207,11 +207,12 @@ export function useMessages(
       // If status is READ, invalidate unread count
       if (status === 'read') {
         console.log('[useMessages] Message marked as READ, invalidating unread counts');
+        // Invalidate unread count queries (standardized query keys)
         queryClient.invalidateQueries({
-          queryKey: ['unreadCount', conversationId],
+          queryKey: queryKeys.unreadCount.conversation(conversationId),
         });
         queryClient.invalidateQueries({
-          queryKey: ['totalUnreadCount'],
+          queryKey: queryKeys.unreadCount.total(),
         });
       }
     };
