@@ -232,7 +232,7 @@ class WebSocketService {
   /**
    * Listen for new poll creation
    */
-  onNewPoll(callback: (data: any) => void): void {
+  onNewPoll(callback: (data: unknown) => void): void {
     if (!this.socket) return;
     this.socket.on('new_poll', callback);
   }
@@ -240,7 +240,7 @@ class WebSocketService {
   /**
    * Listen for poll vote updates
    */
-  onPollVote(callback: (data: any) => void): void {
+  onPollVote(callback: (data: unknown) => void): void {
     if (!this.socket) return;
     this.socket.on('poll_vote_added', callback);
   }
@@ -248,7 +248,7 @@ class WebSocketService {
   /**
    * Listen for poll closed events
    */
-  onPollClosed(callback: (data: any) => void): void {
+  onPollClosed(callback: (data: unknown) => void): void {
     if (!this.socket) return;
     this.socket.on('poll_closed', callback);
   }
