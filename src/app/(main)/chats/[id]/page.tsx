@@ -7,9 +7,10 @@
 
 import { use, useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Menu, MoreVertical, Loader2, X } from 'lucide-react';
+import { Menu, MoreVertical, Loader2, X, Search } from 'lucide-react';
 import { MessageList } from '@/features/messaging/components/MessageList';
 import { MessageInput } from '@/features/messaging/components/MessageInput';
+import { ChatSearchBar, useChatSearch, useJumpToMessage } from '@/features/messaging';
 import { useMessages } from '@/features/messaging/hooks/useMessages';
 import { useSendMessage } from '@/features/messaging/hooks/useSendMessage';
 import { useMessageActions } from '@/features/messaging/hooks/useMessageActions';
@@ -43,11 +44,30 @@ export default function ChatPage({ params }: ChatPageProps) {
   const [replyToMessage, setReplyToMessage] = useState<Message | undefined>();
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   const { messages, loading, hasMore, loadMore, addOptimisticMessage } = useMessages(conversationId);
   const { sendMessage, sending } = useSendMessage();
   const { editMessage, deleteMessage, addReaction, removeReaction } = useMessageActions();
   useSocket(); // Initialize WebSocket connection
+
+  // Jump to message hook for search navigation
+  const {
+    jumpToMessage,
+    highlightedMessageId,
+    searchHighlightId,
+    registerMessageRef,
+    clearSearchHighlight,
+  } = useJumpToMessage();
+
+  // Chat search hook
+  const { searchQuery } = useChatSearch({
+    conversationId,
+    enabled: isSearchOpen,
+    onResultSelect: (messageId) => {
+      jumpToMessage(messageId, { isSearchResult: true });
+    },
+  });
 
   // Debug: Log messages whenever they change
   useEffect(() => {
@@ -87,6 +107,26 @@ export default function ChatPage({ params }: ChatPageProps) {
 
     loadCurrentUser();
   }, []);
+
+  // Keyboard shortcut: Ctrl/Cmd+F to open search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault();
+        setIsSearchOpen(true);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Clear search highlight when closing search
+  useEffect(() => {
+    if (!isSearchOpen) {
+      clearSearchHighlight();
+    }
+  }, [isSearchOpen, clearSearchHighlight]);
 
   // WebSocket is now enabled - no need for polling fallback
   // Real-time updates are handled by useMessages hook via WebSocket
@@ -339,8 +379,11 @@ export default function ChatPage({ params }: ChatPageProps) {
             <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuItem>View Details</DropdownMenuItem>
               <DropdownMenuItem>Mute Conversation</DropdownMenuItem>
-              <DropdownMenuItem>Search Messages</DropdownMenuItem>
-              <DropdownMenuItem 
+              <DropdownMenuItem onClick={() => setIsSearchOpen(true)}>
+                <Search className="w-4 h-4 mr-2" />
+                Search Messages
+              </DropdownMenuItem>
+              <DropdownMenuItem
                 onClick={handleClearConversation}
                 className="text-orange-600"
               >
@@ -353,6 +396,16 @@ export default function ChatPage({ params }: ChatPageProps) {
           </DropdownMenu>
         </div>
       </div>
+
+      {/* Search Bar */}
+      <ChatSearchBar
+        conversationId={conversationId}
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
+        onResultSelect={(messageId) => {
+          jumpToMessage(messageId, { isSearchResult: true });
+        }}
+      />
 
       {/* Messages Area */}
       <MessageList
@@ -368,6 +421,10 @@ export default function ChatPage({ params }: ChatPageProps) {
         onReact={handleReact}
         getUserName={getUserName}
         isGroupChat={conversation.type === 'group'}
+        searchQuery={searchQuery}
+        highlightedMessageId={highlightedMessageId}
+        searchHighlightId={searchHighlightId}
+        registerMessageRef={registerMessageRef}
       />
 
       {/* Message Input Area */}

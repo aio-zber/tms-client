@@ -30,6 +30,8 @@ interface MessageListProps {
   highlightedMessageId?: string | null;
   registerMessageRef?: (messageId: string, element: HTMLElement | null) => void;
   enableAutoRead?: boolean; // Toggle for auto-mark-read feature
+  searchQuery?: string; // Search query for highlighting text
+  searchHighlightId?: string | null; // ID of the currently highlighted search result
 }
 
 interface MessageGroup {
@@ -54,6 +56,8 @@ export function MessageList({
   highlightedMessageId = null,
   registerMessageRef,
   enableAutoRead = true,
+  searchQuery,
+  searchHighlightId,
 }: MessageListProps) {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -377,6 +381,9 @@ export function MessageList({
                         onReply={onReply}
                         onReact={onReact}
                         getUserName={getUserName}
+                        searchQuery={searchQuery}
+                        isHighlighted={highlightedMessageId === message.id}
+                        isSearchHighlighted={searchHighlightId === message.id}
                       />
                     </div>
                   );
