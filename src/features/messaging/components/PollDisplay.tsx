@@ -25,7 +25,6 @@ interface PollDisplayProps {
   poll: Poll;
   onVote: (optionIds: string[]) => Promise<void>;
   onClose?: () => Promise<void>;
-  currentUserId?: string;
   isCreator?: boolean;
 }
 
@@ -33,7 +32,6 @@ export default function PollDisplay({
   poll,
   onVote,
   onClose,
-  currentUserId,
   isCreator = false,
 }: PollDisplayProps) {
   const [isVoting, setIsVoting] = useState(false);

@@ -41,11 +41,11 @@ export function usePollActions() {
       const previousPoll = queryClient.getQueryData(['poll', pollId]);
 
       // Optimistically update poll data
-      queryClient.setQueryData(['poll', pollId], (old: any) => {
-        if (!old) return old;
+      queryClient.setQueryData(['poll', pollId], (old: unknown) => {
+        if (!old || typeof old !== 'object') return old;
 
         return {
-          ...old,
+          ...(old as Record<string, unknown>),
           userVotes: optionIds,
         };
       });

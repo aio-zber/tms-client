@@ -6,7 +6,7 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,14 +31,13 @@ interface PollCreatorProps {
   open: boolean;
   onClose: () => void;
   onCreatePoll: (question: string, options: string[], multipleChoice: boolean) => Promise<void>;
-  conversationId: string;
+  conversationId?: string;
 }
 
 export default function PollCreator({
   open,
   onClose,
   onCreatePoll,
-  conversationId,
 }: PollCreatorProps) {
   const [question, setQuestion] = useState('');
   const [options, setOptions] = useState<string[]>(['', '']);
