@@ -98,7 +98,7 @@ export default function ChatPage({ params }: ChatPageProps) {
       {
         conversation_id: conversationId,
         content,
-        type: 'text',
+        type: 'TEXT',
         reply_to_id: replyToId,
       },
       // Optimistic update callback - add message immediately to UI

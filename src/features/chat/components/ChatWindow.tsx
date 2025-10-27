@@ -97,7 +97,7 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
       const message = await sendMsg({
         conversation_id: conversationId,
         content: newMessage.trim(),
-        type: 'text',
+        type: 'TEXT',
       });
 
       if (message) {
