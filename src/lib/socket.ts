@@ -219,6 +219,27 @@ class SocketClient {
   }
 
   /**
+   * Listen for new poll creation
+   */
+  onNewPoll(callback: (data: Record<string, unknown>) => void) {
+    this.socket?.on('new_poll', callback);
+  }
+
+  /**
+   * Listen for poll vote updates
+   */
+  onPollVote(callback: (data: Record<string, unknown>) => void) {
+    this.socket?.on('poll_vote_added', callback);
+  }
+
+  /**
+   * Listen for poll closed events
+   */
+  onPollClosed(callback: (data: Record<string, unknown>) => void) {
+    this.socket?.on('poll_closed', callback);
+  }
+
+  /**
    * Remove event listener
    */
   off(event: string, callback?: (data: Record<string, unknown>) => void) {
