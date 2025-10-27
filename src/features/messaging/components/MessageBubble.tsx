@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useState, useRef, useEffect, memo } from 'react';
+import { useState, useRef, useEffect, memo, useMemo } from 'react';
 import { format } from 'date-fns';
 import { Check, CheckCheck, Reply, Edit, Trash2, Smile } from 'lucide-react';
 import type { Message } from '@/types/message';
@@ -57,16 +57,19 @@ export const MessageBubble = memo(function MessageBubble({
   const quickEmojis = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥'];
 
   /**
-   * Highlight search query in text
+   * Memoized highlighted message content
+   * Prevents infinite re-renders by only recalculating when content or query changes
    */
-  const highlightSearchText = (text: string, query: string) => {
-    if (!query || !query.trim()) return text;
+  const highlightedContent = useMemo(() => {
+    if (!searchQuery || !searchQuery.trim() || !message.content) {
+      return message.content;
+    }
 
-    const parts = text.split(new RegExp(`(${query})`, 'gi'));
+    const parts = message.content.split(new RegExp(`(${searchQuery})`, 'gi'));
     return (
       <>
         {parts.map((part, index) =>
-          part.toLowerCase() === query.toLowerCase() ? (
+          part.toLowerCase() === searchQuery.toLowerCase() ? (
             <mark
               key={index}
               className="bg-yellow-200 text-gray-900 rounded px-0.5"
@@ -79,7 +82,7 @@ export const MessageBubble = memo(function MessageBubble({
         )}
       </>
     );
-  };
+  }, [message.content, searchQuery]);
 
   // Close context menu when clicking outside
   useEffect(() => {
@@ -245,7 +248,7 @@ export const MessageBubble = memo(function MessageBubble({
               } transition-all`}
             >
               <p className="text-sm md:text-[15px] leading-relaxed break-words whitespace-pre-wrap">
-                {searchQuery ? highlightSearchText(message.content, searchQuery) : message.content}
+                {highlightedContent}
               </p>
 
               {/* Metadata (edited label and status only, NO timestamp) */}
