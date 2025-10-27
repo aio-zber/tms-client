@@ -13,10 +13,6 @@ interface UseChatSearchOptions {
   onResultSelect?: (messageId: string) => void;
 }
 
-interface SearchResult {
-  message: Message;
-  index: number;
-}
 
 interface UseChatSearchReturn {
   // State
