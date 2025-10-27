@@ -2,7 +2,7 @@
  * Message-related type definitions
  */
 
-export type MessageType = 'text' | 'image' | 'file' | 'voice' | 'poll' | 'call';
+export type MessageType = 'TEXT' | 'IMAGE' | 'FILE' | 'VOICE' | 'POLL' | 'CALL';
 
 export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
 
