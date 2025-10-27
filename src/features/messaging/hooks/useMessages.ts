@@ -236,6 +236,75 @@ export function useMessages(
       }
     };
 
+    // Listen for poll events
+    const handleNewPoll = (data: Record<string, unknown>) => {
+      console.log('[useMessages] New poll created via WebSocket:', data);
+      // Invalidate messages query to show new poll message
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.messages.list(conversationId, { limit }),
+      });
+    };
+
+    const handlePollVote = (data: Record<string, unknown>) => {
+      console.log('[useMessages] Poll vote update via WebSocket:', data);
+      const pollData = data as { poll_id: string; user_id: string; poll: unknown };
+
+      // Optimistically update poll data in messages cache
+      queryClient.setQueryData(
+        queryKeys.messages.list(conversationId, { limit }),
+        (oldData: unknown) => {
+          if (!oldData || typeof oldData !== 'object') return oldData;
+
+          const cachedData = oldData as { pages: Array<{ data: Message[] }>; pageParams: unknown[] };
+
+          // Update poll data in all pages
+          const newPages = cachedData.pages.map((page) => ({
+            ...page,
+            data: page.data.map((msg) =>
+              msg.poll?.id === pollData.poll_id
+                ? { ...msg, poll: pollData.poll as Message['poll'] }
+                : msg
+            ),
+          }));
+
+          return {
+            ...cachedData,
+            pages: newPages,
+          };
+        }
+      );
+    };
+
+    const handlePollClosed = (data: Record<string, unknown>) => {
+      console.log('[useMessages] Poll closed via WebSocket:', data);
+      const pollData = data as { poll_id: string; poll: unknown };
+
+      // Optimistically update poll data in messages cache
+      queryClient.setQueryData(
+        queryKeys.messages.list(conversationId, { limit }),
+        (oldData: unknown) => {
+          if (!oldData || typeof oldData !== 'object') return oldData;
+
+          const cachedData = oldData as { pages: Array<{ data: Message[] }>; pageParams: unknown[] };
+
+          // Update poll data in all pages
+          const newPages = cachedData.pages.map((page) => ({
+            ...page,
+            data: page.data.map((msg) =>
+              msg.poll?.id === pollData.poll_id
+                ? { ...msg, poll: pollData.poll as Message['poll'] }
+                : msg
+            ),
+          }));
+
+          return {
+            ...cachedData,
+            pages: newPages,
+          };
+        }
+      );
+    };
+
     socketClient.onNewMessage(handleNewMessage);
     socketClient.onMessageEdited(handleMessageEdited);
     socketClient.onMessageDeleted(handleMessageDeleted);
@@ -245,6 +314,11 @@ export function useMessages(
 
     // Listen for bulk delivered events
     socket.on('messages_delivered', handleMessagesDelivered);
+
+    // Listen for poll events
+    socketClient.onNewPoll(handleNewPoll);
+    socketClient.onPollVote(handlePollVote);
+    socketClient.onPollClosed(handlePollClosed);
 
     // Cleanup
     return () => {
@@ -257,6 +331,9 @@ export function useMessages(
       socketClient.off('reaction_removed', handleReactionRemoved);
       socketClient.off('message_status', handleMessageStatus); // Remove status listener
       socket.off('messages_delivered', handleMessagesDelivered); // Remove bulk delivered listener
+      socketClient.off('new_poll', handleNewPoll); // Remove poll event listeners
+      socketClient.off('poll_vote_added', handlePollVote);
+      socketClient.off('poll_closed', handlePollClosed);
       socket.off('connect', handleConnect);
     };
   }, [conversationId, queryClient, limit]);
