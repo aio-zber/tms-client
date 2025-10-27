@@ -196,7 +196,6 @@ export const MessageBubble = memo(function MessageBubble({
                       }
                     : undefined
                 }
-                currentUserId={currentUserId}
                 isCreator={isSent}
               />
             </div>
