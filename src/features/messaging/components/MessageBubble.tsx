@@ -17,7 +17,6 @@ interface MessageBubbleProps {
   isSent: boolean;
   showSender?: boolean;
   senderName?: string;
-  currentUserId?: string;
   onEdit?: (messageId: string) => void;
   onDelete?: (messageId: string) => void;
   onReply?: (message: Message) => void;
@@ -35,7 +34,6 @@ export const MessageBubble = memo(function MessageBubble({
   isSent,
   showSender = false,
   senderName,
-  currentUserId,
   onEdit,
   onDelete,
   onReply,
