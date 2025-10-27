@@ -9,3 +9,5 @@ export { useMessageActions } from './useMessageActions';
 export { useUnreadCount } from './useUnreadCount';
 export { useSearchMessages } from './useSearchMessages';
 export { useUnifiedSearch } from './useUnifiedSearch';
+export { useChatSearch } from './useChatSearch';
+export { useJumpToMessage } from './useJumpToMessage';

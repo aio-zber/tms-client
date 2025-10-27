@@ -36,9 +36,24 @@ interface MessageProps {
   showAvatar: boolean;
   currentUserId?: string;
   onUpdate?: () => void;
+  // Search-related props
+  searchQuery?: string;
+  isHighlighted?: boolean;
+  isSearchHighlighted?: boolean;
+  messageRef?: (element: HTMLDivElement | null) => void;
 }
 
-export default function Message({ message, isOwnMessage, showAvatar, currentUserId, onUpdate }: MessageProps) {
+export default function Message({
+  message,
+  isOwnMessage,
+  showAvatar,
+  currentUserId,
+  onUpdate,
+  searchQuery,
+  isHighlighted = false,
+  isSearchHighlighted = false,
+  messageRef
+}: MessageProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -61,6 +76,32 @@ export default function Message({ message, isOwnMessage, showAvatar, currentUser
       .join('')
       .toUpperCase()
       .slice(0, 2);
+  };
+
+  /**
+   * Highlight search query in message content
+   * Returns JSX with highlighted matches
+   */
+  const highlightSearchText = (text: string, query: string) => {
+    if (!query || !query.trim()) return text;
+
+    const parts = text.split(new RegExp(`(${query})`, 'gi'));
+    return (
+      <>
+        {parts.map((part, index) =>
+          part.toLowerCase() === query.toLowerCase() ? (
+            <mark
+              key={index}
+              className="bg-yellow-200 text-gray-900 rounded px-0.5"
+            >
+              {part}
+            </mark>
+          ) : (
+            part
+          )
+        )}
+      </>
+    );
   };
 
   const handleEdit = async () => {
@@ -126,8 +167,11 @@ export default function Message({ message, isOwnMessage, showAvatar, currentUser
 
   return (
     <div
+      ref={messageRef}
       className={`flex items-end space-x-2 ${
         isOwnMessage ? 'flex-row-reverse space-x-reverse' : ''
+      } ${isHighlighted ? 'animate-pulse' : ''} ${
+        isSearchHighlighted ? 'ring-2 ring-yellow-400 rounded-2xl' : ''
       }`}
     >
       {/* Avatar */}
@@ -207,14 +251,14 @@ export default function Message({ message, isOwnMessage, showAvatar, currentUser
           </div>
         ) : (
           <div
-            className={`rounded-2xl px-4 py-2 max-w-md ${
+            className={`rounded-2xl px-4 py-2 max-w-md transition-all ${
               isOwnMessage
                 ? 'bg-viber-purple text-white'
                 : 'bg-gray-100 text-gray-900'
-            }`}
+            } ${isSearchHighlighted ? 'bg-yellow-100 border-2 border-yellow-400' : ''}`}
           >
             <p className="text-sm whitespace-pre-wrap break-words">
-              {message.content}
+              {searchQuery ? highlightSearchText(message.content, searchQuery) : message.content}
             </p>
           </div>
         )}

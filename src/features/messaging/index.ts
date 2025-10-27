@@ -12,6 +12,7 @@ export * from './hooks';
 
 // Components
 export { default as MessageSearchDialog } from './components/MessageSearchDialog';
+export { default as ChatSearchBar } from './components/ChatSearchBar';
 export { MessageBubble } from './components/MessageBubble';
 export { MessageInput } from './components/MessageInput';
 export { MessageList } from './components/MessageList';
