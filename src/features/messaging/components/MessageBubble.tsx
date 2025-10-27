@@ -179,7 +179,7 @@ export const MessageBubble = memo(function MessageBubble({
 
         <div className="flex items-end gap-2">
           {/* Message Bubble */}
-          {message.type === 'poll' && message.poll ? (
+          {message.type === 'POLL' && message.poll ? (
             /* Poll Message - Full width without bubble styling */
             <div className="w-full order-1">
               <PollDisplay
