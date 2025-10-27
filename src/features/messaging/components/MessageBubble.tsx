@@ -22,6 +22,9 @@ interface MessageBubbleProps {
   onReply?: (message: Message) => void;
   onReact?: (messageId: string, emoji: string) => void;
   getUserName?: (userId: string) => string;
+  searchQuery?: string;
+  isHighlighted?: boolean;
+  isSearchHighlighted?: boolean;
 }
 
 interface ContextMenuPosition {
@@ -39,6 +42,9 @@ export const MessageBubble = memo(function MessageBubble({
   onReply,
   onReact,
   getUserName,
+  searchQuery,
+  isHighlighted = false,
+  isSearchHighlighted = false,
 }: MessageBubbleProps) {
   const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -49,6 +55,31 @@ export const MessageBubble = memo(function MessageBubble({
 
   // Common emojis for quick reactions
   const quickEmojis = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥'];
+
+  /**
+   * Highlight search query in text
+   */
+  const highlightSearchText = (text: string, query: string) => {
+    if (!query || !query.trim()) return text;
+
+    const parts = text.split(new RegExp(`(${query})`, 'gi'));
+    return (
+      <>
+        {parts.map((part, index) =>
+          part.toLowerCase() === query.toLowerCase() ? (
+            <mark
+              key={index}
+              className="bg-yellow-200 text-gray-900 rounded px-0.5"
+            >
+              {part}
+            </mark>
+          ) : (
+            part
+          )
+        )}
+      </>
+    );
+  };
 
   // Close context menu when clicking outside
   useEffect(() => {
@@ -177,7 +208,11 @@ export const MessageBubble = memo(function MessageBubble({
           </div>
         )}
 
-        <div className="flex items-end gap-2">
+        <div className={`flex items-end gap-2 ${
+          isHighlighted ? 'animate-pulse' : ''
+        } ${
+          isSearchHighlighted ? 'ring-2 ring-yellow-400 rounded-lg p-1 -m-1' : ''
+        }`}>
           {/* Message Bubble */}
           {message.type === 'POLL' && message.poll ? (
             /* Poll Message - Full width without bubble styling */
@@ -205,10 +240,12 @@ export const MessageBubble = memo(function MessageBubble({
                 isSent
                   ? 'bg-viber-purple text-white rounded-br-sm order-1'
                   : 'bg-gray-100 text-gray-900 rounded-bl-sm order-2'
-              } ${message.status === 'failed' ? 'opacity-60' : ''}`}
+              } ${message.status === 'failed' ? 'opacity-60' : ''} ${
+                isSearchHighlighted ? 'ring-2 ring-yellow-400 bg-yellow-50' : ''
+              } transition-all`}
             >
               <p className="text-sm md:text-[15px] leading-relaxed break-words whitespace-pre-wrap">
-                {message.content}
+                {searchQuery ? highlightSearchText(message.content, searchQuery) : message.content}
               </p>
 
               {/* Metadata (edited label and status only, NO timestamp) */}
