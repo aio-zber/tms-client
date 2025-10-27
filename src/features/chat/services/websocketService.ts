@@ -230,6 +230,30 @@ class WebSocketService {
   }
 
   /**
+   * Listen for new poll creation
+   */
+  onNewPoll(callback: (data: any) => void): void {
+    if (!this.socket) return;
+    this.socket.on('new_poll', callback);
+  }
+
+  /**
+   * Listen for poll vote updates
+   */
+  onPollVote(callback: (data: any) => void): void {
+    if (!this.socket) return;
+    this.socket.on('poll_vote_added', callback);
+  }
+
+  /**
+   * Listen for poll closed events
+   */
+  onPollClosed(callback: (data: any) => void): void {
+    if (!this.socket) return;
+    this.socket.on('poll_closed', callback);
+  }
+
+  /**
    * Disconnect from WebSocket server
    */
   disconnect(): void {
