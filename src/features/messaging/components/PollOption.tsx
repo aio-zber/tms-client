@@ -25,6 +25,7 @@ interface PollOptionProps {
   isClosed: boolean;
   onClick: () => void;
   disabled?: boolean;
+  getUserName?: (userId: string) => string;
 }
 
 export default function PollOption({
@@ -34,8 +35,20 @@ export default function PollOption({
   isClosed,
   onClick,
   disabled = false,
+  getUserName,
 }: PollOptionProps) {
   const percentage = totalVotes > 0 ? Math.round((option.voteCount / totalVotes) * 100) : 0;
+
+  // Get voter names
+  const voterNames = option.voters && getUserName
+    ? option.voters.map((userId) => getUserName(userId)).filter(Boolean)
+    : [];
+
+  const votersText = voterNames.length > 0
+    ? voterNames.length <= 3
+      ? voterNames.join(', ')
+      : `${voterNames.slice(0, 3).join(', ')} +${voterNames.length - 3} more`
+    : null;
 
   const buttonStyle: React.CSSProperties = {
     position: 'relative',
@@ -82,89 +95,104 @@ export default function PollOption({
   };
 
   return (
-    <button
-      onClick={handleClick}
-      style={buttonStyle}
-      className="poll-option"
-      disabled={isClosed || disabled}
-      onMouseEnter={(e) => {
-        if (!isClosed && !disabled && !isVoted) {
-          e.currentTarget.style.background = '#ECECF4';
-          e.currentTarget.style.borderColor = VIBER_COLORS.primary;
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!isClosed && !disabled && !isVoted) {
-          e.currentTarget.style.background = VIBER_COLORS.background;
-          e.currentTarget.style.borderColor = VIBER_COLORS.border;
-        }
-      }}
-    >
-      {/* Progress Bar Background */}
-      <div style={progressBarStyle} />
+    <div className="w-full">
+      <button
+        onClick={handleClick}
+        style={buttonStyle}
+        className="poll-option"
+        disabled={isClosed || disabled}
+        onMouseEnter={(e) => {
+          if (!isClosed && !disabled && !isVoted) {
+            e.currentTarget.style.background = '#ECECF4';
+            e.currentTarget.style.borderColor = VIBER_COLORS.primary;
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!isClosed && !disabled && !isVoted) {
+            e.currentTarget.style.background = VIBER_COLORS.background;
+            e.currentTarget.style.borderColor = VIBER_COLORS.border;
+          }
+        }}
+      >
+        {/* Progress Bar Background */}
+        <div style={progressBarStyle} />
 
-      {/* Content */}
-      <div style={contentStyle}>
-        <div className="flex items-center gap-2 flex-1">
-          {/* Checkmark for voted option */}
-          {isVoted && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '20px',
-                height: '20px',
-                borderRadius: '50%',
-                background: VIBER_COLORS.voted,
-                flexShrink: 0,
-              }}
-            >
-              <Check className="h-3 w-3 text-white" />
-            </div>
-          )}
-
-          {/* Option Text */}
-          <span
-            className="text-left font-medium"
-            style={{
-              fontSize: '14px',
-              lineHeight: '1.4',
-            }}
-          >
-            {option.optionText}
-          </span>
-        </div>
-
-        {/* Vote Count & Percentage */}
-        <div className="flex items-center gap-2 flex-shrink-0">
-          {totalVotes > 0 && (
-            <>
-              <span
-                style={{
-                  fontSize: '14px',
-                  fontWeight: 500,
-                  color: isVoted ? 'white' : VIBER_COLORS.primary,
-                }}
-              >
-                {percentage}%
-              </span>
+        {/* Content */}
+        <div style={contentStyle}>
+          <div className="flex items-center gap-2 flex-1">
+            {/* Checkmark for voted option */}
+            {isVoted && (
               <div
                 style={{
-                  padding: '4px 8px',
-                  borderRadius: '8px',
-                  background: isVoted ? 'rgba(255, 255, 255, 0.2)' : 'rgba(115, 96, 242, 0.08)',
-                  fontSize: '12px',
-                  fontWeight: 500,
-                  color: isVoted ? 'white' : VIBER_COLORS.primary,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '20px',
+                  height: '20px',
+                  borderRadius: '50%',
+                  background: VIBER_COLORS.voted,
+                  flexShrink: 0,
                 }}
               >
-                {option.voteCount}
+                <Check className="h-3 w-3 text-white" />
               </div>
-            </>
-          )}
+            )}
+
+            {/* Option Text */}
+            <span
+              className="text-left font-medium"
+              style={{
+                fontSize: '14px',
+                lineHeight: '1.4',
+              }}
+            >
+              {option.optionText}
+            </span>
+          </div>
+
+          {/* Vote Count & Percentage */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {totalVotes > 0 && (
+              <>
+                <span
+                  style={{
+                    fontSize: '14px',
+                    fontWeight: 500,
+                    color: isVoted ? 'white' : VIBER_COLORS.primary,
+                  }}
+                >
+                  {percentage}%
+                </span>
+                <div
+                  style={{
+                    padding: '4px 8px',
+                    borderRadius: '8px',
+                    background: isVoted ? 'rgba(255, 255, 255, 0.2)' : 'rgba(115, 96, 242, 0.08)',
+                    fontSize: '12px',
+                    fontWeight: 500,
+                    color: isVoted ? 'white' : VIBER_COLORS.primary,
+                  }}
+                >
+                  {option.voteCount}
+                </div>
+              </>
+            )}
+          </div>
         </div>
-      </div>
-    </button>
+      </button>
+
+      {/* Voters List - Shown below the option like Telegram */}
+      {votersText && (
+        <div
+          className="mt-1 ml-3 text-xs"
+          style={{
+            color: VIBER_COLORS.textSecondary,
+            fontSize: '11px',
+          }}
+        >
+          {votersText}
+        </div>
+      )}
+    </div>
   );
 }

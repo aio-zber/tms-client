@@ -26,6 +26,7 @@ interface PollDisplayProps {
   onVote: (optionIds: string[]) => Promise<void>;
   onClose?: () => Promise<void>;
   isCreator?: boolean;
+  getUserName?: (userId: string) => string;
 }
 
 export default function PollDisplay({
@@ -33,6 +34,7 @@ export default function PollDisplay({
   onVote,
   onClose,
   isCreator = false,
+  getUserName,
 }: PollDisplayProps) {
   const [isVoting, setIsVoting] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
@@ -134,6 +136,7 @@ export default function PollDisplay({
               isClosed={poll.isClosed}
               onClick={() => handleOptionClick(option.id)}
               disabled={isVoting}
+              getUserName={getUserName}
             />
           ))}
       </div>
@@ -150,8 +153,6 @@ export default function PollDisplay({
           <span>
             {poll.totalVotes} {poll.totalVotes === 1 ? 'vote' : 'votes'}
           </span>
-          <span>•</span>
-          <span>Anonymous</span>
           {poll.multipleChoice && (
             <>
               <span>•</span>
