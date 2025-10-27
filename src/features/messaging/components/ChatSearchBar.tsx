@@ -68,7 +68,7 @@ export default function ChatSearchBar({
 
         if (response.ok) {
           const data = await response.json();
-          const messageIds = data.data.map((msg: any) => msg.id);
+          const messageIds = data.data.map((msg: { id: string }) => msg.id);
           setResults(messageIds);
           setTotalResults(messageIds.length);
           setCurrentIndex(messageIds.length > 0 ? 1 : 0);
@@ -98,6 +98,15 @@ export default function ChatSearchBar({
       });
     }
   }, [searchQuery, currentIndex, totalResults, onSearchStateChange]);
+
+  // Handle close
+  const handleClose = useCallback(() => {
+    setSearchQuery('');
+    setResults([]);
+    setTotalResults(0);
+    setCurrentIndex(0);
+    onClose();
+  }, [onClose]);
 
   // Navigate to previous result
   const handlePrevious = useCallback(() => {
@@ -141,16 +150,7 @@ export default function ChatSearchBar({
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, handleNext, handlePrevious]);
-
-  // Handle close
-  const handleClose = useCallback(() => {
-    setSearchQuery('');
-    setResults([]);
-    setTotalResults(0);
-    setCurrentIndex(0);
-    onClose();
-  }, [onClose]);
+  }, [isOpen, handleNext, handlePrevious, handleClose]);
 
   if (!isOpen) return null;
 
