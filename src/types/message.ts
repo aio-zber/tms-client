@@ -17,10 +17,33 @@ export interface Message {
   replyTo?: Message;
   replyToId?: string;
   reactions?: MessageReaction[];
+  poll?: Poll; // Poll data for poll-type messages
   isEdited: boolean;
   createdAt: string;
   updatedAt?: string;
   deletedAt?: string;
+}
+
+export interface PollOption {
+  id: string;
+  pollId: string;
+  optionText: string;
+  position: number;
+  voteCount: number;
+  voters?: string[]; // User IDs who voted for this
+}
+
+export interface Poll {
+  id: string;
+  messageId: string;
+  question: string;
+  options: PollOption[];
+  multipleChoice: boolean;
+  isClosed: boolean;
+  expiresAt?: string;
+  createdAt: string;
+  totalVotes: number;
+  userVotes: string[]; // Option IDs the current user voted for
 }
 
 export interface MessageMetadata {
@@ -34,7 +57,7 @@ export interface MessageMetadata {
   // For voice messages
   duration?: number;
 
-  // For polls
+  // For polls (deprecated - poll data now in message.poll field)
   pollId?: string;
 
   // For calls

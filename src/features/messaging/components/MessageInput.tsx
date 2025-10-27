@@ -6,9 +6,11 @@
 'use client';
 
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
-import { Send, X, Smile } from 'lucide-react';
+import { Send, X, Smile, BarChart3 } from 'lucide-react';
 import type { Message } from '@/types/message';
 import { Button } from '@/components/ui/button';
+import PollCreator from './PollCreator';
+import { usePollActions } from '../hooks/usePollActions';
 
 interface MessageInputProps {
   conversationId: string;
@@ -36,7 +38,9 @@ export function MessageInput({
   disabled = false,
 }: MessageInputProps) {
   const [content, setContent] = useState('');
+  const [showPollCreator, setShowPollCreator] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { createPoll } = usePollActions();
 
   // Update content when editingMessage changes
   useEffect(() => {
@@ -94,6 +98,23 @@ export function MessageInput({
     }
   };
 
+  const handleCreatePoll = async (question: string, options: string[], multipleChoice: boolean) => {
+    try {
+      await createPoll({
+        conversation_id: conversationId,
+        question,
+        options: options.map((text, index) => ({
+          option_text: text,
+          position: index,
+        })),
+        multiple_choice: multipleChoice,
+      });
+    } catch (error) {
+      console.error('Failed to create poll:', error);
+      throw error;
+    }
+  };
+
   return (
     <div className="p-3 md:p-4 border-t border-gray-200 bg-white">
       <div className="max-w-4xl mx-auto">
@@ -146,6 +167,17 @@ export function MessageInput({
 
         {/* Input Area */}
         <div className="flex items-end gap-2">
+          {/* Poll Button */}
+          <button
+            type="button"
+            className="p-2 md:p-2.5 hover:bg-gray-100 rounded-full transition mb-1"
+            disabled={disabled || editingMessage !== undefined}
+            title="Create poll"
+            onClick={() => setShowPollCreator(true)}
+          >
+            <BarChart3 className="w-5 h-5 md:w-6 md:h-6 text-gray-400" />
+          </button>
+
           {/* Emoji Button (placeholder for future) */}
           <button
             type="button"
@@ -195,6 +227,14 @@ export function MessageInput({
         <p className="text-xs md:text-sm text-gray-400 mt-2 text-center hidden md:block">
           Press Enter to send, Shift+Enter for new line
         </p>
+
+        {/* Poll Creator Dialog */}
+        <PollCreator
+          open={showPollCreator}
+          onClose={() => setShowPollCreator(false)}
+          onCreatePoll={handleCreatePoll}
+          conversationId={conversationId}
+        />
       </div>
     </div>
   );

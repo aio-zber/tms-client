@@ -9,12 +9,15 @@ import { useState, useRef, useEffect, memo } from 'react';
 import { format } from 'date-fns';
 import { Check, CheckCheck, Reply, Edit, Trash2, Smile } from 'lucide-react';
 import type { Message } from '@/types/message';
+import PollDisplay from './PollDisplay';
+import { usePollActions } from '../hooks/usePollActions';
 
 interface MessageBubbleProps {
   message: Message;
   isSent: boolean;
   showSender?: boolean;
   senderName?: string;
+  currentUserId?: string;
   onEdit?: (messageId: string) => void;
   onDelete?: (messageId: string) => void;
   onReply?: (message: Message) => void;
@@ -32,6 +35,7 @@ export const MessageBubble = memo(function MessageBubble({
   isSent,
   showSender = false,
   senderName,
+  currentUserId,
   onEdit,
   onDelete,
   onReply,
@@ -43,6 +47,7 @@ export const MessageBubble = memo(function MessageBubble({
   const [showTimestamp, setShowTimestamp] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
+  const { voteOnPoll, closePoll } = usePollActions();
 
   // Common emojis for quick reactions
   const quickEmojis = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥'];
@@ -176,29 +181,51 @@ export const MessageBubble = memo(function MessageBubble({
 
         <div className="flex items-end gap-2">
           {/* Message Bubble */}
-          <div
-            className={`px-3 md:px-4 py-2 md:py-2.5 ${message.replyTo ? 'rounded-b-2xl rounded-t-md' : 'rounded-2xl'} ${
-              isSent
-                ? 'bg-viber-purple text-white rounded-br-sm order-1'
-                : 'bg-gray-100 text-gray-900 rounded-bl-sm order-2'
-            } ${message.status === 'failed' ? 'opacity-60' : ''}`}
-          >
-            <p className="text-sm md:text-[15px] leading-relaxed break-words whitespace-pre-wrap">
-              {message.content}
-            </p>
+          {message.type === 'poll' && message.poll ? (
+            /* Poll Message - Full width without bubble styling */
+            <div className="w-full order-1">
+              <PollDisplay
+                poll={message.poll}
+                onVote={async (optionIds) => {
+                  await voteOnPoll({ pollId: message.poll!.id, optionIds });
+                }}
+                onClose={
+                  isSent
+                    ? async () => {
+                        await closePoll(message.poll!.id);
+                      }
+                    : undefined
+                }
+                currentUserId={currentUserId}
+                isCreator={isSent}
+              />
+            </div>
+          ) : (
+            /* Regular Text Message */
+            <div
+              className={`px-3 md:px-4 py-2 md:py-2.5 ${message.replyTo ? 'rounded-b-2xl rounded-t-md' : 'rounded-2xl'} ${
+                isSent
+                  ? 'bg-viber-purple text-white rounded-br-sm order-1'
+                  : 'bg-gray-100 text-gray-900 rounded-bl-sm order-2'
+              } ${message.status === 'failed' ? 'opacity-60' : ''}`}
+            >
+              <p className="text-sm md:text-[15px] leading-relaxed break-words whitespace-pre-wrap">
+                {message.content}
+              </p>
 
-            {/* Metadata (edited label and status only, NO timestamp) */}
-            {(message.isEdited || message.status) && (
-              <div
-                className={`flex items-center gap-1 mt-1 text-[11px] ${
-                  isSent ? 'text-white/70 justify-end' : 'text-gray-500 justify-start'
-                }`}
-              >
-                {message.isEdited && <span>(edited)</span>}
-                {renderStatusIcon()}
-              </div>
-            )}
-          </div>
+              {/* Metadata (edited label and status only, NO timestamp) */}
+              {(message.isEdited || message.status) && (
+                <div
+                  className={`flex items-center gap-1 mt-1 text-[11px] ${
+                    isSent ? 'text-white/70 justify-end' : 'text-gray-500 justify-start'
+                  }`}
+                >
+                  {message.isEdited && <span>(edited)</span>}
+                  {renderStatusIcon()}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Reactions */}
