@@ -85,8 +85,26 @@ export function useChatSearch({
           setCurrentIndex(0);
         }
       } catch (err) {
-        setError(err as Error);
-        console.error('Search failed:', err);
+        const error = err as Error;
+        setError(error);
+
+        // Enhanced error logging for debugging
+        console.error('[Chat Search] Search failed:', {
+          query: searchQuery.trim(),
+          conversationId,
+          error: error.message,
+          stack: error.stack,
+        });
+
+        // User-friendly error message
+        if (error.message.includes('404')) {
+          console.error('[Chat Search] Search endpoint not found. Check API configuration.');
+        } else if (error.message.includes('CORS')) {
+          console.error('[Chat Search] CORS error. Check backend CORS settings.');
+        } else if (error.message.includes('Network')) {
+          console.error('[Chat Search] Network error. Check internet connection.');
+        }
+
         setResults([]);
         setCurrentIndex(0);
       } finally {
