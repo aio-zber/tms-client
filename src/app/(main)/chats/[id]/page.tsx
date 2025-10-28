@@ -60,13 +60,17 @@ export default function ChatPage({ params }: ChatPageProps) {
     clearSearchHighlight,
   } = useJumpToMessage();
 
+  // Memoize search result selection callback to prevent infinite re-renders
+  // This callback is passed to useChatSearch which includes it in useEffect dependencies
+  const handleSearchResultSelect = useCallback((messageId: string) => {
+    jumpToMessage(messageId, { isSearchResult: true });
+  }, [jumpToMessage]); // jumpToMessage is already memoized from useJumpToMessage hook
+
   // Chat search hook
   const { searchQuery } = useChatSearch({
     conversationId,
     enabled: isSearchOpen,
-    onResultSelect: (messageId) => {
-      jumpToMessage(messageId, { isSearchResult: true });
-    },
+    onResultSelect: handleSearchResultSelect,
   });
 
   // Debug: Log messages whenever they change
