@@ -41,7 +41,17 @@ class ApiClient {
 
     const originalFetch = window.fetch;
     window.fetch = function(...args: Parameters<typeof fetch>) {
-      const url = typeof args[0] === 'string' ? args[0] : args[0].url;
+      // Extract URL from different input types
+      let url: string;
+      if (typeof args[0] === 'string') {
+        url = args[0];
+      } else if (args[0] instanceof URL) {
+        url = args[0].toString();
+      } else {
+        // Request object
+        url = args[0].url;
+      }
+
       const options = args[1] || {};
 
       console.log('[Fetch Interceptor] Request:', {
