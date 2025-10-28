@@ -129,7 +129,14 @@ class ApiClient {
    * Perform POST request.
    */
   async post<T, D = unknown>(endpoint: string, data?: D): Promise<T> {
-    const response = await fetch(`${this.getBaseURL()}${endpoint}`, {
+    const url = `${this.getBaseURL()}${endpoint}`;
+
+    // Debug logging for API requests
+    if (typeof window !== 'undefined' && !window.location.hostname.includes('railway.app')) {
+      console.log('[API] POST', url, data);
+    }
+
+    const response = await fetch(url, {
       method: 'POST',
       headers: this.getHeaders(),
       credentials: 'include', // Include session cookies
