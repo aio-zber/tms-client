@@ -4,6 +4,7 @@
  * Supports infinite scrolling for loading older messages
  */
 
+import { useMemo } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { messageService } from '../services/messageService';
 import { queryKeys } from '@/lib/queryClient';
@@ -57,7 +58,11 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
   // Flatten pages into a single array
   // Backend returns DESC (newest first), but each page is already reversed to ASC
   // So when we flatten, we get oldest to newest order for chat display
-  const messages: Message[] = query.data?.pages.flatMap((page) => page.data) ?? [];
+  // CRITICAL: Memoize to prevent creating new array on every render (causes infinite loops!)
+  const messages: Message[] = useMemo(
+    () => query.data?.pages.flatMap((page) => page.data) ?? [],
+    [query.data?.pages]
+  );
 
   return {
     messages,
