@@ -3,7 +3,7 @@
  * Manages in-conversation message search state and operations
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { messageService } from '../services/messageService';
 import type { Message } from '@/types/message';
 
@@ -55,6 +55,15 @@ export function useChatSearch({
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
+  // Store onResultSelect callback in ref to prevent infinite re-renders
+  // This allows us to always use the latest callback without triggering the search useEffect
+  const onResultSelectRef = useRef(onResultSelect);
+
+  // Update ref when callback changes (doesn't cause re-render or trigger effects)
+  useEffect(() => {
+    onResultSelectRef.current = onResultSelect;
+  }, [onResultSelect]);
+
   // Search messages with debounce
   useEffect(() => {
     if (!enabled || !isSearchOpen || !searchQuery.trim()) {
@@ -77,10 +86,10 @@ export function useChatSearch({
 
         setResults(response.data);
 
-        // Auto-select first result
+        // Auto-select first result using ref to avoid triggering re-search
         if (response.data.length > 0) {
           setCurrentIndex(1);
-          onResultSelect?.(response.data[0].id);
+          onResultSelectRef.current?.(response.data[0].id);
         } else {
           setCurrentIndex(0);
         }
@@ -113,7 +122,9 @@ export function useChatSearch({
     }, 300); // 300ms debounce
 
     return () => clearTimeout(debounceTimer);
-  }, [searchQuery, conversationId, enabled, isSearchOpen, onResultSelect]);
+  }, [searchQuery, conversationId, enabled, isSearchOpen]);
+  // ⚠️ IMPORTANT: onResultSelect is NOT in dependencies to prevent infinite re-renders
+  // We use onResultSelectRef.current instead, which is updated separately
 
   // Open search
   const openSearch = useCallback(() => {
@@ -144,8 +155,8 @@ export function useChatSearch({
 
     const newIndex = currentIndex >= results.length ? 1 : currentIndex + 1;
     setCurrentIndex(newIndex);
-    onResultSelect?.(results[newIndex - 1].id);
-  }, [results, currentIndex, onResultSelect]);
+    onResultSelectRef.current?.(results[newIndex - 1].id);
+  }, [results, currentIndex]);
 
   // Go to previous result
   const goToPrevious = useCallback(() => {
@@ -153,8 +164,8 @@ export function useChatSearch({
 
     const newIndex = currentIndex <= 1 ? results.length : currentIndex - 1;
     setCurrentIndex(newIndex);
-    onResultSelect?.(results[newIndex - 1].id);
-  }, [results, currentIndex, onResultSelect]);
+    onResultSelectRef.current?.(results[newIndex - 1].id);
+  }, [results, currentIndex]);
 
   // Go to specific result by index (1-based)
   const goToResult = useCallback(
@@ -162,9 +173,9 @@ export function useChatSearch({
       if (index < 1 || index > results.length) return;
 
       setCurrentIndex(index);
-      onResultSelect?.(results[index - 1].id);
+      onResultSelectRef.current?.(results[index - 1].id);
     },
-    [results, onResultSelect]
+    [results]
   );
 
   // Clear search results but keep search open
