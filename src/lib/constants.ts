@@ -3,89 +3,22 @@
  * Centralized configuration values used throughout the application
  */
 
+import { getApiUrl, getWebSocketUrl } from './runtimeConfig';
+
 // API Configuration
 export const TMS_API_URL = process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL || 'https://gcgc-team-management-system-staging.up.railway.app';
 
-// RUNTIME API URL - bypasses Next.js build-time env var issues
-// This function is called at runtime, not build time
-export const getApiBaseUrl = (): string => {
-  // Priority 1: Environment variable (set in Railway deployment)
-  const envUrl = process.env.NEXT_PUBLIC_API_URL;
-  if (envUrl) {
-    // Ensure HTTPS for railway.app domains
-    const apiUrl = envUrl.includes('railway.app') && envUrl.startsWith('http://')
-      ? envUrl.replace(/^http:/, 'https:')
-      : envUrl;
-
-    // Debug logging in development
-    if (typeof window !== 'undefined' && !envUrl.includes('railway.app')) {
-      console.log('[API Config] Using env var API URL:', apiUrl);
-    }
-
-    return apiUrl;
-  }
-
-  // Priority 2: Client-side runtime detection
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname;
-
-    // Local development
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      console.log('[API Config] Using localhost API URL');
-      return 'http://localhost:8000/api/v1';
-    }
-
-    // Railway deployment - use hardcoded URL
-    if (hostname.includes('railway.app')) {
-      const apiUrl = 'https://tms-server-staging.up.railway.app/api/v1';
-      console.log('[API Config] Using Railway API URL:', apiUrl);
-      return apiUrl;
-    }
-
-    // Custom domain fallback
-    console.warn('[API Config] Unknown hostname, using default staging API URL:', hostname);
-    return 'https://tms-server-staging.up.railway.app/api/v1';
-  }
-
-  // Priority 3: SSR fallback - assume production Railway deployment
-  return 'https://tms-server-staging.up.railway.app/api/v1';
-};
+/**
+ * Get API base URL using runtime detection
+ * This avoids Next.js build-time environment variable replacement issues
+ */
+export const getApiBaseUrl = getApiUrl;
 
 /**
- * Get WebSocket URL based on runtime environment
+ * Get WebSocket URL using runtime detection
  * Critical: Returns BASE URL only - Socket.IO client will append path
  */
-const getWsUrl = () => {
-  // Client-side: detect from window.location
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname;
-
-    // Railway deployment (production/staging)
-    if (hostname.includes('railway.app')) {
-      return 'wss://tms-server-staging.up.railway.app';
-    }
-
-    // Local development
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return 'ws://localhost:8000';
-    }
-  }
-
-  // Server-side or fallback: try environment variable
-  const envUrl = process.env.NEXT_PUBLIC_WS_URL;
-  if (envUrl) {
-    // Force WSS if the URL contains 'railway.app' (production/staging)
-    if (envUrl.includes('railway.app') && envUrl.startsWith('ws://')) {
-      return envUrl.replace('ws://', 'wss://');
-    }
-    return envUrl;
-  }
-
-  // Final fallback for SSR
-  return 'ws://localhost:8000';
-};
-
-export const WS_URL = getWsUrl();
+export const WS_URL = getWebSocketUrl();
 
 // Environment
 export const IS_DEVELOPMENT = process.env.NEXT_PUBLIC_ENVIRONMENT === 'development';
