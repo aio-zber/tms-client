@@ -67,7 +67,16 @@ export default function ChatPage({ params }: ChatPageProps) {
   }, [jumpToMessage]); // jumpToMessage is already memoized from useJumpToMessage hook
 
   // Chat search hook
-  const { searchQuery } = useChatSearch({
+  const {
+    searchQuery,
+    setSearchQuery,
+    currentIndex,
+    totalResults,
+    isSearching,
+    goToNext,
+    goToPrevious,
+    closeSearch,
+  } = useChatSearch({
     conversationId,
     enabled: isSearchOpen,
     onResultSelect: handleSearchResultSelect,
@@ -131,6 +140,12 @@ export default function ChatPage({ params }: ChatPageProps) {
       clearSearchHighlight();
     }
   }, [isSearchOpen, clearSearchHighlight]);
+
+  // Handle search close - update local state and call hook's closeSearch
+  const handleCloseSearch = () => {
+    setIsSearchOpen(false);
+    closeSearch();
+  };
 
   // WebSocket is now enabled - no need for polling fallback
   // Real-time updates are handled by useMessages hook via WebSocket
@@ -405,12 +420,15 @@ export default function ChatPage({ params }: ChatPageProps) {
 
       {/* Search Bar */}
       <ChatSearchBar
-        conversationId={conversationId}
         isOpen={isSearchOpen}
-        onClose={() => setIsSearchOpen(false)}
-        onResultSelect={(messageId) => {
-          jumpToMessage(messageId, { isSearchResult: true });
-        }}
+        onClose={handleCloseSearch}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        currentIndex={currentIndex}
+        totalResults={totalResults}
+        isSearching={isSearching}
+        goToNext={goToNext}
+        goToPrevious={goToPrevious}
       />
 
       {/* Messages Area */}

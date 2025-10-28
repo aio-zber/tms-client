@@ -1,121 +1,47 @@
 /**
  * ChatSearchBar Component
  * Telegram/Messenger-style inline search for messages within a conversation
+ *
+ * This is a PURE UI COMPONENT that receives all state and actions as props.
+ * Search logic is handled by the useChatSearch hook.
  */
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect } from 'react';
 import { Search, X, ChevronUp, ChevronDown, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { messageService } from '../services/messageService';
 
 interface ChatSearchBarProps {
-  conversationId: string;
+  // UI state
   isOpen: boolean;
   onClose: () => void;
-  onResultSelect: (messageId: string) => void;
-  onSearchStateChange?: (state: {
-    query: string;
-    currentIndex: number;
-    totalResults: number;
-  }) => void;
+
+  // Search state from useChatSearch hook
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
+  currentIndex: number;
+  totalResults: number;
+  isSearching: boolean;
+
+  // Navigation actions from useChatSearch hook
+  goToNext: () => void;
+  goToPrevious: () => void;
 }
 
 export default function ChatSearchBar({
-  conversationId,
   isOpen,
   onClose,
-  onResultSelect,
-  onSearchStateChange,
+  searchQuery,
+  setSearchQuery,
+  currentIndex,
+  totalResults,
+  isSearching,
+  goToNext,
+  goToPrevious,
 }: ChatSearchBarProps) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [totalResults, setTotalResults] = useState(0);
-  const [results, setResults] = useState<string[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-
-  // Search API call with debounce
-  useEffect(() => {
-    if (!isOpen || !searchQuery.trim()) {
-      setResults([]);
-      setTotalResults(0);
-      setCurrentIndex(0);
-      return;
-    }
-
-    setIsSearching(true);
-    const debounceTimer = setTimeout(async () => {
-      try {
-        // Use messageService for proper POST /messages/search API call
-        const data = await messageService.searchMessages({
-          query: searchQuery,
-          conversation_id: conversationId,
-          limit: 100,
-        });
-
-        const messageIds = data.data.map((msg) => msg.id);
-        setResults(messageIds);
-        setTotalResults(messageIds.length);
-        setCurrentIndex(messageIds.length > 0 ? 1 : 0);
-
-        // Jump to first result
-        if (messageIds.length > 0) {
-          onResultSelect(messageIds[0]);
-        }
-      } catch (error) {
-        console.error('[ChatSearchBar] Search failed:', error);
-        setResults([]);
-        setTotalResults(0);
-        setCurrentIndex(0);
-      } finally {
-        setIsSearching(false);
-      }
-    }, 300);
-
-    return () => clearTimeout(debounceTimer);
-  }, [searchQuery, conversationId, isOpen, onResultSelect]);
-
-  // Notify parent of search state changes
-  useEffect(() => {
-    if (onSearchStateChange) {
-      onSearchStateChange({
-        query: searchQuery,
-        currentIndex,
-        totalResults,
-      });
-    }
-  }, [searchQuery, currentIndex, totalResults, onSearchStateChange]);
-
-  // Handle close
-  const handleClose = useCallback(() => {
-    setSearchQuery('');
-    setResults([]);
-    setTotalResults(0);
-    setCurrentIndex(0);
-    onClose();
-  }, [onClose]);
-
-  // Navigate to previous result
-  const handlePrevious = useCallback(() => {
-    if (results.length === 0) return;
-
-    const newIndex = currentIndex <= 1 ? totalResults : currentIndex - 1;
-    setCurrentIndex(newIndex);
-    onResultSelect(results[newIndex - 1]);
-  }, [results, currentIndex, totalResults, onResultSelect]);
-
-  // Navigate to next result
-  const handleNext = useCallback(() => {
-    if (results.length === 0) return;
-
-    const newIndex = currentIndex >= totalResults ? 1 : currentIndex + 1;
-    setCurrentIndex(newIndex);
-    onResultSelect(results[newIndex - 1]);
-  }, [results, currentIndex, totalResults, onResultSelect]);
-
   // Handle keyboard shortcuts
   useEffect(() => {
     if (!isOpen) return;
@@ -124,23 +50,23 @@ export default function ChatSearchBar({
       // Enter - next result
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        handleNext();
+        goToNext();
       }
       // Shift+Enter - previous result
       else if (e.key === 'Enter' && e.shiftKey) {
         e.preventDefault();
-        handlePrevious();
+        goToPrevious();
       }
       // Escape - close search
       else if (e.key === 'Escape') {
         e.preventDefault();
-        handleClose();
+        onClose();
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, handleNext, handlePrevious, handleClose]);
+  }, [isOpen, goToNext, goToPrevious, onClose]);
 
   if (!isOpen) return null;
 
@@ -181,7 +107,7 @@ export default function ChatSearchBar({
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={handlePrevious}
+                  onClick={goToPrevious}
                   disabled={totalResults === 0}
                   className="h-7 w-7 p-0 hover:bg-gray-100"
                   title="Previous (Shift+Enter)"
@@ -191,7 +117,7 @@ export default function ChatSearchBar({
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={handleNext}
+                  onClick={goToNext}
                   disabled={totalResults === 0}
                   className="h-7 w-7 p-0 hover:bg-gray-100"
                   title="Next (Enter)"
@@ -210,7 +136,7 @@ export default function ChatSearchBar({
       <Button
         size="sm"
         variant="ghost"
-        onClick={handleClose}
+        onClick={onClose}
         className="h-7 w-7 p-0 hover:bg-gray-100 flex-shrink-0"
         title="Close (Esc)"
       >
