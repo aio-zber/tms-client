@@ -10,6 +10,7 @@ import { Search, X, ChevronUp, ChevronDown, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { messageService } from '../services/messageService';
 
 interface ChatSearchBarProps {
   conversationId: string;
@@ -48,38 +49,27 @@ export default function ChatSearchBar({
     setIsSearching(true);
     const debounceTimer = setTimeout(async () => {
       try {
-        // TODO: Replace with actual API call
-        const response = await fetch(
-          `/api/v1/messages/search?query=${encodeURIComponent(
-            searchQuery
-          )}&conversation_id=${conversationId}&limit=100`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              query: searchQuery,
-              conversation_id: conversationId,
-              limit: 100,
-            }),
-          }
-        );
+        // Use messageService for proper POST /messages/search API call
+        const data = await messageService.searchMessages({
+          query: searchQuery,
+          conversation_id: conversationId,
+          limit: 100,
+        });
 
-        if (response.ok) {
-          const data = await response.json();
-          const messageIds = data.data.map((msg: { id: string }) => msg.id);
-          setResults(messageIds);
-          setTotalResults(messageIds.length);
-          setCurrentIndex(messageIds.length > 0 ? 1 : 0);
+        const messageIds = data.data.map((msg) => msg.id);
+        setResults(messageIds);
+        setTotalResults(messageIds.length);
+        setCurrentIndex(messageIds.length > 0 ? 1 : 0);
 
-          // Jump to first result
-          if (messageIds.length > 0) {
-            onResultSelect(messageIds[0]);
-          }
+        // Jump to first result
+        if (messageIds.length > 0) {
+          onResultSelect(messageIds[0]);
         }
       } catch (error) {
-        console.error('Search failed:', error);
+        console.error('[ChatSearchBar] Search failed:', error);
+        setResults([]);
+        setTotalResults(0);
+        setCurrentIndex(0);
       } finally {
         setIsSearching(false);
       }
