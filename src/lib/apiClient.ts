@@ -24,6 +24,39 @@ export class ApiError extends Error {
 }
 
 class ApiClient {
+  constructor() {
+    // Install fetch interceptor for debugging (can be removed after issue is resolved)
+    this.installFetchInterceptor();
+  }
+
+  /**
+   * Install fetch interceptor to log ALL HTTP requests
+   * This helps debug cases where requests go to unexpected URLs
+   */
+  private installFetchInterceptor(): void {
+    if (typeof window === 'undefined' || (window as any).__fetchInterceptorInstalled) {
+      return; // Already installed or server-side
+    }
+
+    const originalFetch = window.fetch;
+    window.fetch = function(...args: Parameters<typeof fetch>) {
+      const url = typeof args[0] === 'string' ? args[0] : args[0].url;
+      const options = args[1] || {};
+
+      console.log('[Fetch Interceptor] Request:', {
+        url,
+        method: options.method || 'GET',
+        hasBody: !!options.body,
+        timestamp: new Date().toISOString(),
+      });
+
+      return originalFetch.apply(this, args);
+    };
+
+    (window as any).__fetchInterceptorInstalled = true;
+    console.log('[Fetch Interceptor] Installed successfully');
+  }
+
   /**
    * Get base URL dynamically at runtime to ensure correct HTTPS usage.
    * This prevents build-time env var issues in Railway deployments.
@@ -129,11 +162,18 @@ class ApiClient {
    * Perform POST request.
    */
   async post<T, D = unknown>(endpoint: string, data?: D): Promise<T> {
-    const url = `${this.getBaseURL()}${endpoint}`;
+    const baseURL = this.getBaseURL();
+    const url = `${baseURL}${endpoint}`;
 
-    // Debug logging for API requests
-    if (typeof window !== 'undefined' && !window.location.hostname.includes('railway.app')) {
-      console.log('[API] POST', url, data);
+    // Comprehensive debug logging (enabled everywhere for debugging)
+    if (typeof window !== 'undefined') {
+      console.log('[API Client] POST Request:', {
+        endpoint,
+        baseURL,
+        fullURL: url,
+        hasData: !!data,
+        dataKeys: data ? Object.keys(data as object) : [],
+      });
     }
 
     const response = await fetch(url, {
