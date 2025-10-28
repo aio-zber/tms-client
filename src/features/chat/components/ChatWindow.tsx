@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Send, MoreVertical, Phone, Video, Search, Settings, Edit2, Users, LogOut } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -56,12 +56,13 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
   const queryClient = useQueryClient();
 
   // Helper to get user name from conversation members
+  // IMPORTANT: Memoized with useCallback to prevent infinite re-renders
   // For now, just return userId since ConversationMember doesn't include user details
   // TODO: Fetch user details from API or include in conversation response
-  const getUserName = (userId: string): string => {
+  const getUserName = useCallback((userId: string): string => {
     // Return userId for now - the backend should enrich this data
     return userId.split('-')[0]; // Show first part of UUID
-  };
+  }, []); // Empty deps - function logic doesn't depend on any props/state
 
   // Sync unread counts with WebSocket events
   useUnreadCountSync();
