@@ -34,6 +34,7 @@ class ApiClient {
    * This helps debug cases where requests go to unexpected URLs
    */
   private installFetchInterceptor(): void {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (typeof window === 'undefined' || (window as any).__fetchInterceptorInstalled) {
       return; // Already installed or server-side
     }
@@ -53,6 +54,7 @@ class ApiClient {
       return originalFetch.apply(this, args);
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).__fetchInterceptorInstalled = true;
     console.log('[Fetch Interceptor] Installed successfully');
   }
