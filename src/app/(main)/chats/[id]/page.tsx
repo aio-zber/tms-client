@@ -233,40 +233,42 @@ export default function ChatPage({ params }: ChatPageProps) {
     }
   }, [conversationId]);
 
-  const getUserName = (userId: string): string => {
+  // Memoize getUserName to prevent infinite re-renders (React Error #185)
+  // This function is passed to MessageList, so it must have a stable reference
+  const getUserName = useCallback((userId: string): string => {
     if (!conversation || !conversation.members) return 'Unknown';
     const member = conversation.members.find((m) => m.userId === userId);
-    
+
     if (!member) return 'Unknown';
-    
+
     // Check if member has enriched user data from backend
     const memberData = member as unknown as Record<string, unknown>;
     const userData = memberData.user as Record<string, unknown> | undefined;
-    
+
     if (userData) {
       // Try to get full name from various fields
       const firstName = userData.firstName || userData.first_name || '';
       const middleName = userData.middleName || userData.middle_name || '';
       const lastName = userData.lastName || userData.last_name || '';
       const name = userData.name;
-      
+
       // Build full name
       if (name) return String(name);
-      
+
       const fullName = [firstName, middleName, lastName]
         .filter(Boolean)
         .join(' ')
         .trim();
-      
+
       if (fullName) return fullName;
-      
+
       // Fallback to email
       if (userData.email) return String(userData.email);
     }
-    
+
     // Final fallback
     return `User ${userId?.slice(0, 8) || userId}`;
-  };
+  }, [conversation]); // Only recreate when conversation changes
 
   const getConversationTitle = (): string => {
     if (!conversation) return 'Loading...';
