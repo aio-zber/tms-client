@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, memo } from 'react';
 import { format, isToday, isYesterday } from 'date-fns';
 import { MessageBubble } from './MessageBubble';
 import { Loader2 } from 'lucide-react';
@@ -38,6 +38,112 @@ interface MessageGroup {
   date: string;
   messages: Message[];
 }
+
+/**
+ * MessageWithVisibility - Extracted component to prevent infinite re-renders
+ * Wraps MessageBubble with intersection observer for auto-read tracking
+ */
+interface MessageWithVisibilityProps {
+  message: Message;
+  isSent: boolean;
+  showSender: boolean;
+  senderName?: string;
+  onEdit?: (messageId: string) => void;
+  onDelete?: (messageId: string) => void;
+  onReply?: (message: Message) => void;
+  onReact?: (messageId: string, emoji: string) => void;
+  getUserName?: (userId: string) => string;
+  searchQuery?: string;
+  isHighlighted: boolean;
+  isSearchHighlighted: boolean;
+  enableAutoRead: boolean;
+  conversationId?: string;
+  trackMessage: (messageId: string) => void;
+}
+
+const MessageWithVisibility = memo(function MessageWithVisibility({
+  message,
+  isSent,
+  showSender,
+  senderName,
+  onEdit,
+  onDelete,
+  onReply,
+  onReact,
+  getUserName,
+  searchQuery,
+  isHighlighted,
+  isSearchHighlighted,
+  enableAutoRead,
+  conversationId,
+  trackMessage,
+}: MessageWithVisibilityProps) {
+  const { ref, inView } = useInView({
+    threshold: 0.5, // 50% visible
+    triggerOnce: false,
+  });
+
+  // Track visibility after 1 second delay
+  useEffect(() => {
+    console.log('[MessageVisibility] Effect triggered:', {
+      messageId: message.id,
+      inView,
+      isSent,
+      messageStatus: message.status,
+      enableAutoRead,
+      hasConversationId: !!conversationId
+    });
+
+    if (!enableAutoRead || !conversationId || isSent || message.status === 'read') {
+      console.log('[MessageVisibility] Skipping mark-as-read:', {
+        reason: !enableAutoRead ? 'autoRead disabled' :
+                !conversationId ? 'no conversationId' :
+                isSent ? 'user sent this message' :
+                'already read'
+      });
+      return;
+    }
+
+    if (inView) {
+      console.log('[MessageVisibility] Message visible, scheduling mark-as-read in 1s:', message.id);
+      const timer = setTimeout(() => {
+        // Double-check still visible after delay
+        if (inView) {
+          console.log('[MessageVisibility] ✅ Calling trackMessage for:', message.id);
+          trackMessage(message.id);
+        }
+      }, 1000); // 1 second delay (Telegram/Messenger pattern)
+
+      return () => clearTimeout(timer);
+    }
+  }, [inView, isSent, message.status, message.id, enableAutoRead, conversationId, trackMessage]);
+
+  return (
+    <div
+      ref={ref}
+      className={`transition-all duration-300 ${
+        isHighlighted
+          ? 'bg-yellow-100 rounded-lg p-2 -m-2 animate-pulse'
+          : ''
+      }`}
+    >
+      <MessageBubble
+        message={message}
+        isSent={isSent}
+        showSender={showSender}
+        senderName={senderName}
+        onEdit={isSent ? onEdit : undefined}
+        onDelete={isSent ? onDelete : undefined}
+        onReply={onReply}
+        onReact={onReact}
+        getUserName={getUserName}
+        searchQuery={searchQuery}
+        isHighlighted={isHighlighted}
+        isSearchHighlighted={isSearchHighlighted}
+      />
+    </div>
+  );
+});
 
 export function MessageList({
   messages,
@@ -319,79 +425,27 @@ export function MessageList({
                   (!previousMessage || previousMessage.senderId !== message.senderId);
 
                 const isHighlighted = highlightedMessageId === message.id;
-
-                // Helper component to track visibility
-                const MessageWithVisibility = () => {
-                  const { ref, inView } = useInView({
-                    threshold: 0.5, // 50% visible
-                    triggerOnce: false,
-                  });
-
-                  // Track visibility after 1 second delay
-                  useEffect(() => {
-                    console.log('[MessageVisibility] Effect triggered:', {
-                      messageId: message.id,
-                      inView,
-                      isSent,
-                      messageStatus: message.status,
-                      enableAutoRead,
-                      hasConversationId: !!conversationId
-                    });
-
-                    if (!enableAutoRead || !conversationId || isSent || message.status === 'read') {
-                      console.log('[MessageVisibility] Skipping mark-as-read:', {
-                        reason: !enableAutoRead ? 'autoRead disabled' :
-                                !conversationId ? 'no conversationId' :
-                                isSent ? 'user sent this message' :
-                                'already read'
-                      });
-                      return;
-                    }
-
-                    if (inView) {
-                      console.log('[MessageVisibility] Message visible, scheduling mark-as-read in 1s:', message.id);
-                      const timer = setTimeout(() => {
-                        // Double-check still visible after delay
-                        if (inView) {
-                          console.log('[MessageVisibility] ✅ Calling trackMessage for:', message.id);
-                          trackMessage(message.id);
-                        }
-                      }, 1000); // 1 second delay (Telegram/Messenger pattern)
-
-                      return () => clearTimeout(timer);
-                    }
-                  }, [inView, isSent, message.status]);
-
-                  return (
-                    <div
-                      ref={ref}
-                      className={`transition-all duration-300 ${
-                        isHighlighted
-                          ? 'bg-yellow-100 rounded-lg p-2 -m-2 animate-pulse'
-                          : ''
-                      }`}
-                    >
-                      <MessageBubble
-                        message={message}
-                        isSent={isSent}
-                        showSender={showSender}
-                        senderName={getUserName ? getUserName(message.senderId) : undefined}
-                        onEdit={isSent ? onEdit : undefined}
-                        onDelete={isSent ? onDelete : undefined}
-                        onReply={onReply}
-                        onReact={onReact}
-                        getUserName={getUserName}
-                        searchQuery={searchQuery}
-                        isHighlighted={highlightedMessageId === message.id}
-                        isSearchHighlighted={searchHighlightId === message.id}
-                      />
-                    </div>
-                  );
-                };
+                const isSearchHighlighted = searchHighlightId === message.id;
 
                 return (
                   <div key={message.id} ref={(el) => registerMessageRef?.(message.id, el)}>
-                    <MessageWithVisibility />
+                    <MessageWithVisibility
+                      message={message}
+                      isSent={isSent}
+                      showSender={showSender}
+                      senderName={getUserName ? getUserName(message.senderId) : undefined}
+                      onEdit={onEdit}
+                      onDelete={onDelete}
+                      onReply={onReply}
+                      onReact={onReact}
+                      getUserName={getUserName}
+                      searchQuery={searchQuery}
+                      isHighlighted={isHighlighted}
+                      isSearchHighlighted={isSearchHighlighted}
+                      enableAutoRead={enableAutoRead}
+                      conversationId={conversationId}
+                      trackMessage={trackMessage}
+                    />
                   </div>
                 );
               })}
