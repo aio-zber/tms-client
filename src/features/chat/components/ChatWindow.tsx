@@ -55,6 +55,14 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
   const { markAsRead, leaveConversation } = useConversationActions();
   const queryClient = useQueryClient();
 
+  // Helper to get user name from conversation members
+  // For now, just return userId since ConversationMember doesn't include user details
+  // TODO: Fetch user details from API or include in conversation response
+  const getUserName = (userId: string): string => {
+    // Return userId for now - the backend should enrich this data
+    return userId.split('-')[0]; // Show first part of UUID
+  };
+
   // Sync unread counts with WebSocket events
   useUnreadCountSync();
 
@@ -266,6 +274,7 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
         onLoadMore={loadMore}
         isGroupChat={conversation.type === 'group'}
         enableAutoRead={true} // Enable Telegram/Messenger-style auto-read
+        getUserName={getUserName}
       />
 
       {/* Message Input */}

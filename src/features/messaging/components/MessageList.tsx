@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState, memo } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, memo, useMemo } from 'react';
 import { format, isToday, isYesterday } from 'date-fns';
 import { MessageBubble } from './MessageBubble';
 import { Loader2 } from 'lucide-react';
@@ -193,39 +193,41 @@ export function MessageList({
     console.log(`  [${idx}] id=${msg.id}, createdAt=${msg.createdAt}, content='${msg.content?.substring(0, 20)}...'`);
   });
 
-  // Group messages by date
-  const groupedMessages: MessageGroup[] = (messages || []).reduce((groups, message) => {
-    // Validate date before formatting
-    if (!message.createdAt) {
-      console.log('[MessageList] ⚠️ SKIPPING message with no createdAt:', message);
+  // Group messages by date - MEMOIZED to prevent infinite re-renders
+  const groupedMessages: MessageGroup[] = useMemo(() => {
+    return (messages || []).reduce((groups, message) => {
+      // Validate date before formatting
+      if (!message.createdAt) {
+        console.log('[MessageList] ⚠️ SKIPPING message with no createdAt:', message);
+        return groups;
+      }
+
+      const messageDate = new Date(message.createdAt);
+      if (isNaN(messageDate.getTime())) {
+        console.log('[MessageList] ⚠️ SKIPPING message with invalid createdAt:', message.createdAt, message);
+        return groups; // Skip invalid dates
+      }
+
+      const dateKey = format(messageDate, 'yyyy-MM-dd');
+
+      const existingGroup = groups.find((g) => g.date === dateKey);
+      if (existingGroup) {
+        existingGroup.messages.push(message);
+      } else {
+        groups.push({
+          date: dateKey,
+          messages: [message],
+        });
+      }
+
       return groups;
-    }
+    }, [] as MessageGroup[]);
+  }, [messages]); // Only recalculate when messages array changes
 
-    const messageDate = new Date(message.createdAt);
-    if (isNaN(messageDate.getTime())) {
-      console.log('[MessageList] ⚠️ SKIPPING message with invalid createdAt:', message.createdAt, message);
-      return groups; // Skip invalid dates
-    }
-
-    const dateKey = format(messageDate, 'yyyy-MM-dd');
-
-    const existingGroup = groups.find((g) => g.date === dateKey);
-    if (existingGroup) {
-      existingGroup.messages.push(message);
-    } else {
-      groups.push({
-        date: dateKey,
-        messages: [message],
-      });
-    }
-
-    return groups;
-  }, [] as MessageGroup[]);
-
-  console.log('[MessageList] Grouped messages:', { 
-    groupCount: groupedMessages.length, 
+  console.log('[MessageList] Grouped messages:', {
+    groupCount: groupedMessages.length,
     totalMessages: groupedMessages.reduce((sum, g) => sum + g.messages.length, 0),
-    groups: groupedMessages 
+    groups: groupedMessages
   });
 
   // Format date label
