@@ -58,16 +58,8 @@ class AuthService {
         throw new AuthError('Invalid credentials', signinResponse.status);
       }
 
-      // Get user session info
-      const userResponse = await fetch(`${process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL}/api/v1/users/me`, {
-        credentials: 'include',
-      });
-
-      if (!userResponse.ok) {
-        throw new AuthError('Failed to get user info', userResponse.status);
-      }
-
-      const userData = await userResponse.json();
+      // Get user session info from TMS Server (not GCGC)
+      // Note: We'll get this after authenticating with TMS Server below
 
       // Get JWT token from TMS for cross-domain authentication
       let jwtToken: string | null = null;
@@ -93,37 +85,37 @@ class AuthService {
         console.warn('⚠️ Error getting JWT token:', error);
       }
 
-      // Authenticate with backend server using JWT token
-      if (jwtToken) {
-        try {
-          // Use runtime API URL to ensure HTTPS in production
-          const apiBaseUrl = getApiBaseUrl();
-          const authEndpoint = `${apiBaseUrl}/auth/login`;
-
-          const backendAuthResponse = await fetch(authEndpoint, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            credentials: 'include',
-            body: JSON.stringify({
-              token: jwtToken,
-            }),
-          });
-
-          if (backendAuthResponse.ok) {
-            const backendData = await backendAuthResponse.json();
-            console.log('✅ Backend authentication successful:', backendData);
-          } else {
-            const errorText = await backendAuthResponse.text();
-            console.warn('⚠️ Backend authentication failed:', errorText);
-          }
-        } catch (error) {
-          console.warn('⚠️ Failed to authenticate with backend:', error);
-        }
-      } else {
-        console.warn('⚠️ No JWT token available - backend authentication skipped');
+      // Authenticate with TMS Server using JWT token
+      if (!jwtToken) {
+        throw new AuthError('No JWT token received from GCGC');
       }
+
+      // Use runtime API URL to ensure HTTPS in production
+      const apiBaseUrl = getApiBaseUrl();
+      const authEndpoint = `${apiBaseUrl}/api/v1/auth/login`;
+
+      const backendAuthResponse = await fetch(authEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          token: jwtToken,
+        }),
+      });
+
+      if (!backendAuthResponse.ok) {
+        const errorText = await backendAuthResponse.text();
+        console.error('❌ TMS Server authentication failed:', errorText);
+        throw new AuthError('Failed to authenticate with messaging server', backendAuthResponse.status);
+      }
+
+      const backendData = await backendAuthResponse.json();
+      console.log('✅ TMS Server authentication successful:', backendData);
+
+      // Extract user data from TMS Server response
+      const userData = backendData.user;
 
       // Store session indicator
       this.setSessionActive(true);
@@ -131,9 +123,9 @@ class AuthService {
       return {
         success: true,
         user: {
-          id: userData.id,
+          id: userData.tms_user_id || userData.id,
           email: userData.email,
-          name: userData.displayName || userData.name || `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.username || 'User',
+          name: userData.display_name || userData.name || `${userData.first_name || ''} ${userData.last_name || ''}`.trim() || userData.username || 'User',
           role: userData.role || 'MEMBER'
         }
       };
@@ -171,11 +163,23 @@ class AuthService {
   }
 
   /**
-   * Get current user from GCGC Team Management System API.
+   * Get current user from TMS Server API.
+   * Uses JWT token stored in localStorage.
    */
   async getCurrentUser() {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL}/api/v1/users/me`, {
+      const jwtToken = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN) : null;
+
+      if (!jwtToken) {
+        throw new AuthError('No authentication token found', 401);
+      }
+
+      const apiBaseUrl = getApiBaseUrl();
+      const response = await fetch(`${apiBaseUrl}/api/v1/users/me`, {
+        headers: {
+          'Authorization': `Bearer ${jwtToken}`,
+          'Content-Type': 'application/json',
+        },
         credentials: 'include',
       });
 
@@ -213,24 +217,42 @@ class AuthService {
   }
 
   /**
-   * Validate session by attempting to fetch current user.
+   * Validate session by attempting to fetch current user from TMS Server.
    * @returns True if session is valid
    */
   async validateSession(): Promise<boolean> {
     if (!this.isAuthenticated()) return false;
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL}/api/v1/users/me`, {
+      const jwtToken = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN) : null;
+
+      if (!jwtToken) {
+        this.setSessionActive(false);
+        return false;
+      }
+
+      const apiBaseUrl = getApiBaseUrl();
+      const response = await fetch(`${apiBaseUrl}/api/v1/users/me`, {
+        headers: {
+          'Authorization': `Bearer ${jwtToken}`,
+          'Content-Type': 'application/json',
+        },
         credentials: 'include',
       });
 
       const isValid = response.ok;
       if (!isValid) {
         this.setSessionActive(false);
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
+        }
       }
       return isValid;
     } catch {
       this.setSessionActive(false);
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
+      }
       return false;
     }
   }
