@@ -39,83 +39,44 @@ class AuthService {
    */
   async login(credentials: LoginCredentials): Promise<LoginResponse> {
     try {
-      // First, try to authenticate with the GCGC Team Management System signin endpoint
-      const signinResponse = await fetch(`${process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL}/api/auth/signin/credentials`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        credentials: 'include',
-        body: new URLSearchParams({
-          email: credentials.email,
-          password: credentials.password,
-          redirect: 'false',
-          json: 'true'
-        }).toString(),
-      });
-
-      if (!signinResponse.ok) {
-        throw new AuthError('Invalid credentials', signinResponse.status);
-      }
-
-      // Get user session info from TMS Server (not GCGC)
-      // Note: We'll get this after authenticating with TMS Server below
-
-      // Get JWT token from TMS for cross-domain authentication
-      let jwtToken: string | null = null;
-      try {
-        const tokenResponse = await fetch(`${process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL}/api/v1/auth/token`, {
-          credentials: 'include',
-        });
-
-        if (tokenResponse.ok) {
-          const tokenData = await tokenResponse.json();
-          jwtToken = tokenData.token;
-
-          // Store JWT token in localStorage for API requests
-          if (typeof window !== 'undefined' && jwtToken) {
-            localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, jwtToken);
-          }
-
-          console.log('✅ JWT token obtained from TMS');
-        } else {
-          console.warn('⚠️ Failed to get JWT token from TMS:', await tokenResponse.text());
-        }
-      } catch (error) {
-        console.warn('⚠️ Error getting JWT token:', error);
-      }
-
-      // Authenticate with TMS Server using JWT token
-      if (!jwtToken) {
-        throw new AuthError('No JWT token received from GCGC');
-      }
-
-      // Use runtime API URL to ensure HTTPS in production
+      // New simplified flow: Send credentials to TMS-Server
+      // TMS-Server handles GCGC authentication server-to-server
       const apiBaseUrl = getApiBaseUrl();
-      const authEndpoint = `${apiBaseUrl}/api/v1/auth/login`;
+      const authEndpoint = `${apiBaseUrl}/api/v1/auth/login/credentials`;
 
-      const backendAuthResponse = await fetch(authEndpoint, {
+      console.log('🔐 Authenticating with TMS Server...');
+
+      const response = await fetch(authEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
         body: JSON.stringify({
-          token: jwtToken,
+          email: credentials.email,
+          password: credentials.password,
         }),
       });
 
-      if (!backendAuthResponse.ok) {
-        const errorText = await backendAuthResponse.text();
-        console.error('❌ TMS Server authentication failed:', errorText);
-        throw new AuthError('Failed to authenticate with messaging server', backendAuthResponse.status);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.detail?.message || errorData.message || 'Authentication failed';
+        console.error('❌ Authentication failed:', errorMessage);
+        throw new AuthError(errorMessage, response.status);
       }
 
-      const backendData = await backendAuthResponse.json();
-      console.log('✅ TMS Server authentication successful:', backendData);
+      const data = await response.json();
+      console.log('✅ Authentication successful');
 
-      // Extract user data from TMS Server response
-      const userData = backendData.user;
+      // Extract JWT token and user data
+      const jwtToken = data.token;
+      const userData = data.user;
+
+      // Store JWT token in localStorage for API requests
+      if (typeof window !== 'undefined' && jwtToken) {
+        localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, jwtToken);
+        console.log('✅ JWT token stored');
+      }
 
       // Store session indicator
       this.setSessionActive(true);
@@ -134,6 +95,7 @@ class AuthService {
       if (error instanceof AuthError) {
         throw error;
       }
+      console.error('❌ Login error:', error);
       throw new AuthError('Network error. Please check your connection.');
     }
   }
