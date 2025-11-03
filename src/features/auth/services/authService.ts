@@ -42,7 +42,7 @@ class AuthService {
       // New simplified flow: Send credentials to TMS-Server
       // TMS-Server handles GCGC authentication server-to-server
       const apiBaseUrl = getApiBaseUrl();
-      const authEndpoint = `${apiBaseUrl}/api/v1/auth/login/credentials`;
+      const authEndpoint = `${apiBaseUrl}/auth/login/credentials`;
 
       console.log('🔐 Authenticating with TMS Server...');
 
@@ -137,7 +137,7 @@ class AuthService {
       }
 
       const apiBaseUrl = getApiBaseUrl();
-      const response = await fetch(`${apiBaseUrl}/api/v1/users/me`, {
+      const response = await fetch(`${apiBaseUrl}/users/me`, {
         headers: {
           'Authorization': `Bearer ${jwtToken}`,
           'Content-Type': 'application/json',
@@ -194,7 +194,7 @@ class AuthService {
       }
 
       const apiBaseUrl = getApiBaseUrl();
-      const response = await fetch(`${apiBaseUrl}/api/v1/users/me`, {
+      const response = await fetch(`${apiBaseUrl}/users/me`, {
         headers: {
           'Authorization': `Bearer ${jwtToken}`,
           'Content-Type': 'application/json',
