@@ -52,8 +52,27 @@ export default function NewConversationDialog({
       // Use a wildcard search to get all users
       // The search API will return users even with a generic query
       const { tmsApi } = await import('@/lib/tmsApi');
-      const users = await tmsApi.searchUsers('', 100); // Empty query to get all users
-      setAllUsers(users);
+      const tmsUsers = await tmsApi.searchUsers('', 100); // Empty query to get all users
+
+      // Transform TMSUser[] to UserSearchResult[] format
+      const transformedUsers: UserSearchResult[] = tmsUsers.map((user) => ({
+        id: user.id,
+        tmsUserId: user.id, // TMSUser.id is the TMS user ID
+        name: user.name,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        username: user.username,
+        image: user.image,
+        positionTitle: user.positionTitle,
+        division: user.division,
+        department: user.department,
+        section: user.section,
+        customTeam: user.customTeam,
+        isActive: user.isActive,
+      }));
+
+      setAllUsers(transformedUsers);
     } catch (error) {
       console.error('Failed to load users:', error);
       // Fallback: trigger a search with a common letter
