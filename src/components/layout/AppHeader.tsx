@@ -32,9 +32,23 @@ export function AppHeader() {
   useEffect(() => {
     const loadUser = async () => {
       try {
-        // Get user data from GCGC Team Management System using session
-        const response = await fetch(`${process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL}/api/v1/users/me`, {
-          credentials: 'include', // Include session cookies
+        // Get JWT token from localStorage
+        const jwtToken = localStorage.getItem('tms_auth_token');
+
+        if (!jwtToken) {
+          // No token, redirect to login
+          window.location.href = '/login';
+          return;
+        }
+
+        // Get user data from TMS Server using JWT Bearer token
+        const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://tms-server-staging.up.railway.app/api/v1';
+        const response = await fetch(`${apiBaseUrl}/users/me`, {
+          headers: {
+            'Authorization': `Bearer ${jwtToken}`,
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
         });
 
         if (response.ok) {
@@ -42,14 +56,18 @@ export function AppHeader() {
           // API provides all required fields
           setUser(userData as User);
         } else if (response.status === 401) {
-          // Session expired, redirect to login
+          // Token expired, clear storage and redirect to login
+          localStorage.removeItem('tms_auth_token');
+          localStorage.removeItem('tms_session_active');
           window.location.href = '/login';
         } else {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
       } catch (error) {
         console.error('Failed to load user data:', error);
-        // Redirect to login on any error
+        // On error, clear auth and redirect to login
+        localStorage.removeItem('tms_auth_token');
+        localStorage.removeItem('tms_session_active');
         window.location.href = '/login';
       } finally {
         setLoading(false);
