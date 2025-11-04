@@ -1,10 +1,11 @@
 /**
  * User Service
  * Handles all user-related API calls.
- * All user data comes from GCGC Team Management System.
+ * All requests route through TMS Server (not GCGC directly).
  */
 
 import { tmsApi } from '@/lib/tmsApi';
+import { getApiBaseUrl, STORAGE_KEYS } from '@/lib/constants';
 import {
   User,
   UserSearchResult,
@@ -30,11 +31,14 @@ class UserService {
    */
   async getCurrentUser(): Promise<User> {
     try {
-      // IMPORTANT: Fetch from tms-server backend (NOT TMS directly)
+      // IMPORTANT: Fetch from tms-server backend (NOT GCGC directly)
       // This returns the local UUID that matches message.senderId
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/me`, {
+      const apiBaseUrl = getApiBaseUrl();
+      const token = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN) : null;
+
+      const response = await fetch(`${apiBaseUrl}/users/me`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
@@ -73,7 +77,7 @@ class UserService {
 
       // Cache user in localStorage for quick access
       if (typeof window !== 'undefined') {
-        localStorage.setItem('user_data', JSON.stringify(user));
+        localStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(user));
       }
 
       return user;
@@ -82,7 +86,7 @@ class UserService {
 
       // If offline or API error, try to return cached data
       if (typeof window !== 'undefined') {
-        const cached = localStorage.getItem('user_data');
+        const cached = localStorage.getItem(STORAGE_KEYS.USER_DATA);
         if (cached) {
           return JSON.parse(cached);
         }
@@ -208,7 +212,7 @@ class UserService {
     if (typeof window === 'undefined') return null;
 
     try {
-      const cached = localStorage.getItem('user_data');
+      const cached = localStorage.getItem(STORAGE_KEYS.USER_DATA);
       if (cached) {
         return JSON.parse(cached);
       }
@@ -228,7 +232,7 @@ class UserService {
    */
   clearCache(): void {
     if (typeof window === 'undefined') return;
-    localStorage.removeItem('user_data');
+    localStorage.removeItem(STORAGE_KEYS.USER_DATA);
   }
 }
 

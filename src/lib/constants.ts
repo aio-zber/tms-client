@@ -5,14 +5,22 @@
 
 import { getApiUrl, getWebSocketUrl } from './runtimeConfig';
 
-// API Configuration
-export const TMS_API_URL = process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL || 'https://gcgc-team-management-system-staging.up.railway.app';
-
 /**
  * Get API base URL using runtime detection
  * This avoids Next.js build-time environment variable replacement issues
+ *
+ * IMPORTANT: This always points to TMS Server, NOT GCGC directly!
+ * All browser requests must route through TMS Server to avoid CORS issues.
  */
 export const getApiBaseUrl = getApiUrl;
+
+/**
+ * GCGC Team Management System URL for static file access
+ * Used ONLY for accessing uploaded files (profile images, attachments, etc.)
+ *
+ * DO NOT use this for API calls! Use getApiBaseUrl() instead.
+ */
+export const GCGC_FILE_URL = process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL || 'https://gcgc-team-management-system-staging.up.railway.app';
 
 /**
  * Get WebSocket URL using runtime detection
