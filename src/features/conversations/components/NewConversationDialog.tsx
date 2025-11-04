@@ -57,27 +57,23 @@ export default function NewConversationDialog({
       const tmsUsers = await tmsApi.searchUsers('', 100); // Empty query to get all users
 
       // Transform TMSUser[] to UserSearchResult[] format
-      // Note: tmsApi.searchUsers() calls /users/ endpoint which returns UserResponse with tms_user_id
-      const transformedUsers: UserSearchResult[] = tmsUsers.map((user) => {
-        // Backend returns snake_case fields (tms_user_id, first_name, etc.)
-        const userData = user as unknown as Record<string, unknown>;
-        return {
-          id: user.id,
-          tmsUserId: (userData.tms_user_id as string) || user.id, // Use tms_user_id from backend, fallback to id
-          name: user.name,
-          firstName: user.firstName || (userData.first_name as string),
-          lastName: user.lastName || (userData.last_name as string),
-          email: user.email,
-          username: user.username,
-          image: user.image,
-          positionTitle: user.positionTitle || (userData.position_title as string),
-          division: user.division,
-          department: user.department,
-          section: user.section,
-          customTeam: user.customTeam || (userData.custom_team as string),
-          isActive: user.isActive ?? (userData.is_active as boolean),
-        };
-      });
+      // Backend now returns camelCase fields (tmsUserId, firstName, etc.) via Pydantic serialization_alias
+      const transformedUsers: UserSearchResult[] = tmsUsers.map((user) => ({
+        id: user.id,
+        tmsUserId: user.tmsUserId || user.id, // Use tmsUserId from backend, fallback to id
+        name: user.name,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        username: user.username,
+        image: user.image,
+        positionTitle: user.positionTitle,
+        division: user.division,
+        department: user.department,
+        section: user.section,
+        customTeam: user.customTeam,
+        isActive: user.isActive,
+      }));
 
       setAllUsers(transformedUsers);
     } catch (error) {
@@ -99,9 +95,33 @@ export default function NewConversationDialog({
   // Filter out current user (they're automatically added as creator/admin)
   const displayUsers = useMemo(() => {
     const users = query ? results : allUsers;
+
+    // Debug: Log current user info for troubleshooting
+    if (currentUser) {
+      console.log('[NewConversationDialog] Current user filter:', {
+        currentUserId: currentUser.id,
+        currentUserTmsUserId: currentUser.tmsUserId,
+        currentUserEmail: currentUser.email,
+        totalUsers: users.length,
+      });
+    }
+
     // Exclude current user from selectable users by comparing TMS user IDs
-    return users.filter(user => user.tmsUserId !== currentUser?.tmsUserId);
-  }, [query, results, allUsers, currentUser?.tmsUserId]);
+    const filtered = users.filter(user => {
+      const shouldExclude = user.tmsUserId === currentUser?.tmsUserId;
+      if (shouldExclude) {
+        console.log('[NewConversationDialog] Filtering out current user:', {
+          userId: user.id,
+          tmsUserId: user.tmsUserId,
+          email: user.email,
+        });
+      }
+      return !shouldExclude;
+    });
+
+    console.log(`[NewConversationDialog] Filtered ${users.length - filtered.length} user(s), showing ${filtered.length} users`);
+    return filtered;
+  }, [query, results, allUsers, currentUser]);
 
   // Show selected users' details
   const selectedUserDetails = useMemo(() => {
@@ -129,6 +149,14 @@ export default function NewConversationDialog({
       return;
     }
 
+    // Debug log before creating conversation
+    console.log('[NewConversationDialog] Creating conversation:', {
+      type: conversationType,
+      member_ids: selectedUsers,
+      name: conversationType === 'group' ? groupName.trim() : undefined,
+      currentUserTmsId: currentUser?.tmsUserId,
+    });
+
     try {
       const conversation = await createConversation({
         type: conversationType,
@@ -149,7 +177,18 @@ export default function NewConversationDialog({
       }
     } catch (error) {
       console.error('Error creating conversation:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to create conversation';
+
+      // Extract error message from different error formats
+      let errorMessage = 'Failed to create conversation';
+
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'object' && error !== null) {
+        // Handle API error objects
+        const apiError = error as { detail?: string; message?: string; error?: string };
+        errorMessage = apiError.detail || apiError.message || apiError.error || JSON.stringify(error);
+      }
+
       toast.error(errorMessage);
     }
   };
