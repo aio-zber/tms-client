@@ -1,18 +1,18 @@
 /**
  * useChatSearch Hook
  * Manages in-conversation message search state and operations
+ * Uses client-side filtering for instant results
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { messageService } from '../services/messageService';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import type { Message } from '@/types/message';
 
 interface UseChatSearchOptions {
   conversationId: string;
+  messages: Message[]; // Pass loaded messages for client-side filtering
   enabled?: boolean;
   onResultSelect?: (messageId: string) => void;
 }
-
 
 interface UseChatSearchReturn {
   // State
@@ -42,89 +42,64 @@ interface UseChatSearchReturn {
 /**
  * Hook for managing in-conversation message search
  * Provides Telegram/Messenger-style search functionality
+ * 
+ * Uses client-side filtering for instant results with loaded messages
  */
 export function useChatSearch({
   conversationId,
+  messages,
   enabled = true,
   onResultSelect,
 }: UseChatSearchOptions): UseChatSearchReturn {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [results, setResults] = useState<Message[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
   // Store onResultSelect callback in ref to prevent infinite re-renders
-  // This allows us to always use the latest callback without triggering the search useEffect
   const onResultSelectRef = useRef(onResultSelect);
 
-  // Update ref when callback changes (doesn't cause re-render or trigger effects)
+  // Update ref when callback changes
   useEffect(() => {
     onResultSelectRef.current = onResultSelect;
   }, [onResultSelect]);
 
-  // Search messages with debounce
-  useEffect(() => {
+  // Client-side search: Filter messages by content
+  const results = useMemo(() => {
     if (!enabled || !isSearchOpen || !searchQuery.trim()) {
-      setResults([]);
-      setCurrentIndex(0);
-      setError(null);
-      return;
+      return [];
     }
 
-    setIsSearching(true);
-    setError(null);
-
-    const debounceTimer = setTimeout(async () => {
-      try {
-        const response = await messageService.searchMessages({
-          query: searchQuery.trim(),
-          conversation_id: conversationId,
-          limit: 100, // Limit to 100 results for performance
-        });
-
-        setResults(response.data);
-
-        // Auto-select first result using ref to avoid triggering re-search
-        if (response.data.length > 0) {
-          setCurrentIndex(1);
-          onResultSelectRef.current?.(response.data[0].id);
-        } else {
-          setCurrentIndex(0);
-        }
-      } catch (err) {
-        const error = err as Error;
-        setError(error);
-
-        // Enhanced error logging for debugging
-        console.error('[Chat Search] Search failed:', {
-          query: searchQuery.trim(),
-          conversationId,
-          error: error.message,
-          stack: error.stack,
-        });
-
-        // User-friendly error message
-        if (error.message.includes('404')) {
-          console.error('[Chat Search] Search endpoint not found. Check API configuration.');
-        } else if (error.message.includes('CORS')) {
-          console.error('[Chat Search] CORS error. Check backend CORS settings.');
-        } else if (error.message.includes('Network')) {
-          console.error('[Chat Search] Network error. Check internet connection.');
-        }
-
-        setResults([]);
-        setCurrentIndex(0);
-      } finally {
-        setIsSearching(false);
+    const query = searchQuery.trim().toLowerCase();
+    
+    // Filter messages that contain the search query
+    const filteredMessages = messages.filter((message) => {
+      // Only search text messages with content
+      if (!message.content || message.type !== 'TEXT') {
+        return false;
       }
-    }, 300); // 300ms debounce
 
-    return () => clearTimeout(debounceTimer);
-  }, [searchQuery, conversationId, enabled, isSearchOpen]);
-  // ⚠️ IMPORTANT: onResultSelect is NOT in dependencies to prevent infinite re-renders
-  // We use onResultSelectRef.current instead, which is updated separately
+      return message.content.toLowerCase().includes(query);
+    });
+
+    // Sort by createdAt descending (newest first)
+    // This matches Telegram's behavior
+    return filteredMessages.sort((a, b) => {
+      const dateA = new Date(a.createdAt || 0).getTime();
+      const dateB = new Date(b.createdAt || 0).getTime();
+      return dateB - dateA;
+    });
+  }, [messages, searchQuery, enabled, isSearchOpen]);
+
+  // Auto-select first result when search results change
+  useEffect(() => {
+    if (results.length > 0) {
+      setCurrentIndex(1);
+      onResultSelectRef.current?.(results[0].id);
+    } else {
+      setCurrentIndex(0);
+    }
+  }, [results]);
 
   // Open search
   const openSearch = useCallback(() => {
@@ -135,7 +110,6 @@ export function useChatSearch({
   const closeSearch = useCallback(() => {
     setIsSearchOpen(false);
     setSearchQuery('');
-    setResults([]);
     setCurrentIndex(0);
     setError(null);
   }, []);
@@ -149,7 +123,7 @@ export function useChatSearch({
     }
   }, [isSearchOpen, closeSearch, openSearch]);
 
-  // Go to next result
+  // Go to next result (with wrapping)
   const goToNext = useCallback(() => {
     if (results.length === 0) return;
 
@@ -158,7 +132,7 @@ export function useChatSearch({
     onResultSelectRef.current?.(results[newIndex - 1].id);
   }, [results, currentIndex]);
 
-  // Go to previous result
+  // Go to previous result (with wrapping)
   const goToPrevious = useCallback(() => {
     if (results.length === 0) return;
 
@@ -181,7 +155,6 @@ export function useChatSearch({
   // Clear search results but keep search open
   const clearSearch = useCallback(() => {
     setSearchQuery('');
-    setResults([]);
     setCurrentIndex(0);
     setError(null);
   }, []);
@@ -199,7 +172,7 @@ export function useChatSearch({
     results,
     currentIndex,
     totalResults: results.length,
-    isSearching,
+    isSearching: false, // Client-side search is instant
     error,
 
     // Actions

@@ -9,7 +9,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { Search, X, ChevronUp, ChevronDown, Loader2 } from 'lucide-react';
+import { Search, X, ChevronUp, ChevronDown } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -93,12 +93,10 @@ export default function ChatSearchBar({
       {/* Results Counter & Navigation */}
       {searchQuery.trim() && (
         <div className="flex items-center gap-2 flex-shrink-0">
-          {isSearching ? (
-            <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
-          ) : totalResults > 0 ? (
+          {totalResults > 0 ? (
             <>
               {/* Counter */}
-              <span className="text-xs text-gray-600 font-medium min-w-[50px] text-center">
+              <span className="text-xs text-gray-600 font-medium min-w-[60px] text-center">
                 {currentIndex} of {totalResults}
               </span>
 
@@ -108,7 +106,6 @@ export default function ChatSearchBar({
                   size="sm"
                   variant="ghost"
                   onClick={goToPrevious}
-                  disabled={totalResults === 0}
                   className="h-7 w-7 p-0 hover:bg-gray-100"
                   title="Previous (Shift+Enter)"
                 >
@@ -118,7 +115,6 @@ export default function ChatSearchBar({
                   size="sm"
                   variant="ghost"
                   onClick={goToNext}
-                  disabled={totalResults === 0}
                   className="h-7 w-7 p-0 hover:bg-gray-100"
                   title="Next (Enter)"
                 >
