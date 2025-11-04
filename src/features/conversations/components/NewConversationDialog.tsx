@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Search, X, Users, MessageCircle } from 'lucide-react';
 import {
   Dialog,
@@ -38,14 +38,45 @@ export default function NewConversationDialog({
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [groupName, setGroupName] = useState('');
   const [conversationType, setConversationType] = useState<'dm' | 'group'>('dm');
+  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [loadingInitial, setLoadingInitial] = useState(false);
 
   const { query, results, isSearching, search, clearSearch } = useUserSearch();
   const { createConversation, loading } = useConversationActions();
 
+  // Load all users when dialog opens
+  useEffect(() => {
+    if (open && allUsers.length === 0) {
+      loadAllUsers();
+    }
+  }, [open]);
+
+  const loadAllUsers = async () => {
+    setLoadingInitial(true);
+    try {
+      // Use a wildcard search to get all users
+      // The search API will return users even with a generic query
+      const { tmsApi } = await import('@/lib/tmsApi');
+      const users = await tmsApi.searchUsers('', 100); // Empty query to get all users
+      setAllUsers(users);
+    } catch (error) {
+      console.error('Failed to load users:', error);
+      // Fallback: trigger a search with a common letter
+      search('a');
+    } finally {
+      setLoadingInitial(false);
+    }
+  };
+
+  // Display users: show search results if searching, otherwise show all users
+  const displayUsers = useMemo(() => {
+    return query ? results : allUsers;
+  }, [query, results, allUsers]);
+
   // Show selected users' details
   const selectedUserDetails = useMemo(() => {
-    return results.filter((user) => selectedUsers.includes(user.id));
-  }, [selectedUsers, results]);
+    return displayUsers.filter((user) => selectedUsers.includes(user.id));
+  }, [selectedUsers, displayUsers]);
 
   const handleUserToggle = (userId: string) => {
     setSelectedUsers((prev) => {
@@ -97,6 +128,7 @@ export default function NewConversationDialog({
     setSelectedUsers([]);
     setGroupName('');
     setConversationType('dm');
+    setAllUsers([]); // Clear cached users
     clearSearch();
     onOpenChange(false);
   };
@@ -197,19 +229,29 @@ export default function NewConversationDialog({
                 className="pl-9 md:pl-10 text-sm md:text-base"
                 value={query}
                 onChange={(e) => search(e.target.value)}
+                autoFocus
               />
             </div>
 
+            {/* Hint for multi-select */}
+            {effectiveType === 'group' && selectedUsers.length === 0 && (
+              <p className="text-xs text-viber-purple bg-viber-purple/10 p-2 rounded">
+                💡 Click multiple users to add them to the group
+              </p>
+            )}
+
             {/* User Results */}
             <ScrollArea className="h-[300px] sm:h-[350px] md:h-[400px] border rounded-lg">
-            {isSearching ? (
+            {(isSearching || loadingInitial) ? (
               <div className="flex items-center justify-center h-40">
                 <div className="text-center">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-viber-purple mx-auto mb-2"></div>
-                  <p className="text-sm text-gray-500">Searching users...</p>
+                  <p className="text-sm text-gray-500">
+                    {loadingInitial ? 'Loading users...' : 'Searching users...'}
+                  </p>
                 </div>
               </div>
-            ) : results.length === 0 && query ? (
+            ) : displayUsers.length === 0 && query ? (
               <div className="flex items-center justify-center h-40">
                 <div className="text-center">
                   <Users className="h-12 w-12 text-gray-300 mx-auto mb-2" />
@@ -219,21 +261,16 @@ export default function NewConversationDialog({
                   </p>
                 </div>
               </div>
-            ) : !query ? (
+            ) : displayUsers.length === 0 ? (
               <div className="flex items-center justify-center h-40">
                 <div className="text-center">
-                  <Search className="h-12 w-12 text-gray-300 mx-auto mb-2" />
-                  <p className="text-sm text-gray-500">
-                    Start typing to search users
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    Search by name, email, or department
-                  </p>
+                  <Users className="h-12 w-12 text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">No users available</p>
                 </div>
               </div>
             ) : (
               <div className="p-2">
-                {results.map((user) => {
+                {displayUsers.map((user) => {
                   const isSelected = selectedUsers.includes(user.id);
 
                   return (
@@ -241,8 +278,8 @@ export default function NewConversationDialog({
                       key={user.id}
                       onClick={() => handleUserToggle(user.id)}
                       className={`w-full flex items-center space-x-3 p-3 rounded-lg transition-colors ${
-                        isSelected 
-                          ? 'bg-viber-purple/10 border-2 border-viber-purple' 
+                        isSelected
+                          ? 'bg-viber-purple/10 border-2 border-viber-purple'
                           : 'border border-transparent hover:bg-gray-50'
                       }`}
                     >
