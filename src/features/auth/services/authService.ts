@@ -104,13 +104,14 @@ class AuthService {
    */
   async logout(): Promise<void> {
     try {
-      // Call GCGC Team Management System signout endpoint
-      await fetch(`${process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL}/api/auth/signout`, {
+      // Call TMS Server logout endpoint
+      const apiBaseUrl = getApiBaseUrl();
+      await fetch(`${apiBaseUrl}/auth/logout`, {
         method: 'POST',
         credentials: 'include',
       });
     } catch (error) {
-      console.warn('Team Management System logout failed:', error);
+      console.warn('TMS Server logout failed:', error);
     } finally {
       this.setSessionActive(false);
       if (typeof window !== 'undefined') {

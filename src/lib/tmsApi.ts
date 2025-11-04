@@ -1,9 +1,10 @@
 /**
  * TMS (Team Management System) API Client
- * Handles authentication and user data from the external TMS system
+ * Handles authentication and user data through TMS Server
+ * All requests go through TMS Server which communicates with GCGC
  */
 
-import { TMS_API_URL, STORAGE_KEYS } from './constants';
+import { getApiBaseUrl, STORAGE_KEYS } from './constants';
 import { User } from '@/types';
 
 export interface TMSUser {
@@ -55,8 +56,10 @@ export class TMSApiError extends Error {
 class TMSApiClient {
   private baseURL: string;
 
-  constructor(baseURL: string = TMS_API_URL) {
-    this.baseURL = baseURL;
+  constructor() {
+    // Use TMS Server API, not GCGC directly
+    // This avoids CORS issues and uses proper JWT authentication
+    this.baseURL = getApiBaseUrl();
   }
 
   /**
@@ -116,43 +119,43 @@ class TMSApiClient {
   }
 
   /**
-   * Get current user data from TMS.
+   * Get current user data from TMS Server.
    */
   async getCurrentUser(): Promise<TMSUser> {
-    const response = await fetch(`${this.baseURL}/api/v1/users/me`, {
+    const response = await fetch(`${this.baseURL}/users/me`, {
       method: 'GET',
       headers: this.getHeaders(),
-      credentials: 'include', // Use session cookies
+      credentials: 'include',
     });
 
     return this.handleResponse<TMSUser>(response);
   }
 
   /**
-   * Get specific user by ID from TMS.
+   * Get specific user by ID from TMS Server.
    */
   async getUserById(id: string): Promise<TMSUser> {
-    const response = await fetch(`${this.baseURL}/api/v1/users/${id}`, {
+    const response = await fetch(`${this.baseURL}/users/${id}`, {
       method: 'GET',
       headers: this.getHeaders(),
-      credentials: 'include', // Use session cookies
+      credentials: 'include',
     });
 
     return this.handleResponse<TMSUser>(response);
   }
 
   /**
-   * Search users in TMS.
+   * Search users through TMS Server.
    */
   async searchUsers(query: string, limit: number = 20): Promise<TMSUser[]> {
-    const url = new URL(`${this.baseURL}/api/v1/users/search`);
+    const url = new URL(`${this.baseURL}/users/`);
     url.searchParams.set('q', query);
     url.searchParams.set('limit', limit.toString());
 
     const response = await fetch(url.toString(), {
       method: 'GET',
       headers: this.getHeaders(),
-      credentials: 'include', // Use session cookies instead of Bearer token
+      credentials: 'include',
     });
 
     const data = await this.handleResponse<TMSUserSearchResponse>(response);
