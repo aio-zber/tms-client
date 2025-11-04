@@ -78,6 +78,7 @@ export default function ChatPage({ params }: ChatPageProps) {
     closeSearch,
   } = useChatSearch({
     conversationId,
+    messages: messages || [],
     enabled: isSearchOpen,
     onResultSelect: handleSearchResultSelect,
   });
