@@ -23,6 +23,7 @@ import { useUserSearch } from '@/features/users/hooks/useUserSearch';
 import { useConversationActions } from '@/features/conversations';
 import { getUserImageUrl } from '@/lib/imageUtils';
 import { UserSearchResult } from '@/types/user';
+import { useUserStore } from '@/store/userStore';
 import toast from 'react-hot-toast';
 
 interface NewConversationDialogProps {
@@ -44,6 +45,7 @@ export default function NewConversationDialog({
 
   const { query, results, isSearching, search, clearSearch } = useUserSearch();
   const { createConversation, loading } = useConversationActions();
+  const currentUser = useUserStore((state) => state.currentUser);
 
   // Load all users when dialog opens
   const loadAllUsers = useCallback(async () => {
@@ -89,13 +91,16 @@ export default function NewConversationDialog({
   }, [open, allUsers.length, loadAllUsers]);
 
   // Display users: show search results if searching, otherwise show all users
+  // Filter out current user (they're automatically added as creator/admin)
   const displayUsers = useMemo(() => {
-    return query ? results : allUsers;
-  }, [query, results, allUsers]);
+    const users = query ? results : allUsers;
+    // Exclude current user from selectable users
+    return users.filter(user => user.tmsUserId !== currentUser?.id);
+  }, [query, results, allUsers, currentUser?.id]);
 
   // Show selected users' details
   const selectedUserDetails = useMemo(() => {
-    return displayUsers.filter((user) => selectedUsers.includes(user.id));
+    return displayUsers.filter((user) => selectedUsers.includes(user.tmsUserId));
   }, [selectedUsers, displayUsers]);
 
   const handleUserToggle = (userId: string) => {
@@ -229,13 +234,13 @@ export default function NewConversationDialog({
               <div className="flex flex-wrap gap-2 p-3 bg-gray-50 rounded-lg max-h-24 overflow-y-auto">
                 {selectedUserDetails.map((user) => (
                   <Badge
-                    key={user.id}
+                    key={user.tmsUserId}
                     variant="secondary"
                     className="pl-2 pr-1 py-1 text-xs md:text-sm"
                   >
                     <span className="max-w-[120px] truncate">{user.name}</span>
                     <button
-                      onClick={() => handleUserToggle(user.id)}
+                      onClick={() => handleUserToggle(user.tmsUserId)}
                       className="ml-1 hover:bg-gray-300 rounded-full p-0.5"
                     >
                       <X className="h-3 w-3" />
@@ -295,12 +300,12 @@ export default function NewConversationDialog({
             ) : (
               <div className="p-2">
                 {displayUsers.map((user) => {
-                  const isSelected = selectedUsers.includes(user.id);
+                  const isSelected = selectedUsers.includes(user.tmsUserId);
 
                   return (
                     <button
-                      key={user.id}
-                      onClick={() => handleUserToggle(user.id)}
+                      key={user.tmsUserId}
+                      onClick={() => handleUserToggle(user.tmsUserId)}
                       className={`w-full flex items-center space-x-3 p-3 rounded-lg transition-colors ${
                         isSelected
                           ? 'bg-viber-purple/10 border-2 border-viber-purple'
