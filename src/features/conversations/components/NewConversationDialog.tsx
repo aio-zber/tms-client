@@ -60,7 +60,7 @@ export default function NewConversationDialog({
       // Note: tmsApi.searchUsers() calls /users/ endpoint which returns UserResponse with tms_user_id
       const transformedUsers: UserSearchResult[] = tmsUsers.map((user) => {
         // Backend returns snake_case fields (tms_user_id, first_name, etc.)
-        const userData = user as Record<string, unknown>;
+        const userData = user as unknown as Record<string, unknown>;
         return {
           id: user.id,
           tmsUserId: (userData.tms_user_id as string) || user.id, // Use tms_user_id from backend, fallback to id
