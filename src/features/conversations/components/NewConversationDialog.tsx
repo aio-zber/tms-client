@@ -58,22 +58,26 @@ export default function NewConversationDialog({
 
       // Transform TMSUser[] to UserSearchResult[] format
       // Note: tmsApi.searchUsers() calls /users/ endpoint which returns UserResponse with tms_user_id
-      const transformedUsers: UserSearchResult[] = tmsUsers.map((user: any) => ({
-        id: user.id,
-        tmsUserId: user.tms_user_id || user.tmsUserId || user.id, // Use tms_user_id from backend, fallback to id
-        name: user.name,
-        firstName: user.firstName || user.first_name,
-        lastName: user.lastName || user.last_name,
-        email: user.email,
-        username: user.username,
-        image: user.image,
-        positionTitle: user.positionTitle || user.position_title,
-        division: user.division,
-        department: user.department,
-        section: user.section,
-        customTeam: user.customTeam || user.custom_team,
-        isActive: user.isActive || user.is_active,
-      }));
+      const transformedUsers: UserSearchResult[] = tmsUsers.map((user) => {
+        // Backend returns snake_case fields (tms_user_id, first_name, etc.)
+        const userData = user as Record<string, unknown>;
+        return {
+          id: user.id,
+          tmsUserId: (userData.tms_user_id as string) || user.id, // Use tms_user_id from backend, fallback to id
+          name: user.name,
+          firstName: user.firstName || (userData.first_name as string),
+          lastName: user.lastName || (userData.last_name as string),
+          email: user.email,
+          username: user.username,
+          image: user.image,
+          positionTitle: user.positionTitle || (userData.position_title as string),
+          division: user.division,
+          department: user.department,
+          section: user.section,
+          customTeam: user.customTeam || (userData.custom_team as string),
+          isActive: user.isActive ?? (userData.is_active as boolean),
+        };
+      });
 
       setAllUsers(transformedUsers);
     } catch (error) {
