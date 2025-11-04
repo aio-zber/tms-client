@@ -219,7 +219,7 @@ export default function NewConversationDialog({
                 />
                 <div className="text-xs text-gray-600 bg-blue-50 p-2 rounded flex items-start gap-2">
                   <span className="text-blue-600 font-semibold">ℹ️</span>
-                  <span>You'll be added as the group admin automatically</span>
+                  <span>You&apos;ll be added as the group admin automatically</span>
                 </div>
               </div>
             )}
