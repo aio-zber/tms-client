@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Search, X, Users, MessageCircle } from 'lucide-react';
 import {
   Dialog,
@@ -22,6 +22,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useUserSearch } from '@/features/users/hooks/useUserSearch';
 import { useConversationActions } from '@/features/conversations';
 import { getUserImageUrl } from '@/lib/imageUtils';
+import { UserSearchResult } from '@/types/user';
 import toast from 'react-hot-toast';
 
 interface NewConversationDialogProps {
@@ -38,20 +39,14 @@ export default function NewConversationDialog({
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [groupName, setGroupName] = useState('');
   const [conversationType, setConversationType] = useState<'dm' | 'group'>('dm');
-  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [allUsers, setAllUsers] = useState<UserSearchResult[]>([]);
   const [loadingInitial, setLoadingInitial] = useState(false);
 
   const { query, results, isSearching, search, clearSearch } = useUserSearch();
   const { createConversation, loading } = useConversationActions();
 
   // Load all users when dialog opens
-  useEffect(() => {
-    if (open && allUsers.length === 0) {
-      loadAllUsers();
-    }
-  }, [open]);
-
-  const loadAllUsers = async () => {
+  const loadAllUsers = useCallback(async () => {
     setLoadingInitial(true);
     try {
       // Use a wildcard search to get all users
@@ -66,7 +61,13 @@ export default function NewConversationDialog({
     } finally {
       setLoadingInitial(false);
     }
-  };
+  }, [search]);
+
+  useEffect(() => {
+    if (open && allUsers.length === 0) {
+      loadAllUsers();
+    }
+  }, [open, allUsers.length, loadAllUsers]);
 
   // Display users: show search results if searching, otherwise show all users
   const displayUsers = useMemo(() => {
