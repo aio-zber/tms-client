@@ -1,13 +1,16 @@
 /**
  * Image URL utilities
- * Handles profile images from Team Management System
+ * Handles profile images from GCGC Team Management System
+ *
+ * NOTE: This is the ONLY place where direct GCGC URLs are allowed,
+ * because we're accessing static uploaded files, not making API calls.
  */
 
-import { TMS_API_URL } from './constants';
+import { GCGC_FILE_URL } from './constants';
 
 /**
  * Get full URL for user profile image.
- * Converts relative paths to absolute URLs pointing to Team Management System.
+ * Converts relative paths to absolute URLs pointing to GCGC's file storage.
  *
  * @param imageUrl - Image URL from user data (can be relative or absolute)
  * @returns Full absolute URL or undefined if no image
@@ -33,10 +36,10 @@ export function getUserImageUrl(imageUrl?: string | null): string | undefined {
     return imageUrl;
   }
 
-  // Relative path - prepend Team Management System URL
+  // Relative path - prepend GCGC file storage URL
   // Remove leading slash if present to avoid double slashes
   const cleanPath = imageUrl.startsWith('/') ? imageUrl.slice(1) : imageUrl;
-  return `${TMS_API_URL}/${cleanPath}`;
+  return `${GCGC_FILE_URL}/${cleanPath}`;
 }
 
 /**
