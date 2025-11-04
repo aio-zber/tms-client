@@ -72,12 +72,10 @@ export default function ChatPage({ params }: ChatPageProps) {
     setSearchQuery,
     currentIndex,
     totalResults,
-    isSearching,
     goToNext,
     goToPrevious,
     closeSearch,
   } = useChatSearch({
-    conversationId,
     messages: messages || [],
     enabled: isSearchOpen,
     onResultSelect: handleSearchResultSelect,
@@ -427,7 +425,6 @@ export default function ChatPage({ params }: ChatPageProps) {
         setSearchQuery={setSearchQuery}
         currentIndex={currentIndex}
         totalResults={totalResults}
-        isSearching={isSearching}
         goToNext={goToNext}
         goToPrevious={goToPrevious}
       />

@@ -24,7 +24,6 @@ interface ChatSearchBarProps {
   setSearchQuery: (query: string) => void;
   currentIndex: number;
   totalResults: number;
-  isSearching: boolean;
 
   // Navigation actions from useChatSearch hook
   goToNext: () => void;
@@ -38,7 +37,6 @@ export default function ChatSearchBar({
   setSearchQuery,
   currentIndex,
   totalResults,
-  isSearching,
   goToNext,
   goToPrevious,
 }: ChatSearchBarProps) {
