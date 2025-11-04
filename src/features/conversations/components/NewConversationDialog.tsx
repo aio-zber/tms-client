@@ -38,6 +38,7 @@ export default function NewConversationDialog({
   onSuccess,
 }: NewConversationDialogProps) {
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [selectedUsersCache, setSelectedUsersCache] = useState<Map<string, UserSearchResult>>(new Map());
   const [groupName, setGroupName] = useState('');
   const [conversationType, setConversationType] = useState<'dm' | 'group'>('dm');
   const [allUsers, setAllUsers] = useState<UserSearchResult[]>([]);
@@ -124,15 +125,25 @@ export default function NewConversationDialog({
   }, [query, results, allUsers, currentUser]);
 
   // Show selected users' details
+  // Use cached user objects instead of filtering from displayUsers
+  // This ensures selected users persist even when they're not in current search results
   const selectedUserDetails = useMemo(() => {
-    return displayUsers.filter((user) => selectedUsers.includes(user.tmsUserId));
-  }, [selectedUsers, displayUsers]);
+    return Array.from(selectedUsersCache.values());
+  }, [selectedUsersCache]);
 
-  const handleUserToggle = (userId: string) => {
+  const handleUserToggle = (userId: string, user: UserSearchResult) => {
     setSelectedUsers((prev) => {
       if (prev.includes(userId)) {
+        // Remove from both array and cache
+        setSelectedUsersCache((cache) => {
+          const newCache = new Map(cache);
+          newCache.delete(userId);
+          return newCache;
+        });
         return prev.filter((id) => id !== userId);
       } else {
+        // Add to both array and cache
+        setSelectedUsersCache((cache) => new Map(cache).set(userId, user));
         return [...prev, userId];
       }
     });
@@ -195,6 +206,7 @@ export default function NewConversationDialog({
 
   const handleClose = () => {
     setSelectedUsers([]);
+    setSelectedUsersCache(new Map()); // Clear user cache
     setGroupName('');
     setConversationType('dm');
     setAllUsers([]); // Clear cached users
@@ -211,8 +223,11 @@ export default function NewConversationDialog({
       .slice(0, 2);
   };
 
-  // Automatically switch to group if more than 1 user selected
-  const effectiveType = selectedUsers.length > 1 ? 'group' : conversationType;
+  // Automatically switch to group ONLY if user selected DM but picked 2+ users (prevent impossible state)
+  // Respects explicit "Group Chat" selection even with 0-1 users
+  const effectiveType = (conversationType === 'dm' && selectedUsers.length > 1)
+    ? 'group'
+    : conversationType;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -284,7 +299,7 @@ export default function NewConversationDialog({
                   >
                     <span className="max-w-[120px] truncate">{user.name}</span>
                     <button
-                      onClick={() => handleUserToggle(user.tmsUserId)}
+                      onClick={() => handleUserToggle(user.tmsUserId, user)}
                       className="ml-1 hover:bg-gray-300 rounded-full p-0.5"
                     >
                       <X className="h-3 w-3" />
@@ -349,7 +364,7 @@ export default function NewConversationDialog({
                   return (
                     <button
                       key={user.tmsUserId}
-                      onClick={() => handleUserToggle(user.tmsUserId)}
+                      onClick={() => handleUserToggle(user.tmsUserId, user)}
                       className={`w-full flex items-center space-x-3 p-3 rounded-lg transition-colors ${
                         isSelected
                           ? 'bg-viber-purple/10 border-2 border-viber-purple'
