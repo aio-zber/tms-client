@@ -11,6 +11,7 @@ import {
 import { getUserInitials, User } from '@/types';
 import { useState, useEffect } from 'react';
 import { authService } from '@/features/auth/services/authService';
+import { STORAGE_KEYS } from '@/lib/constants';
 import {
   Settings,
   Sun,
@@ -32,8 +33,8 @@ export function AppHeader() {
   useEffect(() => {
     const loadUser = async () => {
       try {
-        // Get JWT token from localStorage
-        const jwtToken = localStorage.getItem('tms_auth_token');
+        // Get JWT token from localStorage using correct key
+        const jwtToken = localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
 
         if (!jwtToken) {
           // No token, redirect to login
@@ -57,7 +58,7 @@ export function AppHeader() {
           setUser(userData as User);
         } else if (response.status === 401) {
           // Token expired, clear storage and redirect to login
-          localStorage.removeItem('tms_auth_token');
+          localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
           localStorage.removeItem('tms_session_active');
           window.location.href = '/login';
         } else {
@@ -66,7 +67,7 @@ export function AppHeader() {
       } catch (error) {
         console.error('Failed to load user data:', error);
         // On error, clear auth and redirect to login
-        localStorage.removeItem('tms_auth_token');
+        localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
         localStorage.removeItem('tms_session_active');
         window.location.href = '/login';
       } finally {
