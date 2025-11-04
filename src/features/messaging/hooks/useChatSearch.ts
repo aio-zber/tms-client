@@ -8,7 +8,6 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import type { Message } from '@/types/message';
 
 interface UseChatSearchOptions {
-  conversationId: string;
   messages: Message[]; // Pass loaded messages for client-side filtering
   enabled?: boolean;
   onResultSelect?: (messageId: string) => void;
@@ -46,7 +45,6 @@ interface UseChatSearchReturn {
  * Uses client-side filtering for instant results with loaded messages
  */
 export function useChatSearch({
-  conversationId,
   messages,
   enabled = true,
   onResultSelect,
