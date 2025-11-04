@@ -210,13 +210,17 @@ export default function NewConversationDialog({
 
             {/* Group Name Input (if group) */}
             {effectiveType === 'group' && (
-              <div>
+              <div className="space-y-2">
                 <Input
                   placeholder="Enter group name..."
                   value={groupName}
                   onChange={(e) => setGroupName(e.target.value)}
                   className="text-sm md:text-base"
                 />
+                <div className="text-xs text-gray-600 bg-blue-50 p-2 rounded flex items-start gap-2">
+                  <span className="text-blue-600 font-semibold">ℹ️</span>
+                  <span>You'll be added as the group admin automatically</span>
+                </div>
               </div>
             )}
 
