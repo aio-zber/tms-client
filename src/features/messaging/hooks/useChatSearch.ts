@@ -46,7 +46,7 @@ interface UseChatSearchReturn {
  */
 export function useChatSearch({
   messages,
-  enabled = true,
+  _enabled = true,
   onResultSelect,
 }: UseChatSearchOptions): UseChatSearchReturn {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -64,7 +64,7 @@ export function useChatSearch({
 
   // Client-side search: Filter messages by content
   const results = useMemo(() => {
-    if (!enabled || !isSearchOpen || !searchQuery.trim()) {
+    if (!isSearchOpen || !searchQuery.trim()) {
       return [];
     }
 
@@ -87,7 +87,7 @@ export function useChatSearch({
       const dateB = new Date(b.createdAt || 0).getTime();
       return dateB - dateA;
     });
-  }, [messages, searchQuery, enabled, isSearchOpen]);
+  }, [messages, searchQuery, isSearchOpen]);
 
   // Auto-select first result when search results change
   useEffect(() => {
