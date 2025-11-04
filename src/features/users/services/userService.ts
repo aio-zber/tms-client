@@ -50,29 +50,30 @@ class UserService {
       const userData = await response.json();
 
       // Transform backend response to User format
+      // Backend now returns camelCase via Pydantic serialization_alias
       const user: User = {
         id: userData.id, // Local UUID from tms-server (matches message.senderId!)
-        tmsUserId: userData.tms_user_id,
+        tmsUserId: userData.tmsUserId || userData.id,
         email: userData.email,
         username: userData.username,
-        firstName: userData.first_name,
-        lastName: userData.last_name,
-        middleName: userData.middle_name,
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+        middleName: userData.middleName,
         name: userData.name,
-        displayName: userData.display_name || userData.name || `${userData.first_name || ''} ${userData.last_name || ''}`.trim() || userData.email,
+        displayName: userData.displayName || userData.name || `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.email,
         image: userData.image,
         role: userData.role,
-        positionTitle: userData.position_title,
+        positionTitle: userData.positionTitle,
         division: userData.division,
         department: userData.department,
         section: userData.section,
-        customTeam: userData.custom_team,
-        hierarchyLevel: userData.hierarchy_level,
-        reportsToId: userData.reports_to_id,
-        isActive: userData.is_active !== false,
-        isLeader: userData.role === 'LEADER' || userData.role === 'ADMIN',
-        createdAt: userData.created_at || new Date().toISOString(),
-        lastSyncedAt: userData.last_synced_at,
+        customTeam: userData.customTeam,
+        hierarchyLevel: userData.hierarchyLevel,
+        reportsToId: userData.reportsToId,
+        isActive: userData.isActive !== false,
+        isLeader: userData.isLeader || userData.role === 'LEADER' || userData.role === 'ADMIN',
+        createdAt: userData.createdAt || new Date().toISOString(),
+        lastSyncedAt: userData.lastSyncedAt,
       };
 
       // Cache user in localStorage for quick access
