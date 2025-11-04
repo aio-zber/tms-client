@@ -9,7 +9,7 @@ import type { Message } from '@/types/message';
 
 interface UseChatSearchOptions {
   messages: Message[]; // Pass loaded messages for client-side filtering
-  enabled?: boolean;
+  _enabled?: boolean;
   onResultSelect?: (messageId: string) => void;
 }
 
