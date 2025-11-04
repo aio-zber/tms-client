@@ -57,21 +57,22 @@ export default function NewConversationDialog({
       const tmsUsers = await tmsApi.searchUsers('', 100); // Empty query to get all users
 
       // Transform TMSUser[] to UserSearchResult[] format
-      const transformedUsers: UserSearchResult[] = tmsUsers.map((user) => ({
+      // Note: tmsApi.searchUsers() calls /users/ endpoint which returns UserResponse with tms_user_id
+      const transformedUsers: UserSearchResult[] = tmsUsers.map((user: any) => ({
         id: user.id,
-        tmsUserId: user.id, // TMSUser.id is the TMS user ID
+        tmsUserId: user.tms_user_id || user.tmsUserId || user.id, // Use tms_user_id from backend, fallback to id
         name: user.name,
-        firstName: user.firstName,
-        lastName: user.lastName,
+        firstName: user.firstName || user.first_name,
+        lastName: user.lastName || user.last_name,
         email: user.email,
         username: user.username,
         image: user.image,
-        positionTitle: user.positionTitle,
+        positionTitle: user.positionTitle || user.position_title,
         division: user.division,
         department: user.department,
         section: user.section,
-        customTeam: user.customTeam,
-        isActive: user.isActive,
+        customTeam: user.customTeam || user.custom_team,
+        isActive: user.isActive || user.is_active,
       }));
 
       setAllUsers(transformedUsers);
@@ -94,9 +95,9 @@ export default function NewConversationDialog({
   // Filter out current user (they're automatically added as creator/admin)
   const displayUsers = useMemo(() => {
     const users = query ? results : allUsers;
-    // Exclude current user from selectable users
-    return users.filter(user => user.tmsUserId !== currentUser?.id);
-  }, [query, results, allUsers, currentUser?.id]);
+    // Exclude current user from selectable users by comparing TMS user IDs
+    return users.filter(user => user.tmsUserId !== currentUser?.tmsUserId);
+  }, [query, results, allUsers, currentUser?.tmsUserId]);
 
   // Show selected users' details
   const selectedUserDetails = useMemo(() => {
