@@ -9,6 +9,7 @@ import { User } from '@/types';
 
 export interface TMSUser {
   id: string;
+  tmsUserId?: string; // TMS user ID (returned by backend via serialization_alias)
   email: string;
   username?: string;
   firstName?: string;
