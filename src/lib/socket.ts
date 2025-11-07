@@ -240,6 +240,66 @@ class SocketClient {
   }
 
   /**
+   * Listen for member added events
+   */
+  onMemberAdded(callback: (data: Record<string, unknown>) => void) {
+    console.log('[Socket] Attaching member_added listener');
+    if (this.socket) {
+      this.socket.on('member_added', callback);
+      console.log('[Socket] ✅ member_added listener attached');
+    } else {
+      console.error(
+        '[Socket] ❌ Cannot attach member_added listener - socket not initialized'
+      );
+    }
+  }
+
+  /**
+   * Listen for member removed events
+   */
+  onMemberRemoved(callback: (data: Record<string, unknown>) => void) {
+    console.log('[Socket] Attaching member_removed listener');
+    if (this.socket) {
+      this.socket.on('member_removed', callback);
+      console.log('[Socket] ✅ member_removed listener attached');
+    } else {
+      console.error(
+        '[Socket] ❌ Cannot attach member_removed listener - socket not initialized'
+      );
+    }
+  }
+
+  /**
+   * Listen for member left events
+   */
+  onMemberLeft(callback: (data: Record<string, unknown>) => void) {
+    console.log('[Socket] Attaching member_left listener');
+    if (this.socket) {
+      this.socket.on('member_left', callback);
+      console.log('[Socket] ✅ member_left listener attached');
+    } else {
+      console.error(
+        '[Socket] ❌ Cannot attach member_left listener - socket not initialized'
+      );
+    }
+  }
+
+  /**
+   * Listen for conversation updated events
+   */
+  onConversationUpdated(callback: (data: Record<string, unknown>) => void) {
+    console.log('[Socket] Attaching conversation_updated listener');
+    if (this.socket) {
+      this.socket.on('conversation_updated', callback);
+      console.log('[Socket] ✅ conversation_updated listener attached');
+    } else {
+      console.error(
+        '[Socket] ❌ Cannot attach conversation_updated listener - socket not initialized'
+      );
+    }
+  }
+
+  /**
    * Remove event listener
    */
   off(event: string, callback?: (data: Record<string, unknown>) => void) {

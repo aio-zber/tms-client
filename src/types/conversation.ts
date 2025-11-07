@@ -73,3 +73,38 @@ export interface ConversationListResponse {
     limit: number;
   };
 }
+
+// WebSocket Event Payloads
+
+export interface MemberAddedEvent {
+  conversation_id: string;
+  added_members: Array<{
+    user_id: string;
+    full_name: string;
+    role: ConversationMemberRole;
+  }>;
+  added_by: string;
+  timestamp: string;
+}
+
+export interface MemberRemovedEvent {
+  conversation_id: string;
+  removed_user_id: string;
+  removed_by: string;
+  timestamp: string;
+}
+
+export interface MemberLeftEvent {
+  conversation_id: string;
+  user_id: string;
+  user_name: string;
+  timestamp: string;
+}
+
+export interface ConversationUpdatedEvent {
+  conversation_id: string;
+  updated_by: string;
+  name?: string;
+  avatar_url?: string;
+  timestamp: string;
+}
