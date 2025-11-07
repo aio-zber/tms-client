@@ -142,6 +142,7 @@ export default function ChatPage({ params }: ChatPageProps) {
 
   // Handle search close - update local state and call hook's closeSearch
   const handleCloseSearch = () => {
+    setSearchQuery("");
     setIsSearchOpen(false);
     closeSearch();
   };
@@ -443,7 +444,7 @@ export default function ChatPage({ params }: ChatPageProps) {
         onReact={handleReact}
         getUserName={getUserName}
         isGroupChat={conversation.type === 'group'}
-        searchQuery={searchQuery}
+        searchQuery={isSearchOpen ? searchQuery : ""}
         highlightedMessageId={highlightedMessageId}
         searchHighlightId={searchHighlightId}
         registerMessageRef={registerMessageRef}
