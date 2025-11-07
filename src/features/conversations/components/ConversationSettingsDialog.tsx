@@ -142,6 +142,8 @@ export default function ConversationSettingsDialog({
   const isGroup = conversation.type === 'group';
   const members = conversation.members || [];
   const currentUserIsMember = members.some(m => m.userId === currentUserId);
+  const currentUserMember = members.find(m => m.userId === currentUserId);
+  const currentUserIsAdmin = currentUserMember?.role === 'admin';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -216,16 +218,18 @@ export default function ConversationSettingsDialog({
           {/* Members Tab */}
           {isGroup && (
             <TabsContent value="members" className="space-y-4">
-              {/* Add Members Section */}
-              {!showAddMembers ? (
-                <Button
-                  onClick={() => setShowAddMembers(true)}
-                  className="w-full bg-viber-purple hover:bg-viber-purple-dark"
-                >
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Add Members
-                </Button>
-              ) : (
+              {/* Add Members Section - Only show to admins */}
+              {currentUserIsAdmin && (
+                <>
+                  {!showAddMembers ? (
+                    <Button
+                      onClick={() => setShowAddMembers(true)}
+                      className="w-full bg-viber-purple hover:bg-viber-purple-dark"
+                    >
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      Add Members
+                    </Button>
+                  ) : (
                 <div className="space-y-3 p-3 bg-gray-50 rounded-lg">
                   <div className="flex items-center justify-between">
                     <Label>Add Members</Label>
@@ -318,6 +322,8 @@ export default function ConversationSettingsDialog({
                     Add Selected Members
                   </Button>
                 </div>
+                  )}
+                </>
               )}
 
               {/* Members List */}
@@ -351,7 +357,7 @@ export default function ConversationSettingsDialog({
                             </div>
                           </div>
 
-                          {!isCurrentUser && (
+                          {!isCurrentUser && currentUserIsAdmin && (
                             <Button
                               variant="ghost"
                               size="sm"
