@@ -7,7 +7,7 @@
 
 import { use, useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Menu, MoreVertical, Loader2, X, Search } from 'lucide-react';
+import { Menu, MoreVertical, Loader2, X, Search, Users, LogOut } from 'lucide-react';
 import { MessageList } from '@/features/messaging/components/MessageList';
 import { MessageInput } from '@/features/messaging/components/MessageInput';
 import { ChatSearchBar, useChatSearch, useJumpToMessage } from '@/features/messaging';
@@ -25,8 +25,12 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useConversationActions } from '@/features/conversations';
+import ConversationSettingsDialog from '@/features/conversations/components/ConversationSettingsDialog';
+import toast from 'react-hot-toast';
 
 interface ChatPageProps {
   params: Promise<{
@@ -45,10 +49,12 @@ export default function ChatPage({ params }: ChatPageProps) {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [showSettingsDialog, setShowSettingsDialog] = useState(false);
 
   const { messages, loading, hasMore, loadMore, addOptimisticMessage } = useMessages(conversationId);
   const { sendMessage, sending } = useSendMessage();
   const { editMessage, deleteMessage, addReaction, removeReaction } = useMessageActions();
+  const { leaveConversation } = useConversationActions();
   useSocket(); // Initialize WebSocket connection
 
   // Jump to message hook for search navigation
@@ -119,6 +125,10 @@ export default function ChatPage({ params }: ChatPageProps) {
 
     loadCurrentUser();
   }, []);
+
+  // Detect if current user is admin
+  const currentUserMember = conversation?.members.find(m => m.userId === currentUserId);
+  const currentUserIsAdmin = currentUserMember?.role === 'admin';
 
   // Keyboard shortcut: Ctrl/Cmd+F to open search
   useEffect(() => {
@@ -251,6 +261,11 @@ export default function ChatPage({ params }: ChatPageProps) {
       alert('Failed to clear conversation. Please try again.');
     }
   }, [conversationId]);
+
+  const handleLeaveConversation = useCallback(() => {
+    // Redirect to chats list after leaving
+    router.push('/chats');
+  }, [router]);
 
   // Memoize getUserName to prevent infinite re-renders (React Error #185)
   // This function is passed to MessageList, so it must have a stable reference
@@ -398,8 +413,15 @@ export default function ChatPage({ params }: ChatPageProps) {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem>View Details</DropdownMenuItem>
-              <DropdownMenuItem>Mute Conversation</DropdownMenuItem>
+              {conversation.type === 'group' && currentUserIsAdmin && (
+                <>
+                  <DropdownMenuItem onClick={() => setShowSettingsDialog(true)}>
+                    <Users className="w-4 h-4 mr-2" />
+                    Manage Members
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
               <DropdownMenuItem onClick={() => setIsSearchOpen(true)}>
                 <Search className="w-4 h-4 mr-2" />
                 Search Messages
@@ -410,9 +432,25 @@ export default function ChatPage({ params }: ChatPageProps) {
               >
                 Clear Conversation
               </DropdownMenuItem>
-              <DropdownMenuItem className="text-red-600">
-                Leave Conversation
-              </DropdownMenuItem>
+              {conversation.type === 'group' && (
+                <DropdownMenuItem
+                  onClick={async () => {
+                    if (confirm('Are you sure you want to leave this conversation?')) {
+                      const success = await leaveConversation(conversationId);
+                      if (success) {
+                        toast.success('Left conversation');
+                        handleLeaveConversation();
+                      } else {
+                        toast.error('Failed to leave conversation');
+                      }
+                    }
+                  }}
+                  className="text-red-600"
+                >
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Leave Conversation
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -461,6 +499,23 @@ export default function ChatPage({ params }: ChatPageProps) {
         onSaveEdit={handleSaveEdit}
         onCancelEdit={handleCancelEdit}
       />
+
+      {/* Conversation Settings Dialog */}
+      {conversation && (
+        <ConversationSettingsDialog
+          open={showSettingsDialog}
+          onOpenChange={setShowSettingsDialog}
+          conversation={conversation}
+          currentUserId={currentUserId || ''}
+          onUpdate={() => {
+            // Refresh conversation data
+            setConversation(null);
+            setLoadingConversation(true);
+            // Effect will reload conversation
+          }}
+          onLeave={handleLeaveConversation}
+        />
+      )}
       </div>
     </>
   );
