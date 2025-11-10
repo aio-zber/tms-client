@@ -66,7 +66,7 @@ export function useConversationEvents({
     const handleMemberAdded = (data: Record<string, unknown>) => {
       console.log('[useConversationEvents] member_added event:', data);
 
-      const eventData = data as MemberAddedEvent;
+      const eventData = data as unknown as MemberAddedEvent;
       if (eventData.conversation_id !== conversationId) return;
 
       // Invalidate conversation query to refetch with new members
@@ -92,7 +92,7 @@ export function useConversationEvents({
     const handleMemberRemoved = (data: Record<string, unknown>) => {
       console.log('[useConversationEvents] member_removed event:', data);
 
-      const eventData = data as MemberRemovedEvent;
+      const eventData = data as unknown as MemberRemovedEvent;
       if (eventData.conversation_id !== conversationId) return;
 
       // Invalidate conversation query to refetch with updated members
@@ -116,7 +116,7 @@ export function useConversationEvents({
     const handleMemberLeft = (data: Record<string, unknown>) => {
       console.log('[useConversationEvents] member_left event:', data);
 
-      const eventData = data as MemberLeftEvent;
+      const eventData = data as unknown as MemberLeftEvent;
       if (eventData.conversation_id !== conversationId) return;
 
       // Invalidate conversation query
@@ -140,7 +140,7 @@ export function useConversationEvents({
     const handleConversationUpdated = (data: Record<string, unknown>) => {
       console.log('[useConversationEvents] conversation_updated event:', data);
 
-      const eventData = data as ConversationUpdatedEvent;
+      const eventData = data as unknown as ConversationUpdatedEvent;
       if (eventData.conversation_id !== conversationId) return;
 
       // Invalidate conversation query to refetch updated details
