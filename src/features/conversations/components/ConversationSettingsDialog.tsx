@@ -129,12 +129,12 @@ export default function ConversationSettingsDialog({
     }
   };
 
-  const handleUserToggle = (userId: string) => {
+  const handleUserToggle = (tmsUserId: string) => {
     setSelectedUsers((prev) => {
-      if (prev.includes(userId)) {
-        return prev.filter((id) => id !== userId);
+      if (prev.includes(tmsUserId)) {
+        return prev.filter((id) => id !== tmsUserId);
       } else {
-        return [...prev, userId];
+        return [...prev, tmsUserId];
       }
     });
   };
@@ -250,14 +250,14 @@ export default function ConversationSettingsDialog({
                   {selectedUsers.length > 0 && (
                     <div className="flex flex-wrap gap-2">
                       {results
-                        .filter((u) => selectedUsers.includes(u.id))
+                        .filter((u) => selectedUsers.includes(u.tmsUserId))
                         .map((user) => (
                           <div
-                            key={user.id}
+                            key={user.tmsUserId}
                             className="bg-white border rounded-full px-3 py-1 text-sm flex items-center gap-2"
                           >
                             {user.name || user.email}
-                            <button onClick={() => handleUserToggle(user.id)}>
+                            <button onClick={() => handleUserToggle(user.tmsUserId)}>
                               <X className="h-3 w-3" />
                             </button>
                           </div>
@@ -281,13 +281,13 @@ export default function ConversationSettingsDialog({
                     ) : results.length > 0 ? (
                       <div className="p-2">
                         {results
-                          .filter((u) => !members.some((m) => m.userId === u.id))
+                          .filter((u) => !members.some((m) => m.userId === u.tmsUserId))
                           .map((user) => (
                             <button
-                              key={user.id}
-                              onClick={() => handleUserToggle(user.id)}
+                              key={user.tmsUserId}
+                              onClick={() => handleUserToggle(user.tmsUserId)}
                               className={`w-full flex items-center gap-3 p-2 rounded hover:bg-gray-50 ${
-                                selectedUsers.includes(user.id) ? 'bg-viber-purple-bg' : ''
+                                selectedUsers.includes(user.tmsUserId) ? 'bg-viber-purple-bg' : ''
                               }`}
                             >
                               <Avatar className="w-8 h-8">
@@ -300,7 +300,7 @@ export default function ConversationSettingsDialog({
                                 <div className="font-medium">{user.name || user.email}</div>
                                 <div className="text-xs text-gray-500">{user.email}</div>
                               </div>
-                              {selectedUsers.includes(user.id) && (
+                              {selectedUsers.includes(user.tmsUserId) && (
                                 <div className="text-viber-purple">✓</div>
                               )}
                             </button>

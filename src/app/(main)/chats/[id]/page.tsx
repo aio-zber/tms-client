@@ -510,10 +510,8 @@ export default function ChatPage({ params }: ChatPageProps) {
           conversation={conversation}
           currentUserId={currentUserId || ''}
           onUpdate={() => {
-            // Refresh conversation data
-            setConversation(null);
-            setLoadingConversation(true);
-            // Effect will reload conversation
+            // Just close the dialog - WebSocket will handle the update
+            setShowSettingsDialog(false);
           }}
           onLeave={handleLeaveConversation}
         />
