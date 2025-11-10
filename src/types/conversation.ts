@@ -55,7 +55,7 @@ export interface UpdateConversationRequest {
 }
 
 export interface AddMembersRequest {
-  member_ids: string[];
+  user_ids: string[];
 }
 
 export interface UpdateConversationSettingsRequest {

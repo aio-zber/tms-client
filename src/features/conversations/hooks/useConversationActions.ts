@@ -86,7 +86,7 @@ export function useConversationActions(): UseConversationActionsReturn {
 
       try {
         await conversationService.addMembers(conversationId, {
-          member_ids: memberIds,
+          user_ids: memberIds,
         });
         return true;
       } catch (err) {

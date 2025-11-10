@@ -21,6 +21,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useConversationActions } from '../hooks/useConversationActions';
+import { useConversationEvents } from '../hooks/useConversationEvents';
 import { useUserSearch } from '@/features/users/hooks/useUserSearch';
 import type { Conversation } from '@/types/conversation';
 import toast from 'react-hot-toast';
@@ -55,6 +56,12 @@ export default function ConversationSettingsDialog({
   } = useConversationActions();
 
   const { query, results, isSearching, search, clearSearch } = useUserSearch();
+
+  // Listen for real-time conversation updates (member_added, member_removed, member_left, conversation_updated)
+  useConversationEvents({
+    conversationId: conversation.id,
+    showNotifications: false  // Avoid duplicate toasts - we show our own in action handlers
+  });
 
   useEffect(() => {
     setConversationName(conversation.name || '');
