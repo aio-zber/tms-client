@@ -103,7 +103,7 @@ export function useConversationEvents({
       });
 
       if (showNotifications) {
-        toast.info('Member removed from conversation');
+        toast('Member removed from conversation');
       }
     };
 
@@ -126,7 +126,7 @@ export function useConversationEvents({
       });
 
       if (showNotifications) {
-        toast.info(`${data.user_name} left the conversation`);
+        toast(`${data.user_name} left the conversation`);
       }
     };
 
