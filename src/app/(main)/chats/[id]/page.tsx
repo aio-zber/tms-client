@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useConversationActions } from '@/features/conversations';
 import ConversationSettingsDialog from '@/features/conversations/components/ConversationSettingsDialog';
+import { useConversationEvents } from '@/features/conversations/hooks/useConversationEvents';
 import toast from 'react-hot-toast';
 
 interface ChatPageProps {
@@ -56,6 +57,7 @@ export default function ChatPage({ params }: ChatPageProps) {
   const { editMessage, deleteMessage, addReaction, removeReaction } = useMessageActions();
   const { leaveConversation } = useConversationActions();
   useSocket(); // Initialize WebSocket connection
+  useConversationEvents({ conversationId }); // Handle real-time conversation updates
 
   // Jump to message hook for search navigation
   const {
