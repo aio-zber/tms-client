@@ -63,10 +63,11 @@ export function useConversationEvents({
      * Handle member_added event
      * Triggered when admin adds new member(s) to the conversation
      */
-    const handleMemberAdded = (data: MemberAddedEvent) => {
+    const handleMemberAdded = (data: Record<string, unknown>) => {
       console.log('[useConversationEvents] member_added event:', data);
 
-      if (data.conversation_id !== conversationId) return;
+      const eventData = data as MemberAddedEvent;
+      if (eventData.conversation_id !== conversationId) return;
 
       // Invalidate conversation query to refetch with new members
       queryClient.invalidateQueries({
@@ -79,7 +80,7 @@ export function useConversationEvents({
       });
 
       if (showNotifications) {
-        const memberNames = data.added_members.map(m => m.full_name).join(', ');
+        const memberNames = eventData.added_members.map(m => m.full_name).join(', ');
         toast.success(`${memberNames} added to conversation`);
       }
     };
@@ -88,10 +89,11 @@ export function useConversationEvents({
      * Handle member_removed event
      * Triggered when admin removes a member from the conversation
      */
-    const handleMemberRemoved = (data: MemberRemovedEvent) => {
+    const handleMemberRemoved = (data: Record<string, unknown>) => {
       console.log('[useConversationEvents] member_removed event:', data);
 
-      if (data.conversation_id !== conversationId) return;
+      const eventData = data as MemberRemovedEvent;
+      if (eventData.conversation_id !== conversationId) return;
 
       // Invalidate conversation query to refetch with updated members
       queryClient.invalidateQueries({
@@ -111,10 +113,11 @@ export function useConversationEvents({
      * Handle member_left event
      * Triggered when a member voluntarily leaves the conversation
      */
-    const handleMemberLeft = (data: MemberLeftEvent) => {
+    const handleMemberLeft = (data: Record<string, unknown>) => {
       console.log('[useConversationEvents] member_left event:', data);
 
-      if (data.conversation_id !== conversationId) return;
+      const eventData = data as MemberLeftEvent;
+      if (eventData.conversation_id !== conversationId) return;
 
       // Invalidate conversation query
       queryClient.invalidateQueries({
@@ -126,7 +129,7 @@ export function useConversationEvents({
       });
 
       if (showNotifications) {
-        toast(`${data.user_name} left the conversation`);
+        toast(`${eventData.user_name} left the conversation`);
       }
     };
 
@@ -134,10 +137,11 @@ export function useConversationEvents({
      * Handle conversation_updated event
      * Triggered when conversation name/avatar is updated
      */
-    const handleConversationUpdated = (data: ConversationUpdatedEvent) => {
+    const handleConversationUpdated = (data: Record<string, unknown>) => {
       console.log('[useConversationEvents] conversation_updated event:', data);
 
-      if (data.conversation_id !== conversationId) return;
+      const eventData = data as ConversationUpdatedEvent;
+      if (eventData.conversation_id !== conversationId) return;
 
       // Invalidate conversation query to refetch updated details
       queryClient.invalidateQueries({
@@ -149,8 +153,8 @@ export function useConversationEvents({
       });
 
       if (showNotifications) {
-        if (data.name) {
-          toast.success(`Conversation renamed to "${data.name}"`);
+        if (eventData.name) {
+          toast.success(`Conversation renamed to "${eventData.name}"`);
         } else {
           toast.success('Conversation updated');
         }
