@@ -15,19 +15,21 @@ export default function HomePage() {
       // First, check if user is already authenticated in TMS
       await checkAuth();
 
-      // If not authenticated in TMS, check for GCGC session
+      // Get current authentication state
       const currentAuthState = useAuthStore.getState().isAuthenticated;
 
-      if (!currentAuthState && !ssoAttempted) {
-        // Check if GCGC session exists
+      // Mark SSO attempt as complete (always set to true to prevent infinite loading)
+      setSsoAttempted(true);
+
+      // If not authenticated in TMS, check for GCGC session
+      if (!currentAuthState) {
         const gcgcToken = authService.extractSessionToken();
 
         if (gcgcToken) {
+          // GCGC session exists, attempt auto-login
           console.log('🔐 SSO: GCGC session detected, attempting auto-login...');
-          setSsoAttempted(true);
 
           try {
-            // Auto-login using GCGC session
             await autoLoginFromGCGC();
             console.log('✅ SSO: Auto-login successful, redirecting to chats...');
             router.push('/chats');
@@ -38,32 +40,22 @@ export default function HomePage() {
                                 'https://gcgc-team-management-system-staging.up.railway.app/auth/signin';
             window.location.href = `${gcgcLoginUrl}?callbackUrl=${encodeURIComponent(window.location.href)}`;
           }
-        } else if (!currentAuthState && ssoAttempted) {
-          // No GCGC session found, redirect to GCGC login
+        } else {
+          // No GCGC session found, redirect to GCGC login immediately
           console.log('🔐 SSO: No GCGC session found, redirecting to GCGC login');
           const gcgcLoginUrl = process.env.NEXT_PUBLIC_GCGC_LOGIN_URL ||
                               'https://gcgc-team-management-system-staging.up.railway.app/auth/signin';
           window.location.href = `${gcgcLoginUrl}?callbackUrl=${encodeURIComponent(window.location.href)}`;
         }
+      } else {
+        // User is already authenticated in TMS, redirect to chats
+        console.log('✅ Already authenticated, redirecting to chats...');
+        router.push('/chats');
       }
     };
 
     initializeAuth();
-  }, [checkAuth, autoLoginFromGCGC, router, ssoAttempted]);
-
-  useEffect(() => {
-    // Redirect based on authentication state (only if SSO wasn't attempted or completed)
-    if (!isLoading && ssoAttempted) {
-      if (isAuthenticated) {
-        router.push('/chats');
-      } else {
-        // No TMS auth and no GCGC session, redirect to GCGC
-        const gcgcLoginUrl = process.env.NEXT_PUBLIC_GCGC_LOGIN_URL ||
-                            'https://gcgc-team-management-system-staging.up.railway.app/auth/signin';
-        window.location.href = `${gcgcLoginUrl}?callbackUrl=${encodeURIComponent(window.location.href)}`;
-      }
-    }
-  }, [isAuthenticated, isLoading, router, ssoAttempted]);
+  }, [checkAuth, autoLoginFromGCGC, router]);
 
   // Show loading while checking auth or attempting SSO
   if (isLoading || !ssoAttempted) {
