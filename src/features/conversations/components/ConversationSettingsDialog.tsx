@@ -22,6 +22,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useConversationActions } from '../hooks/useConversationActions';
 import { useConversationEvents } from '../hooks/useConversationEvents';
+import { useConversation } from '../hooks/useConversation';
 import { useUserSearch } from '@/features/users/hooks/useUserSearch';
 import type { Conversation } from '@/types/conversation';
 import toast from 'react-hot-toast';
@@ -57,11 +58,30 @@ export default function ConversationSettingsDialog({
 
   const { query, results, isSearching, search, clearSearch } = useUserSearch();
 
+  // Fetch live conversation data that auto-refreshes
+  const { conversation: liveConversation, refresh } = useConversation(conversation.id, {
+    autoLoad: true
+  });
+
+  // Use live data if available, fallback to prop
+  const currentConversation = liveConversation || conversation;
+
   // Listen for real-time conversation updates (member_added, member_removed, member_left, conversation_updated)
   useConversationEvents({
     conversationId: conversation.id,
     showNotifications: false  // Avoid duplicate toasts - we show our own in action handlers
   });
+
+  // Refresh conversation data when WebSocket events occur
+  useEffect(() => {
+    // The useConversationEvents hook triggers query invalidation
+    // We need to manually refresh since we're using a state-based hook
+    const refreshInterval = setInterval(() => {
+      refresh();
+    }, 1000); // Check for updates every second
+
+    return () => clearInterval(refreshInterval);
+  }, [refresh]);
 
   useEffect(() => {
     setConversationName(conversation.name || '');
@@ -146,8 +166,8 @@ export default function ConversationSettingsDialog({
     });
   };
 
-  const isGroup = conversation.type === 'group';
-  const members = conversation.members || [];
+  const isGroup = currentConversation.type === 'group';
+  const members = currentConversation.members || [];
   const currentUserIsMember = members.some(m => m.userId === currentUserId);
   const currentUserMember = members.find(m => m.userId === currentUserId);
   const currentUserIsAdmin = currentUserMember?.role === 'admin';
@@ -340,6 +360,8 @@ export default function ConversationSettingsDialog({
                   <div className="p-2">
                     {members.map((member) => {
                       const isCurrentUser = member.userId === currentUserId;
+                      const displayName = member.user?.name || member.user?.email || member.userId;
+                      const userImage = member.user?.image;
 
                       return (
                         <div
@@ -348,14 +370,14 @@ export default function ConversationSettingsDialog({
                         >
                           <div className="flex items-center gap-3">
                             <Avatar className="w-10 h-10">
-                              <AvatarImage src={undefined} />
+                              <AvatarImage src={userImage} />
                               <AvatarFallback className="bg-viber-purple text-white">
-                                {getInitials(member.userId)}
+                                {getInitials(displayName)}
                               </AvatarFallback>
                             </Avatar>
                             <div>
                               <div className="font-medium text-sm">
-                                {member.userId}
+                                {displayName}
                                 {isCurrentUser && ' (You)'}
                               </div>
                               <div className="text-xs text-gray-500 capitalize">
@@ -368,7 +390,7 @@ export default function ConversationSettingsDialog({
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleRemoveMember(member.userId, member.userId)}
+                              onClick={() => handleRemoveMember(member.userId, displayName)}
                               disabled={loading}
                               className="text-red-600 hover:text-red-700 hover:bg-red-50"
                             >
