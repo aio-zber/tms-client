@@ -31,6 +31,15 @@ export interface ConversationMember {
   role: ConversationMemberRole;
   joinedAt: string;
   lastReadAt?: string;
+  user?: {
+    id: string;
+    tmsUserId: string;
+    name?: string;
+    firstName?: string;
+    lastName?: string;
+    email: string;
+    image?: string;
+  };
 }
 
 export interface ConversationSettings {
