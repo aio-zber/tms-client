@@ -137,8 +137,8 @@ class UserService {
       // Transform TMS users to UserSearchResult format
       // Note: TMS users don't have local UUIDs yet - they'll be created when a conversation starts
       return tmsUsers.map((tmsUser) => ({
-        id: tmsUser.id, // TMS user ID (will be synced to backend when conversation is created)
-        tmsUserId: tmsUser.id,
+        id: tmsUser.tmsUserId || tmsUser.id, // Use TMS user ID (from backend's serialization_alias)
+        tmsUserId: tmsUser.tmsUserId || tmsUser.id, // TMS user ID (will be synced to backend when conversation is created)
         email: tmsUser.email,
         username: tmsUser.username,
         name: tmsUser.displayName || tmsUser.name || `${tmsUser.firstName || ''} ${tmsUser.lastName || ''}`.trim() || tmsUser.email,
