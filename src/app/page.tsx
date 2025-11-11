@@ -7,7 +7,7 @@ import { authService } from '@/features/auth/services/authService';
 
 export default function HomePage() {
   const router = useRouter();
-  const { isAuthenticated, isLoading, checkAuth, autoLoginFromGCGC } = useAuthStore();
+  const { isLoading, checkAuth, autoLoginFromGCGC } = useAuthStore();
   const [ssoAttempted, setSsoAttempted] = useState(false);
 
   useEffect(() => {
