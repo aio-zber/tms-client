@@ -17,6 +17,7 @@ interface AuthState {
 
   // Actions
   login: (credentials: LoginCredentials) => Promise<void>;
+  autoLoginFromGCGC: () => Promise<void>;
   logout: () => void;
   setToken: (token: string | null) => void;
   checkAuth: () => Promise<void>;
@@ -79,6 +80,55 @@ export const useAuthStore = create<AuthState>()(
             error instanceof AuthError
               ? error.message
               : 'Login failed. Please try again.';
+
+          set({
+            token: null,
+            isAuthenticated: false,
+            isLoading: false,
+            error: errorMessage,
+          });
+
+          throw error;
+        }
+      },
+
+      /**
+       * Auto-login from GCGC session (SSO).
+       * Detects GCGC session cookie and exchanges for TMS JWT.
+       */
+      autoLoginFromGCGC: async () => {
+        set({ isLoading: true, error: null });
+
+        try {
+          console.log('🔐 SSO: Starting auto-login from GCGC...');
+
+          // Call auto-login method
+          await authService.autoLoginFromGCGC();
+
+          // Set session state in store
+          set({
+            token: 'session-active',
+            isAuthenticated: true,
+            isLoading: false,
+            error: null,
+          });
+
+          console.log('✅ SSO: Auto-login successful');
+
+          // Fetch current user data
+          try {
+            await userService.getCurrentUser();
+          } catch (userError) {
+            console.error('SSO: Failed to fetch user after auto-login:', userError);
+            // Continue anyway - user data will be fetched on next request
+          }
+        } catch (error) {
+          console.error('❌ SSO: Auto-login error:', error);
+
+          const errorMessage =
+            error instanceof AuthError
+              ? error.message
+              : 'SSO authentication failed. Please try logging in again.';
 
           set({
             token: null,

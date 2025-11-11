@@ -99,6 +99,78 @@ class AuthService {
   }
 
   /**
+   * Auto-login using GCGC NextAuth session token (SSO).
+   * Called when GCGC session is detected but TMS is not logged in.
+   * @returns User session info
+   */
+  async autoLoginFromGCGC(): Promise<LoginResponse> {
+    try {
+      console.log('🔐 SSO: Attempting auto-login from GCGC session...');
+
+      // Extract GCGC NextAuth session token from cookies
+      const gcgcSessionToken = this.extractSessionToken();
+
+      if (!gcgcSessionToken) {
+        console.error('❌ SSO: No GCGC session token found');
+        throw new AuthError('No GCGC session found', 401);
+      }
+
+      console.log('✅ SSO: GCGC session token detected');
+
+      // Exchange GCGC session token for TMS JWT via SSO endpoint
+      const apiBaseUrl = getApiBaseUrl();
+      const response = await fetch(`${apiBaseUrl}/auth/login/sso`, {
+        method: 'POST',
+        headers: {
+          'X-GCGC-Session-Token': gcgcSessionToken,
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.detail?.message || errorData.message || 'SSO authentication failed';
+        console.error('❌ SSO: Authentication failed:', errorMessage);
+        throw new AuthError(errorMessage, response.status);
+      }
+
+      const data = await response.json();
+      console.log('✅ SSO: Authentication successful');
+
+      // Extract JWT token and user data from TMS-Server response
+      const jwtToken = data.token;
+      const userData = data.user;
+
+      // Store JWT token in localStorage for API requests
+      if (typeof window !== 'undefined' && jwtToken) {
+        localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, jwtToken);
+        console.log('✅ SSO: JWT token stored');
+      }
+
+      // Store session indicator
+      this.setSessionActive(true);
+
+      return {
+        success: true,
+        user: {
+          id: userData.tms_user_id || userData.id,
+          email: userData.email,
+          name: userData.display_name || userData.name || `${userData.first_name || ''} ${userData.last_name || ''}`.trim() || userData.username || 'User',
+          role: userData.role || 'MEMBER'
+        }
+      };
+
+    } catch (error) {
+      if (error instanceof AuthError) {
+        throw error;
+      }
+      console.error('❌ SSO: Auto-login error:', error);
+      throw new AuthError('SSO authentication failed. Please try logging in again.');
+    }
+  }
+
+  /**
    * Logout user.
    * Clears session and stored data.
    */
@@ -224,7 +296,7 @@ class AuthService {
    * - next-auth.session-token (production)
    * - __Secure-next-auth.session-token (secure)
    */
-  private extractSessionToken(): string | null {
+  extractSessionToken(): string | null {
     if (typeof document === 'undefined') return null;
 
     const cookies = document.cookie.split(';');

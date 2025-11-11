@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -20,6 +20,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { useAuth } from '@/features/auth';
+import { authService } from '@/features/auth/services/authService';
 
 // Form validation schema
 const loginSchema = z.object({
@@ -36,6 +37,28 @@ export default function LoginPage() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const { login, isLoading, error, clearError } = useAuth(false);
+
+  const [showEmergencyLogin, setShowEmergencyLogin] = useState(false);
+
+  // Check for GCGC session on mount - redirect if already logged in
+  useEffect(() => {
+    const gcgcToken = authService.extractSessionToken();
+    if (gcgcToken) {
+      console.log('🔐 SSO: GCGC session detected on login page, redirecting to root for auto-login...');
+      router.push('/');
+    } else {
+      // No GCGC session, redirect to GCGC login
+      const redirectToGCGC = () => {
+        const gcgcLoginUrl = process.env.NEXT_PUBLIC_GCGC_LOGIN_URL ||
+                            'https://gcgc-team-management-system-staging.up.railway.app/auth/signin';
+        window.location.href = `${gcgcLoginUrl}?callbackUrl=${encodeURIComponent(window.location.origin)}`;
+      };
+
+      // Give a brief moment for user to see the page, then redirect
+      const timer = setTimeout(redirectToGCGC, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [router]);
 
   const {
     register,
@@ -80,16 +103,62 @@ export default function LoginPage() {
     }
   };
 
+  // If emergency login not shown, display redirect message
+  if (!showEmergencyLogin) {
+    return (
+      <>
+        <Toaster position="top-center" />
+        <Card className="shadow-xl border-gray-200 max-w-md">
+          <CardHeader className="space-y-4 text-center">
+            <div className="mx-auto w-16 h-16 bg-viber-purple rounded-full flex items-center justify-center">
+              <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <CardTitle className="text-2xl font-bold">
+              Redirecting to GCGC Login
+            </CardTitle>
+            <CardDescription className="text-base">
+              TMS is part of the GCGC Team Management System.
+              <br />
+              You need to login through GCGC to access TMS.
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent className="space-y-4">
+            <div className="flex justify-center">
+              <div className="animate-spin w-12 h-12 border-4 border-viber-purple border-t-transparent rounded-full"></div>
+            </div>
+
+            <p className="text-center text-sm text-gray-600">
+              Redirecting you to GCGC login...
+            </p>
+
+            <div className="pt-4 border-t">
+              <button
+                onClick={() => setShowEmergencyLogin(true)}
+                className="w-full text-sm text-gray-500 hover:text-gray-700 underline"
+              >
+                Emergency login (for troubleshooting only)
+              </button>
+            </div>
+          </CardContent>
+        </Card>
+      </>
+    );
+  }
+
+  // Emergency login form (fallback)
   return (
     <>
       <Toaster position="top-center" />
       <Card className="shadow-xl border-gray-200">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center">
-            Welcome Back
+          <CardTitle className="text-2xl font-bold text-center text-amber-600">
+            ⚠️ Emergency Login
           </CardTitle>
           <CardDescription className="text-center">
-            Enter your credentials to access your account
+            This is for troubleshooting only. Please use GCGC login normally.
           </CardDescription>
         </CardHeader>
 
