@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 
 const TMS_SERVER_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') ||
                        'https://tms-server-staging.up.railway.app';
 
-export default function HomePage() {
+function HomePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isLoading, checkAuth } = useAuthStore();
@@ -107,4 +107,19 @@ export default function HomePage() {
   }
 
   return null;
+}
+
+export default function HomePage() {
+  return (
+    <Suspense fallback={
+      <div className="h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin w-12 h-12 border-4 border-viber-purple border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-gray-600 text-sm">Loading...</p>
+        </div>
+      </div>
+    }>
+      <HomePageContent />
+    </Suspense>
+  );
 }
