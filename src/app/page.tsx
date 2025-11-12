@@ -80,8 +80,8 @@ function HomePageContent() {
 
       // Redirect to TMS-Server SSO check endpoint
       // TMS-Server will read GCGC cookies and handle the flow
-      const redirectUri = encodeURIComponent(window.location.origin);
-      const ssoCheckUrl = `${TMS_SERVER_URL}/api/v1/auth/sso/check?redirect_uri=${redirectUri}`;
+      // Note: redirect_uri is hardcoded on server side for security (prevents open redirect attacks)
+      const ssoCheckUrl = `${TMS_SERVER_URL}/api/v1/auth/sso/check`;
 
       console.log(`🔐 SSO: Redirecting to ${ssoCheckUrl}`);
       window.location.href = ssoCheckUrl;
