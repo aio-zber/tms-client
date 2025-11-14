@@ -8,6 +8,8 @@ const TMS_SERVER_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') |
                        'https://tms-server-staging.up.railway.app';
 const GCGC_URL = process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL ||
                  'https://gcgc-team-management-system-staging.up.railway.app';
+const TMS_CLIENT_URL = process.env.NEXT_PUBLIC_TMS_CLIENT_URL ||
+                       'https://tms-client-staging.up.railway.app';
 
 function HomePageContent() {
   const router = useRouter();
@@ -80,7 +82,7 @@ function HomePageContent() {
       // Step 3: Not authenticated - redirect to GCGC SSO endpoint
       // GCGC SSO will detect if user is already logged in and auto-redirect back with token
       console.log('🔐 SSO: Not authenticated, initiating SSO with GCGC...');
-      const callbackUrl = `${window.location.origin}/auth/callback`;
+      const callbackUrl = `${TMS_CLIENT_URL}/auth/callback`;
       const gcgcSsoUrl = `${GCGC_URL}/api/v1/auth/sso?callbackUrl=${encodeURIComponent(callbackUrl)}`;
       console.log('🔐 SSO: Redirecting to GCGC SSO:', gcgcSsoUrl);
       window.location.href = gcgcSsoUrl;
