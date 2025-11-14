@@ -4,7 +4,6 @@
  */
 
 import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
 
 /**
  * Middleware function - runs on every request
