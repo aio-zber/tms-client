@@ -1,15 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 const TMS_SERVER_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') ||
                        'https://tms-server-staging.up.railway.app';
-const GCGC_URL = process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL ||
-                 'https://gcgc-team-management-system-staging.up.railway.app';
 
-export default function AuthCallback() {
+function AuthCallbackContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -17,34 +16,15 @@ export default function AuthCallback() {
       try {
         console.log('🔐 SSO Callback: Starting authentication...');
 
-        // Step 1: Fetch token from GCGC
-        // This is a first-party request to GCGC, so cookies will be sent
-        console.log('🔐 SSO Callback: Fetching token from GCGC...');
-        const tokenResponse = await fetch(
-          `${GCGC_URL}/api/v1/auth/token`,
-          {
-            credentials: 'include',
-            headers: {
-              'Accept': 'application/json',
-            }
-          }
-        );
-
-        if (!tokenResponse.ok) {
-          const errorText = await tokenResponse.text();
-          console.error('❌ SSO Callback: Failed to fetch GCGC token:', errorText);
-          throw new Error(`Failed to fetch GCGC token: ${tokenResponse.status}`);
-        }
-
-        const tokenData = await tokenResponse.json();
-        const gcgcToken = tokenData.token;
+        // Step 1: Get token from URL query parameter
+        const gcgcToken = searchParams?.get('gcgc_token');
 
         if (!gcgcToken) {
-          console.error('❌ SSO Callback: No token in GCGC response:', tokenData);
+          console.error('❌ SSO Callback: No token in URL parameters');
           throw new Error('No token received from GCGC');
         }
 
-        console.log('✅ SSO Callback: GCGC token received');
+        console.log('✅ SSO Callback: GCGC token received from URL');
 
         // Step 2: Login to TMS-Server with GCGC token
         console.log('🔐 SSO Callback: Logging into TMS-Server...');
@@ -96,7 +76,7 @@ export default function AuthCallback() {
     }
 
     handleCallback();
-  }, [router]);
+  }, [router, searchParams]);
 
   return (
     <div className="h-screen flex items-center justify-center bg-gray-50">
@@ -121,5 +101,20 @@ export default function AuthCallback() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function AuthCallback() {
+  return (
+    <Suspense fallback={
+      <div className="h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin w-12 h-12 border-4 border-viber-purple border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-gray-900 font-medium mb-2">Loading...</p>
+        </div>
+      </div>
+    }>
+      <AuthCallbackContent />
+    </Suspense>
   );
 }
