@@ -1,6 +1,6 @@
 /**
- * Next.js Middleware - Simplified
- * Redirects protected routes to root page for SSO handling
+ * Next.js Middleware - Minimal
+ * Only handles static file optimization, auth handled client-side
  */
 
 import { NextResponse } from 'next/server';
@@ -8,35 +8,12 @@ import type { NextRequest } from 'next/server';
 
 /**
  * Middleware function - runs on every request
+ * Authentication is handled client-side in page components since
+ * middleware cannot access localStorage
  */
 export function middleware(request: NextRequest) {
-  const pathname = request.nextUrl.pathname;
-
-  // Skip middleware for Next.js internal routes and API routes
-  if (
-    pathname.startsWith('/_next') ||
-    pathname.startsWith('/api') ||
-    pathname.startsWith('/auth/callback') || // Let callback page handle token
-    pathname.includes('.')
-  ) {
-    return NextResponse.next();
-  }
-
-  // Define protected routes
-  const isProtectedRoute =
-    pathname.startsWith('/chats') ||
-    pathname.startsWith('/calls') ||
-    pathname.startsWith('/settings');
-
-  // For protected routes, check if user has TMS auth token
-  // If not, redirect to root page which will handle SSO flow
-  if (isProtectedRoute) {
-    // Redirect to root page - it will handle SSO authentication
-    // Root page will check for TMS auth, and if missing, initiate GCGC SSO
-    return NextResponse.redirect(new URL('/', request.url));
-  }
-
-  // For root page and other routes, continue normally
+  // Let all requests through - authentication is handled client-side
+  // Each protected page component checks for auth token and redirects if needed
   return NextResponse.next();
 }
 
