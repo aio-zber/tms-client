@@ -77,16 +77,54 @@ function HomePageContent() {
         return;
       }
 
-      // Step 3: Not authenticated - redirect directly to GCGC login
-      console.log('🔐 SSO: Not authenticated, redirecting to GCGC login...');
+      // Step 3: Not authenticated - try to fetch GCGC token directly
+      console.log('🔐 SSO: Not authenticated, checking GCGC session...');
 
-      // Redirect directly to GCGC with callback to TMS-Client's auth callback handler
-      // GCGC will auto-detect if user is already logged in and skip login page
-      const callbackUrl = encodeURIComponent(`${window.location.origin}/auth/callback`);
-      const gcgcLoginUrl = `${GCGC_URL}/auth/signin?callbackUrl=${callbackUrl}`;
+      try {
+        // Try to fetch token from GCGC (if user is logged in, this will work)
+        const tokenResponse = await fetch(`${GCGC_URL}/api/v1/auth/token`, {
+          credentials: 'include',
+          headers: { 'Accept': 'application/json' }
+        });
 
-      console.log(`🔐 SSO: Redirecting to GCGC: ${gcgcLoginUrl}`);
-      window.location.href = gcgcLoginUrl;
+        if (tokenResponse.ok) {
+          // User is logged into GCGC! Get token and login to TMS
+          console.log('✅ SSO: User logged into GCGC, fetching token...');
+          const tokenData = await tokenResponse.json();
+          const gcgcToken = tokenData.token;
+
+          if (gcgcToken) {
+            console.log('🔐 SSO: Logging into TMS with GCGC token...');
+            // Login to TMS-Server
+            const tmsResponse = await fetch(`${TMS_SERVER_URL}/api/v1/auth/login`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token: gcgcToken }),
+            });
+
+            if (tmsResponse.ok) {
+              const tmsData = await tmsResponse.json();
+              localStorage.setItem('auth_token', tmsData.token);
+              console.log('✅ SSO: Auto-login successful, redirecting to /chats...');
+              router.push('/chats');
+              setProcessing(false);
+              return;
+            }
+          }
+        }
+
+        // If we get here, user is NOT logged into GCGC - redirect to GCGC login
+        console.log('🔐 SSO: Not logged into GCGC, redirecting to login...');
+        const callbackUrl = encodeURIComponent(`${window.location.origin}/auth/callback`);
+        const gcgcLoginUrl = `${GCGC_URL}/auth/signin?callbackUrl=${callbackUrl}`;
+        window.location.href = gcgcLoginUrl;
+      } catch (error) {
+        console.error('❌ SSO: Error checking GCGC session:', error);
+        // On error, redirect to GCGC login
+        const callbackUrl = encodeURIComponent(`${window.location.origin}/auth/callback`);
+        const gcgcLoginUrl = `${GCGC_URL}/auth/signin?callbackUrl=${callbackUrl}`;
+        window.location.href = gcgcLoginUrl;
+      }
     };
 
     initializeAuth();
