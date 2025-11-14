@@ -2,6 +2,7 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useAuthStore } from '@/store/authStore';
 
 const TMS_SERVER_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') ||
                        'https://tms-server-staging.up.railway.app';
@@ -10,6 +11,7 @@ function AuthCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
+  const { setToken } = useAuthStore();
 
   useEffect(() => {
     async function handleCallback() {
@@ -56,9 +58,11 @@ function AuthCallbackContent() {
 
         console.log('✅ SSO Callback: TMS token received');
 
-        // Step 3: Store TMS token
+        // Step 3: Store TMS token and update auth store
         localStorage.setItem('auth_token', tmsToken);
-        console.log('✅ SSO Callback: Token stored in localStorage');
+        localStorage.setItem('tms_session_active', 'true');
+        setToken(tmsToken); // Update auth store state immediately
+        console.log('✅ SSO Callback: Token stored and auth state updated');
 
         // Step 4: Redirect to /chats
         console.log('🔐 SSO Callback: Redirecting to /chats...');
