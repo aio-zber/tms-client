@@ -11,7 +11,7 @@ import type { NextRequest } from 'next/server';
  * Authentication is handled client-side in page components since
  * middleware cannot access localStorage
  */
-export function middleware(request: NextRequest) {
+export function middleware() {
   // Let all requests through - authentication is handled client-side
   // Each protected page component checks for auth token and redirects if needed
   return NextResponse.next();
