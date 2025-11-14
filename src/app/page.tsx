@@ -6,6 +6,8 @@ import { useAuthStore } from '@/store/authStore';
 
 const TMS_SERVER_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') ||
                        'https://tms-server-staging.up.railway.app';
+const GCGC_URL = process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL ||
+                 'https://gcgc-team-management-system-staging.up.railway.app';
 
 function HomePageContent() {
   const router = useRouter();
@@ -75,16 +77,16 @@ function HomePageContent() {
         return;
       }
 
-      // Step 3: Not authenticated - initiate SSO flow via TMS-Server
-      console.log('🔐 SSO: Not authenticated, initiating server-to-server SSO...');
+      // Step 3: Not authenticated - redirect directly to GCGC login
+      console.log('🔐 SSO: Not authenticated, redirecting to GCGC login...');
 
-      // Redirect to TMS-Server SSO check endpoint
-      // TMS-Server will read GCGC cookies and handle the flow
-      // Note: redirect_uri is hardcoded on server side for security (prevents open redirect attacks)
-      const ssoCheckUrl = `${TMS_SERVER_URL}/api/v1/auth/sso/check`;
+      // Redirect directly to GCGC with callback to TMS-Client's auth callback handler
+      // GCGC will auto-detect if user is already logged in and skip login page
+      const callbackUrl = encodeURIComponent(`${window.location.origin}/auth/callback`);
+      const gcgcLoginUrl = `${GCGC_URL}/auth/signin?callbackUrl=${callbackUrl}`;
 
-      console.log(`🔐 SSO: Redirecting to ${ssoCheckUrl}`);
-      window.location.href = ssoCheckUrl;
+      console.log(`🔐 SSO: Redirecting to GCGC: ${gcgcLoginUrl}`);
+      window.location.href = gcgcLoginUrl;
     };
 
     initializeAuth();
