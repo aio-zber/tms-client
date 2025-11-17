@@ -158,7 +158,6 @@ export function useSessionSync() {
     broadcastSessionChange('LOGOUT', oldUserId || undefined);
 
     // Redirect to SSO
-    const currentPath = window.location.pathname;
     const redirectUrl = `${TMS_SERVER_URL}/api/v1/auth/sso/check`;
 
     console.log('[Session Sync] Redirecting to SSO');
@@ -257,6 +256,7 @@ export function useSessionSync() {
         clearInterval(intervalId.current);
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return {
