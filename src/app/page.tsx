@@ -25,6 +25,17 @@ function HomePageContent() {
     const initializeAuth = async () => {
       console.log('🔐 SSO: Initializing authentication...');
 
+      // Clear re-authentication flags if present
+      if (typeof window !== 'undefined') {
+        const isReauth = localStorage.getItem('reauthenticating') === 'true';
+        if (isReauth) {
+          const reason = localStorage.getItem('reauth_reason');
+          console.log('🔐 SSO: Re-authentication flow detected', { reason });
+          localStorage.removeItem('reauthenticating');
+          localStorage.removeItem('reauth_reason');
+        }
+      }
+
       // Step 1: Check if we have an SSO code in URL
       const ssoCode = searchParams?.get('sso_code');
 
@@ -97,15 +108,28 @@ function HomePageContent() {
 
   // Show loading while processing
   if (isLoading || processing) {
+    // Check for re-authentication flags
+    const isReauthenticating = typeof window !== 'undefined' &&
+      localStorage.getItem('reauthenticating') === 'true';
+    const reauthReason = typeof window !== 'undefined' &&
+      localStorage.getItem('reauth_reason');
+
+    // Determine loading message
+    let loadingMessage = 'Checking authentication...';
+
+    if (searchParams?.get('sso_code')) {
+      loadingMessage = 'Completing login...';
+    } else if (isReauthenticating) {
+      loadingMessage = reauthReason === 'user_mismatch'
+        ? 'Switching accounts...'
+        : 'Re-authenticating...';
+    }
+
     return (
       <div className="h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin w-12 h-12 border-4 border-viber-purple border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-gray-600 text-sm">
-            {searchParams?.get('sso_code')
-              ? 'Completing login...'
-              : 'Checking authentication...'}
-          </p>
+          <p className="text-gray-600 text-sm">{loadingMessage}</p>
         </div>
       </div>
     );
