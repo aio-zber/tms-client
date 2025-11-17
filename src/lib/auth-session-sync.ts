@@ -83,11 +83,21 @@ export function useSessionSync() {
       return true;
     }
 
+    // Cross-tab validation coordination: Check if another tab validated recently
+    const lastGlobalValidation = localStorage.getItem('last_validation_timestamp');
+    if (lastGlobalValidation && now - parseInt(lastGlobalValidation) < RATE_LIMIT_WINDOW) {
+      if (DEBUG) console.log('[Session Sync] Another tab validated recently, skipping');
+      return true;
+    }
+
     const currentUserId = localStorage.getItem('current_user_id');
 
     try {
       validationInProgress.current = true;
       lastValidation.current = now;
+
+      // Update global validation timestamp for cross-tab coordination
+      localStorage.setItem('last_validation_timestamp', now.toString());
 
       const startTime = Date.now();
       if (DEBUG) console.log('[Session Sync] Validating session...');
@@ -122,8 +132,8 @@ export function useSessionSync() {
         return false;
       }
 
-      // Check if user changed
-      if (data.user?.tms_user_id && currentUserId && data.user.tms_user_id !== currentUserId) {
+      // Check if user changed - only if current_user_id was already set
+      if (currentUserId && data.user?.tms_user_id && data.user.tms_user_id !== currentUserId) {
         console.log('[Session Sync] User changed - clearing session', {
           oldUserId: currentUserId,
           newUserId: data.user.tms_user_id,
@@ -132,11 +142,11 @@ export function useSessionSync() {
         return false;
       }
 
-      // Update stored user ID if not set or changed (ensures consistency)
-      if (data.user?.tms_user_id && data.user.tms_user_id !== currentUserId) {
+      // Initialize user ID if not set yet (prevents false mismatch on first validation)
+      if (!currentUserId && data.user?.tms_user_id) {
         localStorage.setItem('current_user_id', data.user.tms_user_id);
         if (DEBUG) {
-          console.log('[Session Sync] Updated stored user ID:', data.user.tms_user_id);
+          console.log('[Session Sync] Initialized stored user ID:', data.user.tms_user_id);
         }
       }
 
@@ -245,8 +255,8 @@ export function useSessionSync() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    // 1. Validate on mount
-    validateSession();
+    // 1. Don't validate on mount - let page.tsx handle initial auth check
+    // This prevents race conditions when multiple tabs open simultaneously
 
     // 2. Validate on window focus
     const handleVisibilityChange = () => {
@@ -294,10 +304,18 @@ export function useSessionSync() {
 
       // Also listen for direct token changes
       if (event.key === 'auth_token') {
-        if (!event.newValue) {
-          // Token removed - logout
-          console.log('[Session Sync] Token removed in another tab');
-          clearSession();
+        if (event.oldValue && !event.newValue) {
+          // Token was removed (not just changed) - add grace period to prevent false positives
+          console.log('[Session Sync] Token removed in another tab, verifying...');
+          setTimeout(() => {
+            // Verify token is still missing after grace period
+            if (!localStorage.getItem('auth_token')) {
+              console.log('[Session Sync] Token still missing after grace period - logging out');
+              clearSession();
+            } else {
+              if (DEBUG) console.log('[Session Sync] Token was restored - false alarm');
+            }
+          }, 500); // 500ms grace period
         }
       }
     };
