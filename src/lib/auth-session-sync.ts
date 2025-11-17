@@ -132,6 +132,14 @@ export function useSessionSync() {
         return false;
       }
 
+      // Update stored user ID if not set or changed (ensures consistency)
+      if (data.user?.tms_user_id && data.user.tms_user_id !== currentUserId) {
+        localStorage.setItem('current_user_id', data.user.tms_user_id);
+        if (DEBUG) {
+          console.log('[Session Sync] Updated stored user ID:', data.user.tms_user_id);
+        }
+      }
+
       if (DEBUG) {
         console.log('[Session Sync] Session valid', {
           userId: data.user?.tms_user_id,
