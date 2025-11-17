@@ -16,6 +16,10 @@ import { useEffect, useRef } from 'react';
 
 const TMS_SERVER_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') ||
                        'https://tms-server-staging.up.railway.app';
+const GCGC_URL = process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL ||
+                 'https://gcgc-team-management-system-staging.up.railway.app';
+const TMS_CLIENT_URL = process.env.NEXT_PUBLIC_TMS_CLIENT_URL ||
+                       'https://tms-client-staging.up.railway.app';
 
 const VALIDATION_INTERVAL = 60000; // 60 seconds
 const RATE_LIMIT_WINDOW = 5000; // 5 seconds
@@ -100,7 +104,7 @@ export function useSessionSync() {
 
       if (response.status === 401) {
         console.log('[Session Sync] Token invalid (401) - clearing session');
-        clearSession();
+        clearSession('invalid_token');
         return false;
       }
 
@@ -114,7 +118,7 @@ export function useSessionSync() {
 
       if (!data.valid) {
         console.log('[Session Sync] Session invalid - clearing session');
-        clearSession();
+        clearSession('invalid_token');
         return false;
       }
 
@@ -124,8 +128,7 @@ export function useSessionSync() {
           oldUserId: currentUserId,
           newUserId: data.user.tms_user_id,
         });
-        clearSession();
-        broadcastSessionChange('USER_CHANGED', data.user.tms_user_id);
+        clearSession('user_mismatch');
         return false;
       }
 
@@ -148,11 +151,12 @@ export function useSessionSync() {
 
   /**
    * Clear local session and redirect to SSO
+   * @param reason - Why the session is being cleared
    */
-  const clearSession = () => {
+  const clearSession = (reason?: 'invalid_token' | 'user_mismatch' | 'logout') => {
     if (typeof window === 'undefined') return;
 
-    console.log('[Session Sync] Clearing local session');
+    console.log('[Session Sync] Clearing local session', { reason });
 
     const oldUserId = localStorage.getItem('current_user_id');
 
@@ -161,23 +165,50 @@ export function useSessionSync() {
     localStorage.removeItem('current_user_id');
     localStorage.removeItem('tms_session_active');
 
-    // Broadcast logout to other tabs
-    broadcastSessionChange('LOGOUT', oldUserId || undefined);
-
     // Don't redirect during SSO flow - let page.tsx handle it
     const url = new URL(window.location.href);
     const hasSsoCode = url.searchParams.has('sso_code') || url.searchParams.has('gcgc_token');
-    const isRootPage = window.location.pathname === '/';
     const isCallbackPage = window.location.pathname === '/auth/callback';
 
-    if (hasSsoCode || isCallbackPage || isRootPage) {
+    if (hasSsoCode || isCallbackPage) {
       console.log('[Session Sync] SSO flow detected, not redirecting (page will handle it)');
       return; // Let the main page flow handle redirect
     }
 
-    // Redirect to SSO only if not already in SSO flow
+    // For invalid token or user mismatch: trigger automatic re-authentication
+    if (reason === 'invalid_token' || reason === 'user_mismatch') {
+      // Set flags for loading state
+      localStorage.setItem('reauthenticating', 'true');
+      localStorage.setItem('reauth_reason', reason);
+
+      // Broadcast to other tabs
+      broadcastSessionChange(
+        reason === 'user_mismatch' ? 'USER_CHANGED' : 'LOGOUT',
+        oldUserId || undefined
+      );
+
+      // Redirect to GCGC SSO for automatic re-authentication
+      const callbackUrl = `${TMS_CLIENT_URL}/auth/callback`;
+      const gcgcSsoUrl = `${GCGC_URL}/api/v1/auth/sso?callbackUrl=${encodeURIComponent(callbackUrl)}`;
+
+      console.log('[Session Sync] Redirecting to GCGC SSO for re-authentication');
+      window.location.href = gcgcSsoUrl;
+      return;
+    }
+
+    // For root page: let page.tsx handle the flow
+    const isRootPage = window.location.pathname === '/';
+    if (isRootPage) {
+      console.log('[Session Sync] Root page detected, letting page.tsx handle flow');
+      return;
+    }
+
+    // Broadcast logout to other tabs
+    broadcastSessionChange('LOGOUT', oldUserId || undefined);
+
+    // Default: redirect to SSO check for other scenarios
     const redirectUrl = `${TMS_SERVER_URL}/api/v1/auth/sso/check`;
-    console.log('[Session Sync] Redirecting to SSO');
+    console.log('[Session Sync] Redirecting to SSO check');
     window.location.href = redirectUrl;
   };
 
