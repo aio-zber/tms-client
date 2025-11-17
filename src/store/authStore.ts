@@ -205,7 +205,7 @@ export const useAuthStore = create<AuthState>()(
                 ? localStorage.getItem('current_user_id')
                 : null;
 
-              if (storedUserId && userData?.tms_user_id && userData.tms_user_id !== storedUserId) {
+              if (storedUserId && userData?.tmsUserId && userData.tmsUserId !== storedUserId) {
                 console.log('Auth check: User ID changed, clearing session');
                 await authService.logout();
                 set({
@@ -217,8 +217,8 @@ export const useAuthStore = create<AuthState>()(
               }
 
               // Update stored user ID if needed
-              if (typeof window !== 'undefined' && userData?.tms_user_id) {
-                localStorage.setItem('current_user_id', userData.tms_user_id);
+              if (typeof window !== 'undefined' && userData?.tmsUserId) {
+                localStorage.setItem('current_user_id', userData.tmsUserId);
               }
             } catch {
               // User data fetch failed, but session is valid
