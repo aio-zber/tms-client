@@ -198,19 +198,38 @@ export const useAuthStore = create<AuthState>()(
           const isValid = await authService.validateSession();
 
           if (isValid) {
+            // Additional check: Verify user ID hasn't changed
+            try {
+              const userData = await userService.getCurrentUser();
+              const storedUserId = typeof window !== 'undefined'
+                ? localStorage.getItem('current_user_id')
+                : null;
+
+              if (storedUserId && userData?.tms_user_id && userData.tms_user_id !== storedUserId) {
+                console.log('Auth check: User ID changed, clearing session');
+                await authService.logout();
+                set({
+                  token: null,
+                  isAuthenticated: false,
+                  isLoading: false,
+                });
+                return;
+              }
+
+              // Update stored user ID if needed
+              if (typeof window !== 'undefined' && userData?.tms_user_id) {
+                localStorage.setItem('current_user_id', userData.tms_user_id);
+              }
+            } catch {
+              // User data fetch failed, but session is valid
+              // Continue with authentication
+            }
+
             set({
               token: 'session-active',
               isAuthenticated: true,
               isLoading: false,
             });
-
-            // Fetch user data if authenticated
-            try {
-              await userService.getCurrentUser();
-            } catch {
-              // User data fetch failed, but session is valid
-              // Continue with authentication
-            }
           } else {
             // Session is invalid, clear everything
             await authService.logout();
