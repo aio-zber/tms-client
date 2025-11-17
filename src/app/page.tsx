@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
+import { useSessionSync } from '@/lib/auth-session-sync';
 
 const TMS_SERVER_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') ||
                        'https://tms-server-staging.up.railway.app';
@@ -16,6 +17,9 @@ function HomePageContent() {
   const searchParams = useSearchParams();
   const { isLoading, checkAuth } = useAuthStore();
   const [processing, setProcessing] = useState(true);
+
+  // Enable session synchronization with GCGC
+  useSessionSync();
 
   useEffect(() => {
     const initializeAuth = async () => {
