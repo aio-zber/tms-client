@@ -58,15 +58,15 @@ function AuthCallbackContent() {
 
         console.log('✅ SSO Callback: TMS token received');
 
-        // Step 3: Store TMS token, user ID, and update auth store
-        localStorage.setItem('auth_token', tmsToken);
-        localStorage.setItem('tms_session_active', 'true');
-
-        // Store user ID for session validation
+        // Step 3: Store user ID BEFORE token (atomic initialization to prevent race conditions)
         if (tmsData.user?.tms_user_id) {
           localStorage.setItem('current_user_id', tmsData.user.tms_user_id);
           console.log('✅ SSO Callback: User ID stored:', tmsData.user.tms_user_id);
         }
+
+        // Then store token and session flag
+        localStorage.setItem('auth_token', tmsToken);
+        localStorage.setItem('tms_session_active', 'true');
 
         setToken(tmsToken); // Update auth store state immediately
         console.log('✅ SSO Callback: Token stored and auth state updated');

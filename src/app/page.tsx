@@ -60,16 +60,16 @@ function HomePageContent() {
           const data = await response.json();
           console.log('✅ SSO: Code exchange successful');
 
-          // Store token and user ID in localStorage
+          // Store user ID BEFORE token (atomic initialization to prevent race conditions)
+          if (data.user?.tms_user_id) {
+            localStorage.setItem('current_user_id', data.user.tms_user_id);
+            console.log('✅ SSO: User ID stored:', data.user.tms_user_id);
+          }
+
+          // Then store token and session flag
           if (data.token) {
             localStorage.setItem('auth_token', data.token);
             localStorage.setItem('session_active', 'true');
-
-            // Store user ID for session validation
-            if (data.user?.tms_user_id) {
-              localStorage.setItem('current_user_id', data.user.tms_user_id);
-              console.log('✅ SSO: User ID stored:', data.user.tms_user_id);
-            }
           }
 
           // Clear SSO code from URL and redirect to chats
