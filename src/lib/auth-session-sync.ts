@@ -53,6 +53,19 @@ export function useSessionSync() {
       return true;
     }
 
+    // Skip validation during SSO initialization to prevent race conditions
+    const token = localStorage.getItem('auth_token');
+    const url = new URL(window.location.href);
+    const hasSsoCode = url.searchParams.has('sso_code') || url.searchParams.has('gcgc_token');
+    const isRootPage = window.location.pathname === '/';
+    const isCallbackPage = window.location.pathname === '/auth/callback';
+
+    // Don't validate during SSO flow - let page.tsx handle authentication
+    if (!token || hasSsoCode || isCallbackPage || (isRootPage && !token)) {
+      if (DEBUG) console.log('[Session Sync] Skipping validation during SSO flow');
+      return true; // Return true to prevent logout during SSO
+    }
+
     // Prevent concurrent validations
     if (validationInProgress.current) {
       if (DEBUG) console.log('[Session Sync] Validation already in progress, skipping');
@@ -66,13 +79,7 @@ export function useSessionSync() {
       return true;
     }
 
-    const token = localStorage.getItem('auth_token');
     const currentUserId = localStorage.getItem('current_user_id');
-
-    if (!token) {
-      if (DEBUG) console.log('[Session Sync] No token found');
-      return false;
-    }
 
     try {
       validationInProgress.current = true;
@@ -157,9 +164,19 @@ export function useSessionSync() {
     // Broadcast logout to other tabs
     broadcastSessionChange('LOGOUT', oldUserId || undefined);
 
-    // Redirect to SSO
-    const redirectUrl = `${TMS_SERVER_URL}/api/v1/auth/sso/check`;
+    // Don't redirect during SSO flow - let page.tsx handle it
+    const url = new URL(window.location.href);
+    const hasSsoCode = url.searchParams.has('sso_code') || url.searchParams.has('gcgc_token');
+    const isRootPage = window.location.pathname === '/';
+    const isCallbackPage = window.location.pathname === '/auth/callback';
 
+    if (hasSsoCode || isCallbackPage || isRootPage) {
+      console.log('[Session Sync] SSO flow detected, not redirecting (page will handle it)');
+      return; // Let the main page flow handle redirect
+    }
+
+    // Redirect to SSO only if not already in SSO flow
+    const redirectUrl = `${TMS_SERVER_URL}/api/v1/auth/sso/check`;
     console.log('[Session Sync] Redirecting to SSO');
     window.location.href = redirectUrl;
   };
