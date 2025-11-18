@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { useSessionSync } from '@/lib/auth-session-sync';
+import { authService } from '@/features/auth/services/authService';
 
 const TMS_SERVER_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') ||
                        'https://tms-server-staging.up.railway.app';
@@ -86,7 +87,57 @@ function HomePageContent() {
         }
       }
 
-      // Step 2: Check if already authenticated in TMS
+      // Step 2: Validate GCGC session matches TMS session (detect account switches)
+      const gcgcToken = authService.extractSessionToken();
+      const storedUserId = localStorage.getItem('current_user_id');
+
+      if (gcgcToken && storedUserId) {
+        try {
+          console.log('🔐 SSO: Validating GCGC session matches TMS session...');
+          const response = await fetch(`${TMS_SERVER_URL}/api/v1/auth/validate-gcgc-session`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ gcgc_token: gcgcToken }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            const gcgcUserId = data.user?.id;
+
+            // User ID mismatch = account switch detected
+            if (gcgcUserId && gcgcUserId !== storedUserId) {
+              console.log('🔐 SSO: Account switch detected, clearing old session', {
+                oldUserId: storedUserId,
+                newUserId: gcgcUserId,
+              });
+
+              // Clear old session
+              localStorage.removeItem('auth_token');
+              localStorage.removeItem('current_user_id');
+              localStorage.removeItem('tms_session_active');
+              localStorage.removeItem('session_active');
+
+              // Redirect to SSO for fresh authentication with new user
+              const callbackUrl = `${TMS_CLIENT_URL}/auth/callback`;
+              const gcgcSsoUrl = `${GCGC_URL}/api/v1/auth/sso?callbackUrl=${encodeURIComponent(callbackUrl)}`;
+              console.log('🔐 SSO: Redirecting to GCGC SSO for re-authentication...');
+              window.location.href = gcgcSsoUrl;
+              return;
+            } else if (gcgcUserId) {
+              console.log('✅ SSO: GCGC session matches TMS session', { userId: gcgcUserId });
+            }
+          } else {
+            console.warn('⚠️ SSO: GCGC session validation failed, continuing with normal flow');
+          }
+        } catch (error) {
+          console.warn('⚠️ SSO: GCGC session validation error, continuing with normal flow:', error);
+          // Continue with normal flow - don't block users on validation errors
+        }
+      }
+
+      // Step 3: Check if already authenticated in TMS
       console.log('🔐 SSO: Checking TMS authentication...');
       await checkAuth();
 
