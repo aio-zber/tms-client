@@ -3,7 +3,7 @@
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { CenterPanel } from '@/components/layout/CenterPanel';
-import ChatWindow from '@/features/chat/components/ChatWindow';
+import { Chat } from '@/features/chat/components/Chat';
 
 function ChatsContent() {
   const searchParams = useSearchParams();
@@ -33,7 +33,7 @@ function ChatsContent() {
     );
   }
 
-  return <ChatWindow conversationId={conversationId} />;
+  return <Chat conversationId={conversationId} />;
 }
 
 export default function ChatsPage() {
