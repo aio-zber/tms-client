@@ -40,9 +40,12 @@ interface AuthState {
 export const useAuthStore = create<AuthState>()(
   devtools(
     (set, _get: () => AuthState) => ({
-      // Initial state
+      // Initial state - hydrate isAuthenticated from localStorage to prevent redirect on refresh
       token: null,
-      isAuthenticated: false,
+      isAuthenticated: typeof window !== 'undefined'
+        ? (localStorage.getItem('tms_session_active') === 'true' ||
+           localStorage.getItem('session_active') === 'true')
+        : false,
       isLoading: false,
       error: null,
 
