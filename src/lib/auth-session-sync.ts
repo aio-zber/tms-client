@@ -255,8 +255,17 @@ export function useSessionSync() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    // 1. Don't validate on mount - let page.tsx handle initial auth check
-    // This prevents race conditions when multiple tabs open simultaneously
+    // 1. Validate on mount with cross-tab coordination
+    // Only validate if no other tab validated recently (prevents race conditions)
+    const lastGlobalValidation = localStorage.getItem('last_validation_timestamp');
+    const now = Date.now();
+
+    if (!lastGlobalValidation || now - parseInt(lastGlobalValidation) > RATE_LIMIT_WINDOW) {
+      if (DEBUG) console.log('[Session Sync] Mount validation (no recent validation found)');
+      validateSession();
+    } else {
+      if (DEBUG) console.log('[Session Sync] Skipping mount validation (another tab validated recently)');
+    }
 
     // 2. Validate on window focus
     const handleVisibilityChange = () => {
