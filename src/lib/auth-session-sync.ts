@@ -257,10 +257,21 @@ export function useSessionSync() {
 
     // 1. Validate on mount with cross-tab coordination
     // Only validate if no other tab validated recently (prevents race conditions)
+    // Skip validation for authenticated pages to prevent refresh redirects
     const lastGlobalValidation = localStorage.getItem('last_validation_timestamp');
     const now = Date.now();
 
-    if (!lastGlobalValidation || now - parseInt(lastGlobalValidation) > RATE_LIMIT_WINDOW) {
+    // Skip validation on mount for authenticated pages (user already inside app)
+    // This prevents race conditions with layout auth checks during page refreshes
+    const currentPath = window.location.pathname;
+    const isAuthenticatedPage = currentPath.startsWith('/chats') ||
+                                currentPath.startsWith('/settings') ||
+                                currentPath.startsWith('/profile');
+
+    if (isAuthenticatedPage) {
+      if (DEBUG) console.log('[Session Sync] Skipping mount validation on authenticated page:', currentPath);
+      // Validation will still run on focus events and periodic checks
+    } else if (!lastGlobalValidation || now - parseInt(lastGlobalValidation) > RATE_LIMIT_WINDOW) {
       if (DEBUG) console.log('[Session Sync] Mount validation (no recent validation found)');
       validateSession();
     } else {
