@@ -61,10 +61,28 @@ function HomePageContent() {
           const data = await response.json();
           console.log('✅ SSO: Code exchange successful');
 
+          // Detect account switch by comparing old vs new user ID
+          const previousUserId = localStorage.getItem('current_user_id');
+          const newUserId = data.user?.tms_user_id;
+
+          if (previousUserId && newUserId && previousUserId !== newUserId) {
+            console.log('🔐 SSO: Account switch detected, clearing old session', {
+              oldUserId: previousUserId,
+              newUserId: newUserId,
+            });
+
+            // Clear all cached data from previous user to prevent showing stale data
+            localStorage.removeItem('user_data'); // Cached user profile from userService
+            localStorage.removeItem('tms_session_active'); // Old session flag
+            localStorage.removeItem('auth_token'); // Old user's token (will be replaced below)
+
+            console.log('✅ SSO: Old session cleared');
+          }
+
           // Store user ID BEFORE token (atomic initialization to prevent race conditions)
-          if (data.user?.tms_user_id) {
-            localStorage.setItem('current_user_id', data.user.tms_user_id);
-            console.log('✅ SSO: User ID stored:', data.user.tms_user_id);
+          if (newUserId) {
+            localStorage.setItem('current_user_id', newUserId);
+            console.log('✅ SSO: User ID stored:', newUserId);
           }
 
           // Then store token and session flag
