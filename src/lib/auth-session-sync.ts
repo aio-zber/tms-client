@@ -46,6 +46,7 @@ export function useSessionSync() {
   const validationInProgress = useRef(false);
   const lastValidation = useRef(0);
   const intervalId = useRef<NodeJS.Timeout>();
+  const mountTime = useRef<number>(0);
 
   /**
    * Validate session with TMS-Server
@@ -255,6 +256,9 @@ export function useSessionSync() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
+    // Record mount time for grace period checks
+    mountTime.current = Date.now();
+
     // 1. Validate on mount with cross-tab coordination
     // Only validate if no other tab validated recently (prevents race conditions)
     // Skip validation for authenticated pages to prevent refresh redirects
@@ -281,6 +285,14 @@ export function useSessionSync() {
     // 2. Validate on window focus
     const handleVisibilityChange = () => {
       if (!document.hidden) {
+        // Skip focus validation within 2 seconds of mount
+        // This handles the refresh scenario where visibility change fires immediately after mount
+        const timeSinceMount = Date.now() - mountTime.current;
+        if (timeSinceMount < 2000) {
+          if (DEBUG) console.log('[Session Sync] Skipping focus validation (recent mount, likely refresh)');
+          return;
+        }
+
         if (DEBUG) console.log('[Session Sync] Tab gained focus - validating session');
         validateSession();
       }
