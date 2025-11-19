@@ -7,7 +7,7 @@
 
 import { useState, useRef, useEffect, memo, useMemo } from 'react';
 import { format } from 'date-fns';
-import { Check, CheckCheck, Reply, Edit, Trash2, Smile } from 'lucide-react';
+import { Check, CheckCheck, Reply, Edit, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { Message } from '@/types/message';
 import PollDisplay from './PollDisplay';
@@ -381,7 +381,7 @@ export const MessageBubble = memo(function MessageBubble({
       </div>
     </div>
 
-      {/* Context Menu */}
+      {/* Context Menu - Simplified (React option removed, use QuickReactionBar instead) */}
       {contextMenu && (
         <div
           ref={contextMenuRef}
@@ -391,16 +391,6 @@ export const MessageBubble = memo(function MessageBubble({
             top: `${contextMenu.y}px`,
           }}
         >
-          <button
-            onClick={() => {
-              setContextMenu(null);
-              setShowEmojiPicker(true);
-            }}
-            className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-gray-100 flex items-center gap-2 text-gray-700 transition"
-          >
-            <Smile className="w-4 h-4 md:w-5 md:h-5" />
-            React
-          </button>
           {onReply && (
             <button
               onClick={() => handleMenuAction(() => onReply(message))}

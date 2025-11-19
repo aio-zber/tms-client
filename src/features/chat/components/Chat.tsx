@@ -53,7 +53,7 @@ export function Chat({
 
   const { messages, loading, hasMore, loadMore, addOptimisticMessage } = useMessages(conversationId);
   const { sendMessage, sending } = useSendMessage();
-  const { editMessage, deleteMessage, addReaction, removeReaction } = useMessageActions({ currentUserId });
+  const { editMessage, deleteMessage, addReaction, removeReaction, switchReaction } = useMessageActions({ currentUserId });
   const handleLeaveConversationWithNav = useLeaveConversation(conversationId);
   const getUserName = useUserDisplayName(conversation);
 
@@ -195,21 +195,22 @@ export function Chat({
       const message = messages.find(m => m.id === messageId);
       if (!message || !currentUserId) return;
 
-      // Check if user already reacted with this emoji
-      const existingReaction = message.reactions?.find(
-        r => r.emoji === emoji && r.userId === currentUserId
-      );
+      // Find user's existing reaction (any emoji)
+      const existingReaction = message.reactions?.find(r => r.userId === currentUserId);
 
-      if (existingReaction) {
-        // Remove reaction
+      if (existingReaction?.emoji === emoji) {
+        // Toggle: same emoji clicked - remove it
         await removeReaction(messageId, emoji);
+      } else if (existingReaction) {
+        // Switch: different emoji clicked - replace old with new
+        await switchReaction(messageId, existingReaction.emoji, emoji);
       } else {
-        // Add reaction
+        // Add: no existing reaction - add new one
         await addReaction(messageId, emoji);
       }
       // No need to refresh - WebSocket will push the reaction
     },
-    [addReaction, removeReaction, messages, currentUserId]
+    [addReaction, removeReaction, switchReaction, messages, currentUserId]
   );
 
   const handleClearConversation = useCallback(async () => {
