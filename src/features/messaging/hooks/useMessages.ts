@@ -2,6 +2,7 @@
  * useMessages Hook
  * Manages message fetching and state for a conversation
  * Now uses TanStack Query for proper cache management and server state sync
+ * Includes deduplication logic to prevent WebSocket race conditions
  */
 
 import { useEffect, useCallback } from 'react';
@@ -9,6 +10,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { socketClient } from '@/lib/socket';
 import { queryKeys } from '@/lib/queryClient';
 import { useMessagesQuery } from './useMessagesQuery';
+import { isPendingEdit, isPendingDelete, isPendingReaction } from './useMessageActions';
 import type { Message } from '@/types/message';
 
 interface UseMessagesOptions {
@@ -137,7 +139,13 @@ export function useMessages(
       const messageId = updatedMessage.message_id as string;
       const newContent = updatedMessage.content as string;
 
-      // Immediately update cache for instant UI feedback
+      // DEDUPLICATION: Skip if this is the sender's own edit (already optimistically updated)
+      if (isPendingEdit(messageId)) {
+        console.log('[useMessages] ⏭️  Skipping WebSocket edit update - sender already updated optimistically');
+        return;
+      }
+
+      // Update cache for other users who didn't initiate the edit
       queryClient.setQueryData(
         queryKeys.messages.list(conversationId, { limit }),
         (oldData: unknown) => {
@@ -170,7 +178,13 @@ export function useMessages(
 
       const messageId = data.message_id as string;
 
-      // Immediately remove message from cache for instant UI feedback
+      // DEDUPLICATION: Skip if this is the sender's own delete (already optimistically updated)
+      if (isPendingDelete(messageId)) {
+        console.log('[useMessages] ⏭️  Skipping WebSocket delete update - sender already updated optimistically');
+        return;
+      }
+
+      // Remove message from cache for other users who didn't initiate the delete
       queryClient.setQueryData(
         queryKeys.messages.list(conversationId, { limit }),
         (oldData: unknown) => {
@@ -197,7 +211,13 @@ export function useMessages(
         reaction: { id: string; userId: string; emoji: string; createdAt: string };
       };
 
-      // Immediately add reaction to cache for instant UI feedback
+      // DEDUPLICATION: Skip if this is the sender's own reaction (already optimistically updated)
+      if (isPendingReaction(message_id, reaction.emoji, 'add')) {
+        console.log('[useMessages] ⏭️  Skipping WebSocket reaction add - sender already updated optimistically');
+        return;
+      }
+
+      // Add reaction to cache for other users who didn't initiate the reaction
       queryClient.setQueryData(
         queryKeys.messages.list(conversationId, { limit }),
         (oldData: unknown) => {
@@ -236,7 +256,13 @@ export function useMessages(
         emoji: string;
       };
 
-      // Immediately remove reaction from cache for instant UI feedback
+      // DEDUPLICATION: Skip if this is the sender's own reaction removal (already optimistically updated)
+      if (isPendingReaction(message_id, emoji, 'remove')) {
+        console.log('[useMessages] ⏭️  Skipping WebSocket reaction remove - sender already updated optimistically');
+        return;
+      }
+
+      // Remove reaction from cache for other users who didn't initiate the removal
       queryClient.setQueryData(
         queryKeys.messages.list(conversationId, { limit }),
         (oldData: unknown) => {
