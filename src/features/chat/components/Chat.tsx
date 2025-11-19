@@ -53,7 +53,7 @@ export function Chat({
 
   const { messages, loading, hasMore, loadMore, addOptimisticMessage } = useMessages(conversationId);
   const { sendMessage, sending } = useSendMessage();
-  const { editMessage, deleteMessage, addReaction, removeReaction } = useMessageActions();
+  const { editMessage, deleteMessage, addReaction, removeReaction } = useMessageActions({ currentUserId });
   const handleLeaveConversationWithNav = useLeaveConversation(conversationId);
   const getUserName = useUserDisplayName(conversation);
 

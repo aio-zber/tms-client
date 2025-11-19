@@ -19,7 +19,12 @@ interface UseMessageActionsReturn {
   error: Error | null;
 }
 
-export function useMessageActions(): UseMessageActionsReturn {
+interface UseMessageActionsOptions {
+  currentUserId?: string;
+}
+
+export function useMessageActions(options: UseMessageActionsOptions = {}): UseMessageActionsReturn {
+  const { currentUserId } = options;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const queryClient = useQueryClient();
@@ -159,30 +164,166 @@ export function useMessageActions(): UseMessageActionsReturn {
   const addReaction = useCallback(async (messageId: string, emoji: string) => {
     setError(null);
 
+    if (!currentUserId) {
+      console.warn('[useMessageActions] No currentUserId provided, skipping optimistic update');
+      try {
+        await messageService.addReaction(messageId, { emoji });
+        return true;
+      } catch (err) {
+        setError(err as Error);
+        console.error('Failed to add reaction:', err);
+        return false;
+      }
+    }
+
+    // Get all message query keys to update all conversations
+    const allQueries = queryClient.getQueriesData({
+      queryKey: queryKeys.messages.all
+    });
+
+    // Store previous data for rollback
+    const previousData: Array<[unknown[], unknown]> = [];
+
+    // Create optimistic reaction object
+    const optimisticReaction = {
+      id: `temp-${Date.now()}`, // Temporary ID
+      userId: currentUserId,
+      emoji,
+      createdAt: new Date().toISOString()
+    };
+
     try {
+      // OPTIMISTIC UPDATE: Add reaction to cache immediately
+      allQueries.forEach(([queryKey]) => {
+        const oldData = queryClient.getQueryData(queryKey);
+
+        if (oldData) {
+          // Store for rollback
+          previousData.push([queryKey as unknown[], oldData]);
+
+          // Optimistically add the reaction to cache
+          queryClient.setQueryData(queryKey, (old: unknown) => {
+            if (!old || typeof old !== 'object') return old;
+
+            const cachedData = old as { pages: Array<{ data: Message[] }>; pageParams: unknown[] };
+
+            return {
+              ...cachedData,
+              pages: cachedData.pages.map((page) => ({
+                ...page,
+                data: page.data.map((msg) =>
+                  msg.id === messageId
+                    ? {
+                        ...msg,
+                        reactions: [...(msg.reactions || []), optimisticReaction] as Message['reactions'],
+                      }
+                    : msg
+                ),
+              })),
+            };
+          });
+        }
+      });
+
+      console.log('[useMessageActions] ✅ Optimistically added reaction to cache:', messageId, emoji);
+
+      // Now make the actual API call in background
       await messageService.addReaction(messageId, { emoji });
+
+      console.log('[useMessageActions] ✅ API confirmed reaction:', messageId, emoji);
       return true;
     } catch (err) {
+      // ROLLBACK: Restore previous cache state on error
+      console.error('[useMessageActions] ❌ Add reaction failed, rolling back cache:', err);
+
+      previousData.forEach(([queryKey, oldData]) => {
+        queryClient.setQueryData(queryKey, oldData);
+      });
+
       setError(err as Error);
-      console.error('Failed to add reaction:', err);
       return false;
     }
-  }, []);
+  }, [queryClient, currentUserId]);
 
   const removeReaction = useCallback(
     async (messageId: string, emoji: string) => {
       setError(null);
 
+      if (!currentUserId) {
+        console.warn('[useMessageActions] No currentUserId provided, skipping optimistic update');
+        try {
+          await messageService.removeReaction(messageId, emoji);
+          return true;
+        } catch (err) {
+          setError(err as Error);
+          console.error('Failed to remove reaction:', err);
+          return false;
+        }
+      }
+
+      // Get all message query keys to update all conversations
+      const allQueries = queryClient.getQueriesData({
+        queryKey: queryKeys.messages.all
+      });
+
+      // Store previous data for rollback
+      const previousData: Array<[unknown[], unknown]> = [];
+
       try {
+        // OPTIMISTIC UPDATE: Remove reaction from cache immediately
+        allQueries.forEach(([queryKey]) => {
+          const oldData = queryClient.getQueryData(queryKey);
+
+          if (oldData) {
+            // Store for rollback
+            previousData.push([queryKey as unknown[], oldData]);
+
+            // Optimistically remove the reaction from cache
+            queryClient.setQueryData(queryKey, (old: unknown) => {
+              if (!old || typeof old !== 'object') return old;
+
+              const cachedData = old as { pages: Array<{ data: Message[] }>; pageParams: unknown[] };
+
+              return {
+                ...cachedData,
+                pages: cachedData.pages.map((page) => ({
+                  ...page,
+                  data: page.data.map((msg) =>
+                    msg.id === messageId
+                      ? {
+                          ...msg,
+                          reactions: (msg.reactions || []).filter(
+                            (r) => !(r.userId === currentUserId && r.emoji === emoji)
+                          ),
+                        }
+                      : msg
+                  ),
+                })),
+              };
+            });
+          }
+        });
+
+        console.log('[useMessageActions] ✅ Optimistically removed reaction from cache:', messageId, emoji);
+
+        // Now make the actual API call in background
         await messageService.removeReaction(messageId, emoji);
+
+        console.log('[useMessageActions] ✅ API confirmed reaction removal:', messageId, emoji);
         return true;
       } catch (err) {
+        // ROLLBACK: Restore previous cache state on error
+        console.error('[useMessageActions] ❌ Remove reaction failed, rolling back cache:', err);
+
+        previousData.forEach(([queryKey, oldData]) => {
+          queryClient.setQueryData(queryKey, oldData);
+        });
+
         setError(err as Error);
-        console.error('Failed to remove reaction:', err);
         return false;
       }
     },
-    []
+    [queryClient, currentUserId]
   );
 
   return {
