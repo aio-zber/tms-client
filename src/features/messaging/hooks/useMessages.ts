@@ -188,22 +188,83 @@ export function useMessages(
       );
     };
 
-    // Listen for reactions added - invalidate query
+    // Listen for reactions added - optimistic cache update (Messenger pattern)
     const handleReactionAdded = (data: Record<string, unknown>) => {
       console.log('[useMessages] Reaction added via WebSocket:', data);
 
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.messages.list(conversationId, { limit }),
-      });
+      const { message_id, reaction } = data as {
+        message_id: string;
+        reaction: { id: string; userId: string; emoji: string; createdAt: string };
+      };
+
+      // Immediately add reaction to cache for instant UI feedback
+      queryClient.setQueryData(
+        queryKeys.messages.list(conversationId, { limit }),
+        (oldData: unknown) => {
+          if (!oldData || typeof oldData !== 'object') return oldData;
+
+          const cachedData = oldData as { pages: Array<{ data: Message[] }>; pageParams: unknown[] };
+
+          // Add reaction to the message in all pages
+          const newPages = cachedData.pages.map((page) => ({
+            ...page,
+            data: page.data.map((msg) =>
+              msg.id === message_id
+                ? {
+                    ...msg,
+                    reactions: [...(msg.reactions || []), reaction] as Message['reactions'],
+                  }
+                : msg
+            ),
+          }));
+
+          return {
+            ...cachedData,
+            pages: newPages,
+          };
+        }
+      );
     };
 
-    // Listen for reactions removed - invalidate query
+    // Listen for reactions removed - optimistic cache update (Messenger pattern)
     const handleReactionRemoved = (data: Record<string, unknown>) => {
       console.log('[useMessages] Reaction removed via WebSocket:', data);
 
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.messages.list(conversationId, { limit }),
-      });
+      const { message_id, user_id, emoji } = data as {
+        message_id: string;
+        user_id: string;
+        emoji: string;
+      };
+
+      // Immediately remove reaction from cache for instant UI feedback
+      queryClient.setQueryData(
+        queryKeys.messages.list(conversationId, { limit }),
+        (oldData: unknown) => {
+          if (!oldData || typeof oldData !== 'object') return oldData;
+
+          const cachedData = oldData as { pages: Array<{ data: Message[] }>; pageParams: unknown[] };
+
+          // Remove reaction from the message in all pages
+          const newPages = cachedData.pages.map((page) => ({
+            ...page,
+            data: page.data.map((msg) =>
+              msg.id === message_id
+                ? {
+                    ...msg,
+                    reactions: (msg.reactions || []).filter(
+                      (r) => !(r.userId === user_id && r.emoji === emoji)
+                    ),
+                  }
+                : msg
+            ),
+          }));
+
+          return {
+            ...cachedData,
+            pages: newPages,
+          };
+        }
+      );
     };
 
     // Listen for message status updates (Telegram/Messenger pattern)

@@ -8,9 +8,11 @@
 import { useState, useRef, useEffect, memo, useMemo } from 'react';
 import { format } from 'date-fns';
 import { Check, CheckCheck, Reply, Edit, Trash2, Smile } from 'lucide-react';
+import { motion } from 'framer-motion';
 import type { Message } from '@/types/message';
 import PollDisplay from './PollDisplay';
 import { usePollActions } from '../hooks/usePollActions';
+import { QuickReactionBar } from './QuickReactionBar';
 
 interface MessageBubbleProps {
   message: Message;
@@ -51,6 +53,7 @@ export const MessageBubble = memo(function MessageBubble({
   const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showTimestamp, setShowTimestamp] = useState(false);
+  const [isHovered, setIsHovered] = useState(false); // Messenger-style hover detection
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const { voteOnPoll, closePoll } = usePollActions();
@@ -228,11 +231,25 @@ export const MessageBubble = memo(function MessageBubble({
       <div className={`flex gap-2 ${isSent ? 'justify-end' : 'justify-start'}`}>
         {/* Message Content */}
         <div
-          className={`max-w-[85%] sm:max-w-[75%] md:max-w-[70%] lg:max-w-[60%] flex flex-col ${
+          className={`max-w-[85%] sm:max-w-[75%] md:max-w-[70%] lg:max-w-[60%] flex flex-col relative ${
             isSent ? 'items-end' : 'items-start'
           }`}
           onContextMenu={handleContextMenu}
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
         >
+          {/* Quick Reaction Bar - Messenger-style hover (Desktop only) */}
+          {isHovered && onReact && !message.poll && (
+            <div className="hidden md:block">
+              <QuickReactionBar
+                onReact={(emoji) => {
+                  onReact(message.id, emoji);
+                  setIsHovered(false); // Hide after clicking
+                }}
+                isSent={isSent}
+              />
+            </div>
+          )}
           {/* Sender Name (for group chats) */}
           {showSender && !isSent && senderName && (
             <span className="text-xs md:text-sm text-gray-600 mb-1 px-3">{senderName}</span>
@@ -323,8 +340,18 @@ export const MessageBubble = memo(function MessageBubble({
               const hasUserReacted = userReactions.has(emoji);
 
               return (
-                <button
+                <motion.button
                   key={emoji}
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0, opacity: 0 }}
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.95 }}
+                  transition={{
+                    type: "spring",
+                    damping: 20,
+                    stiffness: 400
+                  }}
                   title={getReactorNames(emoji)}
                   className={`px-2 py-1 rounded-full text-xs md:text-sm flex items-center gap-1 transition-all ${
                     hasUserReacted
@@ -339,7 +366,7 @@ export const MessageBubble = memo(function MessageBubble({
                 >
                   <span className="text-base md:text-lg">{emoji}</span>
                   {count > 1 && <span className="text-[10px] font-medium">{count}</span>}
-                </button>
+                </motion.button>
               );
             })}
           </div>
