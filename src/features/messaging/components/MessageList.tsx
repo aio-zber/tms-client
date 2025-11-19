@@ -22,7 +22,7 @@ interface MessageListProps {
   conversationId?: string; // Added for auto-mark-read
   onLoadMore?: () => void;
   onEdit?: (messageId: string) => void;
-  onDelete?: (messageId: string) => void;
+  onDelete?: (messageId: string, scope: 'me' | 'everyone') => void;
   onReply?: (message: Message) => void;
   onReact?: (messageId: string, emoji: string) => void;
   getUserName?: (userId: string) => string;
@@ -50,7 +50,7 @@ interface MessageWithVisibilityProps {
   senderName?: string;
   currentUserId: string;
   onEdit?: (messageId: string) => void;
-  onDelete?: (messageId: string) => void;
+  onDelete?: (messageId: string, scope: 'me' | 'everyone') => void;
   onReply?: (message: Message) => void;
   onReact?: (messageId: string, emoji: string) => void;
   getUserName?: (userId: string) => string;

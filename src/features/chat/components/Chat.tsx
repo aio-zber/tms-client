@@ -176,8 +176,12 @@ export function Chat({
   }, []);
 
   const handleDeleteMessage = useCallback(
-    async (messageId: string) => {
-      if (confirm('Are you sure you want to delete this message?')) {
+    async (messageId: string, scope: 'me' | 'everyone' = 'everyone') => {
+      const confirmMsg = scope === 'everyone'
+        ? 'Delete this message for everyone? This cannot be undone.'
+        : 'Delete this message for you? Others will still see it.';
+
+      if (confirm(confirmMsg)) {
         await deleteMessage(messageId);
         // No need to refresh - WebSocket will push the deletion
       }
