@@ -21,7 +21,7 @@ interface MessageBubbleProps {
   senderName?: string;
   currentUserId?: string;
   onEdit?: (messageId: string) => void;
-  onDelete?: (messageId: string) => void;
+  onDelete?: (messageId: string, scope: 'me' | 'everyone') => void;
   onReply?: (message: Message) => void;
   onReact?: (messageId: string, emoji: string) => void;
   getUserName?: (userId: string) => string;
@@ -60,6 +60,16 @@ export const MessageBubble = memo(function MessageBubble({
 
   // Common emojis for quick reactions
   const quickEmojis = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥'];
+
+  /**
+   * Check if message can be deleted for everyone (within 48 hours)
+   * Messenger pattern: Only recent messages can be deleted for everyone
+   */
+  const canDeleteForEveryone = useMemo(() => {
+    const messageAge = Date.now() - new Date(message.createdAt).getTime();
+    const FORTY_EIGHT_HOURS = 48 * 60 * 60 * 1000;
+    return messageAge < FORTY_EIGHT_HOURS;
+  }, [message.createdAt]);
 
   /**
    * Memoized reaction grouping
@@ -410,13 +420,27 @@ export const MessageBubble = memo(function MessageBubble({
             </button>
           )}
           {isSent && onDelete && (
-            <button
-              onClick={() => handleMenuAction(() => onDelete(message.id))}
-              className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-red-50 flex items-center gap-2 text-red-600 transition"
-            >
-              <Trash2 className="w-4 h-4 md:w-5 md:h-5" />
-              Delete
-            </button>
+            <>
+              {/* Delete for Me - always available */}
+              <button
+                onClick={() => handleMenuAction(() => onDelete(message.id, 'me'))}
+                className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-gray-100 flex items-center gap-2 text-gray-700 transition"
+              >
+                <Trash2 className="w-4 h-4 md:w-5 md:h-5" />
+                Delete for Me
+              </button>
+
+              {/* Delete for Everyone - only if within 48 hours */}
+              {canDeleteForEveryone && (
+                <button
+                  onClick={() => handleMenuAction(() => onDelete(message.id, 'everyone'))}
+                  className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-red-50 flex items-center gap-2 text-red-600 transition"
+                >
+                  <Trash2 className="w-4 h-4 md:w-5 md:h-5" />
+                  Delete for Everyone
+                </button>
+              )}
+            </>
           )}
         </div>
       )}
