@@ -112,7 +112,7 @@ export function useMessageVisibility({
     onSuccess: () => {
       // Invalidate messages query to refresh status
       queryClient.invalidateQueries({
-        queryKey: ['messages', conversationId],
+        queryKey: queryKeys.messages.all,
       });
 
       // Invalidate unread count (standardized query keys)
@@ -186,7 +186,7 @@ export function useMessageVisibilityBatch(conversationId: string, _currentUserId
     onSuccess: () => {
       console.log('[useMessageVisibilityBatch] Invalidating queries after successful mark-as-read');
       queryClient.invalidateQueries({
-        queryKey: ['messages', conversationId],
+        queryKey: queryKeys.messages.all,
       });
 
       // Invalidate unread count (standardized query keys)

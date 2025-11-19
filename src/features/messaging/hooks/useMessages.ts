@@ -134,16 +134,20 @@ export function useMessages(
 
     // Listen for message edits - optimistic cache update (regular function, not useCallback)
     const handleMessageEdited = (updatedMessage: Record<string, unknown>) => {
-      console.log('[useMessages] Message edited via WebSocket:', updatedMessage);
+      const wsTime = Date.now();
+      console.log(`[useMessages] 📨 [${wsTime}] Message edited via WebSocket:`, updatedMessage);
 
       const messageId = updatedMessage.message_id as string;
       const newContent = updatedMessage.content as string;
 
       // DEDUPLICATION: Skip if this is the sender's own edit (already optimistically updated)
       if (isPendingEdit(messageId)) {
-        console.log('[useMessages] ⏭️  Skipping WebSocket edit update - sender already updated optimistically');
+        console.log(`[useMessages] ⏭️  [${wsTime}] Skipping WebSocket edit update - sender already updated optimistically (pending flag still set)`);
         return;
       }
+
+      console.log(`[useMessages] ✅ [${wsTime}] Applying WebSocket edit update (pending flag cleared or not sender)`);
+
 
       // Update cache for other users who didn't initiate the edit
       queryClient.setQueryData(
@@ -204,7 +208,8 @@ export function useMessages(
 
     // Listen for reactions added - optimistic cache update (Messenger pattern)
     const handleReactionAdded = (data: Record<string, unknown>) => {
-      console.log('[useMessages] Reaction added via WebSocket:', data);
+      const wsTime = Date.now();
+      console.log(`[useMessages] 📨 [${wsTime}] Reaction added via WebSocket:`, data);
 
       const { message_id, reaction } = data as {
         message_id: string;
@@ -213,9 +218,11 @@ export function useMessages(
 
       // DEDUPLICATION: Skip if this is the sender's own reaction (already optimistically updated)
       if (isPendingReaction(message_id, reaction.emoji, 'add')) {
-        console.log('[useMessages] ⏭️  Skipping WebSocket reaction add - sender already updated optimistically');
+        console.log(`[useMessages] ⏭️  [${wsTime}] Skipping WebSocket reaction add - sender already updated optimistically (pending flag still set)`);
         return;
       }
+
+      console.log(`[useMessages] ✅ [${wsTime}] Applying WebSocket reaction add (pending flag cleared or not sender)`);
 
       // Add reaction to cache for other users who didn't initiate the reaction
       queryClient.setQueryData(

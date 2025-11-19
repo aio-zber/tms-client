@@ -51,7 +51,9 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
       setError(null);
 
       // Mark as pending to prevent WebSocket handler from overwriting optimistic update
+      const startTime = Date.now();
       pendingEdits.add(messageId);
+      console.log(`[useMessageActions] ⏱️ [${startTime}] Edit started for message:`, messageId);
 
       // Get all message query keys to update all conversations this message might appear in
       const allQueries = queryClient.getQueriesData({
@@ -101,11 +103,16 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
         // Now make the actual API call in background
         const updatedMessage = await messageService.editMessage(messageId, data);
 
-        console.log('[useMessageActions] ✅ API confirmed edit:', updatedMessage.id);
+        const apiTime = Date.now();
+        console.log(`[useMessageActions] ✅ [${apiTime}] API confirmed edit (${apiTime - startTime}ms):`, updatedMessage.id);
 
         // Clear pending flag after successful API call
         // Use setTimeout to allow WebSocket event to be received and skipped
-        setTimeout(() => pendingEdits.delete(messageId), 1000);
+        setTimeout(() => {
+          const clearTime = Date.now();
+          console.log(`[useMessageActions] 🔓 [${clearTime}] Clearing pending flag (${clearTime - startTime}ms total):`, messageId);
+          pendingEdits.delete(messageId);
+        }, 3000);
 
         return updatedMessage;
       } catch (err) {
@@ -177,7 +184,7 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
       console.log('[useMessageActions] ✅ API confirmed deletion:', messageId);
 
       // Clear pending flag after successful API call
-      setTimeout(() => pendingDeletes.delete(messageId), 1000);
+      setTimeout(() => pendingDeletes.delete(messageId), 3000);
 
       return true;
     } catch (err) {
@@ -214,7 +221,9 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
     }
 
     // Mark as pending to prevent WebSocket handler from overwriting optimistic update
+    const startTime = Date.now();
     pendingReactions.set(messageId, { emoji, action: 'add' });
+    console.log(`[useMessageActions] ⏱️ [${startTime}] Add reaction started:`, messageId, emoji);
 
     // Get all message query keys to update all conversations
     const allQueries = queryClient.getQueriesData({
@@ -270,10 +279,15 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
       // Now make the actual API call in background
       await messageService.addReaction(messageId, { emoji });
 
-      console.log('[useMessageActions] ✅ API confirmed reaction:', messageId, emoji);
+      const apiTime = Date.now();
+      console.log(`[useMessageActions] ✅ [${apiTime}] API confirmed reaction (${apiTime - startTime}ms):`, messageId, emoji);
 
       // Clear pending flag after successful API call
-      setTimeout(() => pendingReactions.delete(messageId), 1000);
+      setTimeout(() => {
+        const clearTime = Date.now();
+        console.log(`[useMessageActions] 🔓 [${clearTime}] Clearing pending reaction flag (${clearTime - startTime}ms total):`, messageId, emoji);
+        pendingReactions.delete(messageId);
+      }, 1000);
 
       return true;
     } catch (err) {
@@ -362,7 +376,7 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
         console.log('[useMessageActions] ✅ API confirmed reaction removal:', messageId, emoji);
 
         // Clear pending flag after successful API call
-        setTimeout(() => pendingReactions.delete(messageId), 1000);
+        setTimeout(() => pendingReactions.delete(messageId), 3000);
 
         return true;
       } catch (err) {
@@ -468,7 +482,7 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
         console.log('[useMessageActions] ✅ API confirmed reaction switch:', messageId, newEmoji);
 
         // Clear pending flag after successful API call
-        setTimeout(() => pendingReactions.delete(messageId), 1000);
+        setTimeout(() => pendingReactions.delete(messageId), 3000);
 
         return true;
       } catch (err) {
