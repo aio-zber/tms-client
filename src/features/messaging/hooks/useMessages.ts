@@ -130,22 +130,62 @@ export function useMessages(
       });
     };
 
-    // Listen for message edits - invalidate query
+    // Listen for message edits - optimistic cache update (regular function, not useCallback)
     const handleMessageEdited = (updatedMessage: Record<string, unknown>) => {
       console.log('[useMessages] Message edited via WebSocket:', updatedMessage);
 
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.messages.list(conversationId, { limit }),
-      });
+      const messageId = updatedMessage.message_id as string;
+      const newContent = updatedMessage.content as string;
+
+      // Immediately update cache for instant UI feedback
+      queryClient.setQueryData(
+        queryKeys.messages.list(conversationId, { limit }),
+        (oldData: unknown) => {
+          if (!oldData) return oldData;
+
+          const data = oldData as { pages: Array<{ data: Message[] }> };
+          return {
+            ...data,
+            pages: data.pages.map(page => ({
+              ...page,
+              data: page.data.map(msg =>
+                msg.id === messageId
+                  ? {
+                      ...msg,
+                      content: newContent,
+                      isEdited: true,
+                      updatedAt: new Date().toISOString()
+                    }
+                  : msg
+              )
+            }))
+          };
+        }
+      );
     };
 
-    // Listen for message deletions - invalidate query
+    // Listen for message deletions - optimistic cache update (regular function, not useCallback)
     const handleMessageDeleted = (data: Record<string, unknown>) => {
       console.log('[useMessages] Message deleted via WebSocket:', data);
 
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.messages.list(conversationId, { limit }),
-      });
+      const messageId = data.message_id as string;
+
+      // Immediately remove message from cache for instant UI feedback
+      queryClient.setQueryData(
+        queryKeys.messages.list(conversationId, { limit }),
+        (oldData: unknown) => {
+          if (!oldData) return oldData;
+
+          const queryData = oldData as { pages: Array<{ data: Message[] }> };
+          return {
+            ...queryData,
+            pages: queryData.pages.map(page => ({
+              ...page,
+              data: page.data.filter(msg => msg.id !== messageId)
+            }))
+          };
+        }
+      );
     };
 
     // Listen for reactions added - invalidate query

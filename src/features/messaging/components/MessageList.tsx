@@ -48,6 +48,7 @@ interface MessageWithVisibilityProps {
   isSent: boolean;
   showSender: boolean;
   senderName?: string;
+  currentUserId: string;
   onEdit?: (messageId: string) => void;
   onDelete?: (messageId: string) => void;
   onReply?: (message: Message) => void;
@@ -66,6 +67,7 @@ const MessageWithVisibility = memo(function MessageWithVisibility({
   isSent,
   showSender,
   senderName,
+  currentUserId,
   onEdit,
   onDelete,
   onReply,
@@ -132,6 +134,7 @@ const MessageWithVisibility = memo(function MessageWithVisibility({
         isSent={isSent}
         showSender={showSender}
         senderName={senderName}
+        currentUserId={currentUserId}
         onEdit={isSent ? onEdit : undefined}
         onDelete={isSent ? onDelete : undefined}
         onReply={onReply}
@@ -436,6 +439,7 @@ export function MessageList({
                       isSent={isSent}
                       showSender={showSender}
                       senderName={getUserName ? getUserName(message.senderId) : undefined}
+                      currentUserId={currentUserId}
                       onEdit={onEdit}
                       onDelete={onDelete}
                       onReply={onReply}

@@ -17,6 +17,7 @@ interface MessageBubbleProps {
   isSent: boolean;
   showSender?: boolean;
   senderName?: string;
+  currentUserId?: string;
   onEdit?: (messageId: string) => void;
   onDelete?: (messageId: string) => void;
   onReply?: (message: Message) => void;
@@ -37,6 +38,7 @@ export const MessageBubble = memo(function MessageBubble({
   isSent,
   showSender = false,
   senderName,
+  currentUserId,
   onEdit,
   onDelete,
   onReply,
@@ -55,6 +57,53 @@ export const MessageBubble = memo(function MessageBubble({
 
   // Common emojis for quick reactions
   const quickEmojis = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥'];
+
+  /**
+   * Memoized reaction grouping
+   * Groups reactions by emoji and counts them
+   */
+  const groupedReactions = useMemo(() => {
+    if (!message.reactions || message.reactions.length === 0) return {};
+
+    return message.reactions.reduce((acc, reaction) => {
+      acc[reaction.emoji] = (acc[reaction.emoji] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+  }, [message.reactions]);
+
+  /**
+   * Set of emojis the current user has reacted with
+   */
+  const userReactions = useMemo(() => {
+    if (!message.reactions || !currentUserId) return new Set<string>();
+
+    return new Set(
+      message.reactions
+        .filter(r => r.userId === currentUserId)
+        .map(r => r.emoji)
+    );
+  }, [message.reactions, currentUserId]);
+
+  /**
+   * Get formatted list of reactor names for a specific emoji
+   */
+  const getReactorNames = (emoji: string): string => {
+    if (!message.reactions || !getUserName) return '';
+
+    const reactors = message.reactions
+      .filter(r => r.emoji === emoji)
+      .map(r => getUserName(r.userId));
+
+    if (reactors.length === 0) return '';
+    if (reactors.length === 1) return reactors[0];
+    if (reactors.length === 2) return `${reactors[0]} and ${reactors[1]}`;
+    if (reactors.length <= 5) {
+      const last = reactors[reactors.length - 1];
+      const rest = reactors.slice(0, -1);
+      return `${rest.join(', ')}, and ${last}`;
+    }
+    return `${reactors.slice(0, 3).join(', ')}, and ${reactors.length - 3} others`;
+  };
 
   /**
    * Memoized highlighted message content
@@ -269,26 +318,30 @@ export const MessageBubble = memo(function MessageBubble({
         {/* Reactions */}
         {message.reactions && message.reactions.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-1.5">
-            {/* Group reactions by emoji */}
-            {Object.entries(
-              message.reactions.reduce((acc, reaction) => {
-                acc[reaction.emoji] = (acc[reaction.emoji] || 0) + 1;
-                return acc;
-              }, {} as Record<string, number>)
-            ).map(([emoji, count]) => (
-              <button
-                key={emoji}
-                className={`px-2 py-1 rounded-full text-xs md:text-sm flex items-center gap-1 transition ${
-                  isSent
-                    ? 'bg-white/20 hover:bg-white/30 text-white border border-white/30'
-                    : 'bg-white hover:bg-gray-50 text-gray-900 border border-gray-200'
-                }`}
-                onClick={() => onReact && onReact(message.id, emoji)}
-              >
-                <span className="text-base md:text-lg">{emoji}</span>
-                {count > 1 && <span className="text-[10px] font-medium">{count}</span>}
-              </button>
-            ))}
+            {/* Group reactions by emoji - now memoized */}
+            {Object.entries(groupedReactions).map(([emoji, count]) => {
+              const hasUserReacted = userReactions.has(emoji);
+
+              return (
+                <button
+                  key={emoji}
+                  title={getReactorNames(emoji)}
+                  className={`px-2 py-1 rounded-full text-xs md:text-sm flex items-center gap-1 transition-all ${
+                    hasUserReacted
+                      ? isSent
+                        ? 'bg-white border-2 border-white text-viber-purple font-semibold shadow-sm'
+                        : 'bg-blue-50 border-2 border-blue-500 text-blue-700 font-semibold shadow-sm'
+                      : isSent
+                        ? 'bg-white/20 hover:bg-white/30 text-white border border-white/30'
+                        : 'bg-white hover:bg-gray-50 text-gray-900 border border-gray-200'
+                  }`}
+                  onClick={() => onReact && onReact(message.id, emoji)}
+                >
+                  <span className="text-base md:text-lg">{emoji}</span>
+                  {count > 1 && <span className="text-[10px] font-medium">{count}</span>}
+                </button>
+              );
+            })}
           </div>
         )}
 
