@@ -225,14 +225,26 @@ export function useMessages(
           // Add reaction to the message in all pages
           const newPages = cachedData.pages.map((page) => ({
             ...page,
-            data: page.data.map((msg) =>
-              msg.id === message_id
-                ? {
-                    ...msg,
-                    reactions: [...(msg.reactions || []), reaction] as Message['reactions'],
-                  }
-                : msg
-            ),
+            data: page.data.map((msg) => {
+              if (msg.id !== message_id) return msg;
+
+              // Check if this exact reaction already exists (prevent duplicates from WebSocket)
+              const existingReaction = (msg.reactions || []).find(
+                (r) => r.userId === reaction.userId && r.emoji === reaction.emoji
+              );
+
+              // If reaction already exists, don't add it again
+              if (existingReaction) {
+                console.log(`[useMessages] ⚠️ Reaction already exists, skipping add: ${reaction.emoji} from ${reaction.userId}`);
+                return msg;
+              }
+
+              // Add the new reaction
+              return {
+                ...msg,
+                reactions: [...(msg.reactions || []), reaction] as Message['reactions'],
+              };
+            }),
           }));
 
           return {
