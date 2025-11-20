@@ -287,7 +287,7 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
         const clearTime = Date.now();
         console.log(`[useMessageActions] 🔓 [${clearTime}] Clearing pending reaction flag (${clearTime - startTime}ms total):`, messageId, emoji);
         pendingReactions.delete(messageId);
-      }, 1000);
+      }, 3000);
 
       return true;
     } catch (err) {
