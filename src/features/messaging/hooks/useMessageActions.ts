@@ -261,7 +261,12 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
                   msg.id === messageId
                     ? {
                         ...msg,
-                        reactions: [...(msg.reactions || []), optimisticReaction] as Message['reactions'],
+                        // Remove any existing reactions by current user (backend handles this too)
+                        // Then add the new reaction - ensures only one reaction per user
+                        reactions: [
+                          ...(msg.reactions || []).filter((r) => r.userId !== currentUserId),
+                          optimisticReaction
+                        ] as Message['reactions'],
                       }
                     : msg
                 ),
@@ -452,10 +457,11 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
                     msg.id === messageId
                       ? {
                           ...msg,
-                          // Remove old emoji and add new emoji
+                          // Remove ALL reactions by current user, then add new one
+                          // This handles rapid switching where oldEmoji might be stale
                           reactions: [
                             ...(msg.reactions || []).filter(
-                              (r) => !(r.userId === currentUserId && r.emoji === oldEmoji)
+                              (r) => r.userId !== currentUserId
                             ),
                             optimisticReaction
                           ] as Message['reactions'],
