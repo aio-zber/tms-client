@@ -106,13 +106,10 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
         const apiTime = Date.now();
         console.log(`[useMessageActions] ✅ [${apiTime}] API confirmed edit (${apiTime - startTime}ms):`, updatedMessage.id);
 
-        // Clear pending flag after successful API call
-        // Use setTimeout to allow WebSocket event to be received and skipped
-        setTimeout(() => {
-          const clearTime = Date.now();
-          console.log(`[useMessageActions] 🔓 [${clearTime}] Clearing pending flag (${clearTime - startTime}ms total):`, messageId);
-          pendingEdits.delete(messageId);
-        }, 3000);
+        // Clear pending flag immediately - deduplication not needed (TanStack Query handles it)
+        const clearTime = Date.now();
+        console.log(`[useMessageActions] 🔓 [${clearTime}] Clearing pending flag (${clearTime - startTime}ms total):`, messageId);
+        pendingEdits.delete(messageId);
 
         return updatedMessage;
       } catch (err) {
@@ -183,8 +180,8 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
 
       console.log('[useMessageActions] ✅ API confirmed deletion:', messageId);
 
-      // Clear pending flag after successful API call
-      setTimeout(() => pendingDeletes.delete(messageId), 3000);
+      // Clear pending flag immediately
+      pendingDeletes.delete(messageId);
 
       return true;
     } catch (err) {
@@ -282,12 +279,10 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
       const apiTime = Date.now();
       console.log(`[useMessageActions] ✅ [${apiTime}] API confirmed reaction (${apiTime - startTime}ms):`, messageId, emoji);
 
-      // Clear pending flag after successful API call
-      setTimeout(() => {
-        const clearTime = Date.now();
-        console.log(`[useMessageActions] 🔓 [${clearTime}] Clearing pending reaction flag (${clearTime - startTime}ms total):`, messageId, emoji);
-        pendingReactions.delete(messageId);
-      }, 3000);
+      // Clear pending flag immediately
+      const clearTime = Date.now();
+      console.log(`[useMessageActions] 🔓 [${clearTime}] Clearing pending reaction flag (${clearTime - startTime}ms total):`, messageId, emoji);
+      pendingReactions.delete(messageId);
 
       return true;
     } catch (err) {
@@ -375,8 +370,8 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
 
         console.log('[useMessageActions] ✅ API confirmed reaction removal:', messageId, emoji);
 
-        // Clear pending flag after successful API call
-        setTimeout(() => pendingReactions.delete(messageId), 3000);
+        // Clear pending flag immediately
+        pendingReactions.delete(messageId);
 
         return true;
       } catch (err) {
@@ -481,8 +476,8 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
 
         console.log('[useMessageActions] ✅ API confirmed reaction switch:', messageId, newEmoji);
 
-        // Clear pending flag after successful API call
-        setTimeout(() => pendingReactions.delete(messageId), 3000);
+        // Clear pending flag immediately
+        pendingReactions.delete(messageId);
 
         return true;
       } catch (err) {
