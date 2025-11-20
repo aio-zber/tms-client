@@ -206,9 +206,15 @@ export function useMessages(
       const wsTime = Date.now();
       console.log(`[useMessages] 📨 [${wsTime}] Reaction added via WebSocket:`, data);
 
-      const { message_id, reaction } = data as {
+      const { message_id, reaction: rawReaction } = data as {
         message_id: string;
         reaction: { id: string; userId: string; emoji: string; createdAt: string };
+      };
+
+      // Add messageId to reaction object (required by MessageReaction type)
+      const reaction = {
+        ...rawReaction,
+        messageId: message_id,
       };
 
       // Apply WebSocket update (deduplication not needed - TanStack Query handles it)
