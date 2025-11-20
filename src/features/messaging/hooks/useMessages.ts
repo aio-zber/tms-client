@@ -228,13 +228,29 @@ export function useMessages(
             data: page.data.map((msg) => {
               if (msg.id !== message_id) return msg;
 
-              // Check if this exact reaction already exists (prevent duplicates from WebSocket)
-              const existingReaction = (msg.reactions || []).find(
+              const currentReactions = msg.reactions || [];
+
+              // Check if this exact reaction already exists (by userId + emoji)
+              const existingIndex = currentReactions.findIndex(
                 (r) => r.userId === reaction.userId && r.emoji === reaction.emoji
               );
 
-              // If reaction already exists, don't add it again
-              if (existingReaction) {
+              // If reaction already exists
+              if (existingIndex !== -1) {
+                const existingReaction = currentReactions[existingIndex];
+
+                // If it's a temporary reaction (from optimistic update), replace it with the real one
+                if (existingReaction.id.startsWith('temp-')) {
+                  console.log(`[useMessages] 🔄 Replacing temporary reaction with server reaction: ${reaction.emoji}`);
+                  const newReactions = [...currentReactions];
+                  newReactions[existingIndex] = reaction;
+                  return {
+                    ...msg,
+                    reactions: newReactions as Message['reactions'],
+                  };
+                }
+
+                // If it's a real reaction (same ID or not), skip adding
                 console.log(`[useMessages] ⚠️ Reaction already exists, skipping add: ${reaction.emoji} from ${reaction.userId}`);
                 return msg;
               }
@@ -242,7 +258,7 @@ export function useMessages(
               // Add the new reaction
               return {
                 ...msg,
-                reactions: [...(msg.reactions || []), reaction] as Message['reactions'],
+                reactions: [...currentReactions, reaction] as Message['reactions'],
               };
             }),
           }));
