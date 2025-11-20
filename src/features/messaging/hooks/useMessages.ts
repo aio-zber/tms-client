@@ -10,7 +10,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { socketClient } from '@/lib/socket';
 import { queryKeys } from '@/lib/queryClient';
 import { useMessagesQuery } from './useMessagesQuery';
-import { isPendingEdit, isPendingDelete, isPendingReaction } from './useMessageActions';
+import { isPendingDelete } from './useMessageActions';
 import type { Message } from '@/types/message';
 
 interface UseMessagesOptions {
@@ -140,13 +140,8 @@ export function useMessages(
       const messageId = updatedMessage.message_id as string;
       const newContent = updatedMessage.content as string;
 
-      // DEDUPLICATION: Skip if this is the sender's own edit (already optimistically updated)
-      if (isPendingEdit(messageId)) {
-        console.log(`[useMessages] ⏭️  [${wsTime}] Skipping WebSocket edit update - sender already updated optimistically (pending flag still set)`);
-        return;
-      }
-
-      console.log(`[useMessages] ✅ [${wsTime}] Applying WebSocket edit update (pending flag cleared or not sender)`);
+      // Apply WebSocket update (deduplication not needed - TanStack Query handles it)
+      console.log(`[useMessages] ✅ [${wsTime}] Applying WebSocket edit update`);
 
 
       // Update cache for other users who didn't initiate the edit
@@ -216,13 +211,8 @@ export function useMessages(
         reaction: { id: string; userId: string; emoji: string; createdAt: string };
       };
 
-      // DEDUPLICATION: Skip if this is the sender's own reaction (already optimistically updated)
-      if (isPendingReaction(message_id, reaction.emoji, 'add')) {
-        console.log(`[useMessages] ⏭️  [${wsTime}] Skipping WebSocket reaction add - sender already updated optimistically (pending flag still set)`);
-        return;
-      }
-
-      console.log(`[useMessages] ✅ [${wsTime}] Applying WebSocket reaction add (pending flag cleared or not sender)`);
+      // Apply WebSocket update (deduplication not needed - TanStack Query handles it)
+      console.log(`[useMessages] ✅ [${wsTime}] Applying WebSocket reaction add`);
 
       // Add reaction to cache for other users who didn't initiate the reaction
       queryClient.setQueryData(
@@ -263,13 +253,10 @@ export function useMessages(
         emoji: string;
       };
 
-      // DEDUPLICATION: Skip if this is the sender's own reaction removal (already optimistically updated)
-      if (isPendingReaction(message_id, emoji, 'remove')) {
-        console.log('[useMessages] ⏭️  Skipping WebSocket reaction remove - sender already updated optimistically');
-        return;
-      }
+      // Apply WebSocket update (deduplication not needed - TanStack Query handles it)
+      console.log('[useMessages] ✅ Applying WebSocket reaction remove');
 
-      // Remove reaction from cache for other users who didn't initiate the removal
+      // Remove reaction from cache
       queryClient.setQueryData(
         queryKeys.messages.list(conversationId, { limit }),
         (oldData: unknown) => {

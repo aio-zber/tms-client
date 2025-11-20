@@ -51,8 +51,8 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
     enabled: enabled && !!conversationId,
     // Refetch on window focus to catch new messages
     refetchOnWindowFocus: true,
-    // Consider stale after 30 seconds
-    staleTime: 30000,
+    // Consider stale after 10 seconds (more responsive without being excessive)
+    staleTime: 10000,
   });
 
   // Flatten pages into a single array
