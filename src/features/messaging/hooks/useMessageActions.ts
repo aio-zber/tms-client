@@ -470,8 +470,8 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
 
         console.log('[useMessageActions] ✅ Optimistically switched reaction in cache:', messageId, oldEmoji, '->', newEmoji);
 
-        // Now make the actual API calls in background
-        await messageService.removeReaction(messageId, oldEmoji);
+        // Backend now handles atomic switching - just call addReaction
+        // If user has an existing reaction, backend will remove it first automatically
         await messageService.addReaction(messageId, { emoji: newEmoji });
 
         console.log('[useMessageActions] ✅ API confirmed reaction switch:', messageId, newEmoji);
