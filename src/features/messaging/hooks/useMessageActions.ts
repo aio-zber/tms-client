@@ -284,6 +284,12 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
       const apiTime = Date.now();
       console.log(`[useMessageActions] ✅ [${apiTime}] API confirmed reaction (${apiTime - startTime}ms):`, messageId, emoji);
 
+      // Invalidate all message queries to fetch fresh data from server
+      // This ensures temporary reactions are replaced with real server data
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.messages.all,
+      });
+
       // Clear pending flag immediately
       const clearTime = Date.now();
       console.log(`[useMessageActions] 🔓 [${clearTime}] Clearing pending reaction flag (${clearTime - startTime}ms total):`, messageId, emoji);
@@ -481,6 +487,12 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
         await messageService.addReaction(messageId, { emoji: newEmoji });
 
         console.log('[useMessageActions] ✅ API confirmed reaction switch:', messageId, newEmoji);
+
+        // Invalidate all message queries to fetch fresh data from server
+        // This ensures temporary reactions are replaced with real server data
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.messages.all,
+        });
 
         // Clear pending flag immediately
         pendingReactions.delete(messageId);
