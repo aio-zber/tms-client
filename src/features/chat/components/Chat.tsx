@@ -199,8 +199,10 @@ export function Chat({
       const message = messages.find(m => m.id === messageId);
       if (!message || !currentUserId) return;
 
-      // Find user's existing reaction (any emoji)
-      const existingReaction = message.reactions?.find(r => r.userId === currentUserId);
+      // Find user's existing REAL reactions (ignore temp ones from optimistic updates)
+      // Get the last real reaction (most recent) in case there are multiple
+      const userReactions = message.reactions?.filter(r => r.userId === currentUserId && !r.id.startsWith('temp-'));
+      const existingReaction = userReactions?.[userReactions.length - 1];
 
       if (existingReaction?.emoji === emoji) {
         // Toggle: same emoji clicked - remove it
