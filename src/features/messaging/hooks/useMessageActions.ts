@@ -284,11 +284,9 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
       const apiTime = Date.now();
       console.log(`[useMessageActions] ✅ [${apiTime}] API confirmed reaction (${apiTime - startTime}ms):`, messageId, emoji);
 
-      // Invalidate all message queries to fetch fresh data from server
-      // This ensures temporary reactions are replaced with real server data
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.messages.all,
-      });
+      // Don't invalidate queries - let WebSocket events update the cache
+      // The WebSocket handler will replace temp reactions with real server data
+      // This prevents flashing by avoiding a refetch
 
       // Clear pending flag immediately
       const clearTime = Date.now();
@@ -488,11 +486,9 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
 
         console.log('[useMessageActions] ✅ API confirmed reaction switch:', messageId, newEmoji);
 
-        // Invalidate all message queries to fetch fresh data from server
-        // This ensures temporary reactions are replaced with real server data
-        await queryClient.invalidateQueries({
-          queryKey: queryKeys.messages.all,
-        });
+        // Don't invalidate queries - let WebSocket events update the cache
+        // The WebSocket handler will replace temp reactions with real server data
+        // This prevents flashing by avoiding a refetch
 
         // Clear pending flag immediately
         pendingReactions.delete(messageId);
