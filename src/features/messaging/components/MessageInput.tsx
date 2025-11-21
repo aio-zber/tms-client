@@ -209,6 +209,7 @@ export function MessageInput({
               side="top"
               align="center"
               ariaLabel="Add emoji"
+              keepOpen={true}
             />
           </div>
 

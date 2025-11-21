@@ -343,46 +343,6 @@ export const MessageBubble = memo(function MessageBubble({
           )}
         </div>
 
-        {/* Reactions */}
-        {message.reactions && message.reactions.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-1.5">
-            {/* Group reactions by emoji - now memoized */}
-            {Object.entries(groupedReactions).map(([emoji, count]) => {
-              const hasUserReacted = userReactions.has(emoji);
-
-              return (
-                <motion.button
-                  key={emoji}
-                  initial={{ scale: 0, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0, opacity: 0 }}
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.95 }}
-                  transition={{
-                    type: "spring",
-                    damping: 20,
-                    stiffness: 400
-                  }}
-                  title={getReactorNames(emoji)}
-                  className={`px-2 py-1 rounded-full text-xs md:text-sm flex items-center gap-1 transition-all ${
-                    hasUserReacted
-                      ? isSent
-                        ? 'bg-white border-2 border-white text-viber-purple font-semibold shadow-sm'
-                        : 'bg-blue-50 border-2 border-blue-500 text-blue-700 font-semibold shadow-sm'
-                      : isSent
-                        ? 'bg-white/20 hover:bg-white/30 text-white border border-white/30'
-                        : 'bg-white hover:bg-gray-50 text-gray-900 border border-gray-200'
-                  }`}
-                  onClick={() => onReact && onReact(message.id, emoji)}
-                >
-                  <span className="text-base md:text-lg">{emoji}</span>
-                  {count > 1 && <span className="text-[10px] font-medium">{count}</span>}
-                </motion.button>
-              );
-            })}
-          </div>
-        )}
-
         {/* Timestamp (outside bubble, only shown on right-click) */}
         {showTimestamp && (
           <div className={`text-[10px] text-gray-400 mt-1 px-1 ${isSent ? 'text-right' : 'text-left'}`}>
@@ -390,6 +350,42 @@ export const MessageBubble = memo(function MessageBubble({
           </div>
         )}
       </div>
+
+      {/* Reactions - Telegram style (below message bubble) */}
+      {message.reactions && message.reactions.length > 0 && (
+        <div className={`flex flex-wrap gap-1 mt-1 ${isSent ? 'justify-end' : 'justify-start'}`}>
+          {/* Group reactions by emoji - now memoized */}
+          {Object.entries(groupedReactions).map(([emoji, count]) => {
+            const hasUserReacted = userReactions.has(emoji);
+
+            return (
+              <motion.button
+                key={emoji}
+                initial={{ scale: 0, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0, opacity: 0 }}
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.95 }}
+                transition={{
+                  type: "spring",
+                  damping: 20,
+                  stiffness: 400
+                }}
+                title={getReactorNames(emoji)}
+                className={`px-2 py-1 rounded-full text-xs md:text-sm flex items-center gap-1 transition-all ${
+                  hasUserReacted
+                    ? 'bg-viber-purple-light/20 border-2 border-viber-purple text-viber-purple font-semibold shadow-sm'
+                    : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300'
+                }`}
+                onClick={() => onReact && onReact(message.id, emoji)}
+              >
+                <span className="text-base md:text-lg">{emoji}</span>
+                <span className="text-xs font-medium">{count}</span>
+              </motion.button>
+            );
+          })}
+        </div>
+      )}
     </div>
 
       {/* Context Menu */}
@@ -432,7 +428,9 @@ export const MessageBubble = memo(function MessageBubble({
               Reply
             </button>
           )}
-          {isSent && onEdit && (
+
+          {/* Edit - only for own messages */}
+          {currentUserId && message.senderId === currentUserId && onEdit && (
             <button
               onClick={() => handleMenuAction(() => onEdit(message.id))}
               className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-gray-100 flex items-center gap-2 text-gray-700 transition"
@@ -441,28 +439,27 @@ export const MessageBubble = memo(function MessageBubble({
               Edit
             </button>
           )}
-          {isSent && onDelete && (
-            <>
-              {/* Delete for Me - always available */}
-              <button
-                onClick={() => handleMenuAction(() => onDelete(message.id, 'me'))}
-                className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-gray-100 flex items-center gap-2 text-gray-700 transition"
-              >
-                <Trash2 className="w-4 h-4 md:w-5 md:h-5" />
-                Delete for Me
-              </button>
 
-              {/* Delete for Everyone - only if within 48 hours */}
-              {canDeleteForEveryone && (
-                <button
-                  onClick={() => handleMenuAction(() => onDelete(message.id, 'everyone'))}
-                  className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-red-50 flex items-center gap-2 text-red-600 transition"
-                >
-                  <Trash2 className="w-4 h-4 md:w-5 md:h-5" />
-                  Delete for Everyone
-                </button>
-              )}
-            </>
+          {/* Delete for Me - available for ALL messages (own and others) */}
+          {onDelete && (
+            <button
+              onClick={() => handleMenuAction(() => onDelete(message.id, 'me'))}
+              className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-gray-100 flex items-center gap-2 text-gray-700 transition"
+            >
+              <Trash2 className="w-4 h-4 md:w-5 md:h-5" />
+              Delete for Me
+            </button>
+          )}
+
+          {/* Delete for Everyone - only for own messages within 48 hours */}
+          {currentUserId && message.senderId === currentUserId && onDelete && canDeleteForEveryone && (
+            <button
+              onClick={() => handleMenuAction(() => onDelete(message.id, 'everyone'))}
+              className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-red-50 flex items-center gap-2 text-red-600 transition"
+            >
+              <Trash2 className="w-4 h-4 md:w-5 md:h-5" />
+              Delete for Everyone
+            </button>
           )}
         </div>
       )}
