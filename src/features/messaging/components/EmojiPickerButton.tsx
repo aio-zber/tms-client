@@ -40,8 +40,26 @@ export function EmojiPickerButton({
     }
   };
 
+  const handleOpenChange = (newOpen: boolean) => {
+    // Always allow opening
+    if (newOpen) {
+      setOpen(true);
+      return;
+    }
+
+    // When closing and keepOpen is false, allow it
+    if (!keepOpen) {
+      setOpen(false);
+      return;
+    }
+
+    // When keepOpen is true and trying to close, ignore it
+    // The picker will only close via onPointerDownOutside or ESC key
+    return;
+  };
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
           type="button"
@@ -58,24 +76,10 @@ export function EmojiPickerButton({
         align={align}
         className="w-full p-0 border-none shadow-lg"
         sideOffset={5}
-        onInteractOutside={(e) => {
-          if (!keepOpen) return; // If not keepOpen, allow default close behavior
-
-          // When keepOpen=true, prevent ALL outside interactions from closing
-          // This includes scrolling, clicking, etc.
-          e.preventDefault();
-        }}
-        onFocusOutside={(e) => {
-          // Prevent closing on focus loss when keepOpen is true
-          if (keepOpen) {
-            e.preventDefault();
-          }
-        }}
         onPointerDownOutside={(e) => {
-          // Only allow closing on actual clicks outside, not scroll events
-          if (!keepOpen) return;
+          if (!keepOpen) return; // If not keepOpen, use default behavior
 
-          // Check if this is a real click outside (not inside the picker)
+          // When keepOpen=true, only close on clicks truly outside the picker
           const target = e.target as HTMLElement;
           const isInsidePicker =
             target.closest('[data-radix-popper-content-wrapper]') ||
@@ -83,15 +87,13 @@ export function EmojiPickerButton({
             target.closest('[class*="emoji"]');
 
           if (!isInsidePicker) {
-            // Real click outside - allow closing
+            // Real click outside - close the picker
             setOpen(false);
-          } else {
-            // Click inside picker - prevent closing
-            e.preventDefault();
           }
+          // If inside picker, do nothing (let the picker handle it)
         }}
         onEscapeKeyDown={() => {
-          // Allow ESC key to close even when keepOpen is true
+          // Allow ESC key to close
           setOpen(false);
         }}
       >
