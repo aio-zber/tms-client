@@ -6,7 +6,7 @@
 'use client';
 
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
-import { Send, X, Smile, BarChart3 } from 'lucide-react';
+import { Send, X, BarChart3 } from 'lucide-react';
 import type { Message } from '@/types/message';
 import { Button } from '@/components/ui/button';
 import PollCreator from './PollCreator';

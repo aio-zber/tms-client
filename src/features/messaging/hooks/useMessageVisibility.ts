@@ -154,7 +154,7 @@ export function useMessageVisibility({
         clearTimeout(timeoutRef.current);
       }
     };
-  }, [inView, shouldTrack, entry?.intersectionRatio, threshold, delayMs, message.id]);
+  }, [inView, shouldTrack, entry?.intersectionRatio, threshold, delayMs, message.id, markReadMutation]);
 
   return {
     ref,
