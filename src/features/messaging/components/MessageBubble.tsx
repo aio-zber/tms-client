@@ -72,6 +72,26 @@ export const MessageBubble = memo(function MessageBubble({
     return messageAge < FORTY_EIGHT_HOURS;
   }, [message.createdAt]);
 
+  // DEBUG: Log context menu props when opened
+  useEffect(() => {
+    if (contextMenu) {
+      console.log('[MessageBubble] Context menu opened:', {
+        messageId: message.id,
+        currentUserId,
+        senderId: message.senderId,
+        senderIdType: typeof message.senderId,
+        currentUserIdType: typeof currentUserId,
+        isOwnMessage: message.senderId === currentUserId,
+        isSent,
+        hasOnReact: !!onReact,
+        hasOnReply: !!onReply,
+        hasOnDelete: !!onDelete,
+        isPoll: !!message.poll,
+        canDeleteForEveryone,
+      });
+    }
+  }, [contextMenu, message.id, currentUserId, message.senderId, isSent, onReact, onReply, onDelete, message.poll, canDeleteForEveryone]);
+
   /**
    * Memoized reaction grouping
    * Groups reactions by emoji and counts them
@@ -440,8 +460,8 @@ export const MessageBubble = memo(function MessageBubble({
             </button>
           )}
 
-          {/* Delete for Everyone - only for own messages within 48 hours */}
-          {currentUserId && message.senderId === currentUserId && onDelete && canDeleteForEveryone && (
+          {/* Delete for Everyone - only for own messages */}
+          {currentUserId && message.senderId === currentUserId && onDelete && (
             <button
               onClick={() => handleMenuAction(() => onDelete(message.id, 'everyone'))}
               className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-red-50 flex items-center gap-2 text-red-600 transition"

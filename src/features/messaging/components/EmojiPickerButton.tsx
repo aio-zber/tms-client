@@ -58,6 +58,18 @@ export function EmojiPickerButton({
         align={align}
         className="w-full p-0 border-none shadow-lg"
         sideOffset={5}
+        onInteractOutside={(e) => {
+          // Keep picker open when keepOpen=true (for message input)
+          if (keepOpen) {
+            e.preventDefault();
+          }
+        }}
+        onPointerDownOutside={(e) => {
+          // Prevent closing when clicking outside if keepOpen=true
+          if (keepOpen) {
+            e.preventDefault();
+          }
+        }}
       >
         <CustomEmojiPicker onEmojiSelect={handleEmojiSelect} />
       </PopoverContent>
