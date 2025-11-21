@@ -304,6 +304,7 @@ export function useMessages(
           const cachedData = oldData as { pages: Array<{ data: Message[] }>; pageParams: unknown[] };
 
           // Remove reaction from the message in all pages
+          // IMPORTANT: Only remove REAL reactions (not temp ones from optimistic updates)
           const newPages = cachedData.pages.map((page) => ({
             ...page,
             data: page.data.map((msg) =>
@@ -311,7 +312,7 @@ export function useMessages(
                 ? {
                     ...msg,
                     reactions: (msg.reactions || []).filter(
-                      (r) => !(r.userId === user_id && r.emoji === emoji)
+                      (r) => !(r.userId === user_id && r.emoji === emoji && !r.id.startsWith('temp-'))
                     ),
                   }
                 : msg
