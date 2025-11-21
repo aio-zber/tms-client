@@ -236,6 +236,10 @@ export function useMessages(
 
               const currentReactions = msg.reactions || [];
 
+              // Debug: Log current reactions state
+              console.log(`[useMessages] 🔍 Current reactions for ${msg.id}:`, currentReactions.map(r => `${r.emoji}(${r.id.startsWith('temp-') ? 'TEMP' : 'REAL'})`).join(', '));
+              console.log(`[useMessages] 🔍 Looking for: userId=${reaction.userId}, emoji=${reaction.emoji}`);
+
               // FIRST: Check if this exact reaction (same emoji + userId) already exists (temp OR real)
               const existingReactionIndex = currentReactions.findIndex(
                 (r) => r.userId === reaction.userId && r.emoji === reaction.emoji
@@ -245,7 +249,7 @@ export function useMessages(
               if (existingReactionIndex !== -1) {
                 const existingReaction = currentReactions[existingReactionIndex];
                 const wasTemp = existingReaction.id.startsWith('temp-');
-                console.log(`[useMessages] ✅ Replacing ${wasTemp ? 'temp' : 'existing'} reaction with server reaction: ${reaction.emoji}`);
+                console.log(`[useMessages] ✅ Replacing ${wasTemp ? 'temp' : 'existing'} reaction with server reaction: ${reaction.emoji} (found at index ${existingReactionIndex})`);
 
                 return {
                   ...msg,
