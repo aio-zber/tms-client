@@ -9,6 +9,7 @@
 
 import { memo } from 'react';
 import { motion } from 'framer-motion';
+import { EmojiPickerButton } from './EmojiPickerButton';
 
 interface QuickReactionBarProps {
   onReact: (emoji: string) => void;
@@ -61,7 +62,7 @@ export const QuickReactionBar = memo(function QuickReactionBar({
       ))}
 
       {/* More reactions button (opens full emoji picker) */}
-      <motion.button
+      <motion.div
         initial={{ opacity: 0, scale: 0 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{
@@ -70,27 +71,31 @@ export const QuickReactionBar = memo(function QuickReactionBar({
           damping: 20,
           stiffness: 500
         }}
-        whileHover={{ scale: 1.2 }}
-        whileTap={{ scale: 0.9 }}
-        className="w-8 h-8 md:w-9 md:h-9 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors text-gray-500"
-        title="More reactions"
-        aria-label="More reactions"
       >
-        <svg
-          className="w-5 h-5"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <circle cx="12" cy="12" r="10" strokeWidth="2" />
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="2"
-            d="M8 15s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"
-          />
-        </svg>
-      </motion.button>
+        <EmojiPickerButton
+          onEmojiSelect={onReact}
+          triggerClassName="w-8 h-8 md:w-9 md:h-9 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors text-gray-500"
+          triggerIcon={
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <circle cx="12" cy="12" r="10" strokeWidth="2" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M8 15s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"
+              />
+            </svg>
+          }
+          side="top"
+          align="center"
+          ariaLabel="More reactions"
+        />
+      </motion.div>
     </motion.div>
   );
 });

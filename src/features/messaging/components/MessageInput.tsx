@@ -11,6 +11,7 @@ import type { Message } from '@/types/message';
 import { Button } from '@/components/ui/button';
 import PollCreator from './PollCreator';
 import { usePollActions } from '../hooks/usePollActions';
+import { EmojiPickerButton } from './EmojiPickerButton';
 
 interface MessageInputProps {
   conversationId: string;
@@ -41,6 +42,28 @@ export function MessageInput({
   const [showPollCreator, setShowPollCreator] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { createPoll } = usePollActions();
+
+  // Handle emoji selection - insert at cursor position
+  const handleEmojiSelect = (emoji: string) => {
+    if (!textareaRef.current) return;
+
+    const textarea = textareaRef.current;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const textBefore = content.substring(0, start);
+    const textAfter = content.substring(end);
+
+    // Insert emoji at cursor position
+    const newContent = textBefore + emoji + textAfter;
+    setContent(newContent);
+
+    // Restore focus and set cursor position after emoji
+    setTimeout(() => {
+      textarea.focus();
+      const newCursorPos = start + emoji.length;
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+    }, 0);
+  };
 
   // Update content when editingMessage changes
   useEffect(() => {
@@ -178,15 +201,16 @@ export function MessageInput({
             <BarChart3 className="w-5 h-5 md:w-6 md:h-6 text-gray-400" />
           </button>
 
-          {/* Emoji Button (placeholder for future) */}
-          <button
-            type="button"
-            className="p-2 md:p-2.5 hover:bg-gray-100 rounded-full transition mb-1 hidden sm:block"
-            disabled={disabled}
-            title="Add emoji (coming soon)"
-          >
-            <Smile className="w-5 h-5 md:w-6 md:h-6 text-gray-400" />
-          </button>
+          {/* Emoji Button */}
+          <div className="mb-1 hidden sm:block">
+            <EmojiPickerButton
+              onEmojiSelect={handleEmojiSelect}
+              triggerClassName="p-2 md:p-2.5 hover:bg-gray-100 rounded-full transition"
+              side="top"
+              align="center"
+              ariaLabel="Add emoji"
+            />
+          </div>
 
           {/* Textarea */}
           <div className="flex-1 relative">
