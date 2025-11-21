@@ -230,9 +230,10 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
     // Store previous data for rollback
     const previousData: Array<[unknown[], unknown]> = [];
 
-    // Create optimistic reaction object
+    // Create optimistic reaction object with deterministic ID
+    // Use emoji + userId to prevent duplicate temps during rapid switching
     const optimisticReaction = {
-      id: `temp-${Date.now()}`, // Temporary ID
+      id: `temp-${currentUserId}-${emoji}`, // Deterministic temp ID
       userId: currentUserId,
       emoji,
       createdAt: new Date().toISOString()
@@ -430,9 +431,10 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
       // Store previous data for rollback
       const previousData: Array<[unknown[], unknown]> = [];
 
-      // Create optimistic reaction object
+      // Create optimistic reaction object with deterministic ID
+      // Use emoji + userId to prevent duplicate temps during rapid switching
       const optimisticReaction = {
-        id: `temp-${Date.now()}`, // Temporary ID
+        id: `temp-${currentUserId}-${newEmoji}`, // Deterministic temp ID
         userId: currentUserId,
         emoji: newEmoji,
         createdAt: new Date().toISOString()

@@ -199,9 +199,9 @@ export function Chat({
       const message = messages.find(m => m.id === messageId);
       if (!message || !currentUserId) return;
 
-      // Find user's existing REAL reactions (ignore temp ones from optimistic updates)
-      // Get the last real reaction (most recent) in case there are multiple
-      const userReactions = message.reactions?.filter(r => r.userId === currentUserId && !r.id.startsWith('temp-'));
+      // Find user's existing reactions (include temp ones for correct switching logic)
+      // During rapid switching, we need to detect temp reactions to avoid incorrect behavior
+      const userReactions = message.reactions?.filter(r => r.userId === currentUserId);
       const existingReaction = userReactions?.[userReactions.length - 1];
 
       if (existingReaction?.emoji === emoji) {

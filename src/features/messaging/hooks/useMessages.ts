@@ -236,25 +236,33 @@ export function useMessages(
 
               const currentReactions = msg.reactions || [];
 
-              // Remove ALL temporary reactions from this user (from rapid switching)
-              // Then check if the real reaction already exists
+              // FIRST: Check if this exact reaction (same emoji + userId) already exists (temp OR real)
+              const existingReactionIndex = currentReactions.findIndex(
+                (r) => r.userId === reaction.userId && r.emoji === reaction.emoji
+              );
+
+              // If the same emoji reaction exists (temp or real), REPLACE it with server reaction
+              if (existingReactionIndex !== -1) {
+                const existingReaction = currentReactions[existingReactionIndex];
+                const wasTemp = existingReaction.id.startsWith('temp-');
+                console.log(`[useMessages] ✅ Replacing ${wasTemp ? 'temp' : 'existing'} reaction with server reaction: ${reaction.emoji}`);
+
+                return {
+                  ...msg,
+                  reactions: currentReactions.map((r, idx) =>
+                    idx === existingReactionIndex ? reaction : r
+                  ) as Message['reactions'],
+                };
+              }
+
+              // SECOND: No matching emoji found, so remove ALL temp reactions from this user and add server reaction
               const reactionsWithoutUserTemps = currentReactions.filter(
                 (r) => !(r.userId === reaction.userId && r.id.startsWith('temp-'))
               );
 
-              // Check if this exact reaction already exists (by userId + emoji) in the cleaned list
-              const existingReaction = reactionsWithoutUserTemps.find(
-                (r) => r.userId === reaction.userId && r.emoji === reaction.emoji
-              );
+              const removedCount = currentReactions.length - reactionsWithoutUserTemps.length;
+              console.log(`[useMessages] ✅ Adding server reaction (removed ${removedCount} temp reactions): ${reaction.emoji}`);
 
-              // If the same real reaction already exists, skip adding
-              if (existingReaction && !existingReaction.id.startsWith('temp-')) {
-                console.log(`[useMessages] ⚠️ Reaction already exists, skipping add: ${reaction.emoji} from ${reaction.userId}`);
-                return msg;
-              }
-
-              // Add the new reaction (all temp reactions from this user are already removed)
-              console.log(`[useMessages] ✅ Adding server reaction (removed ${currentReactions.length - reactionsWithoutUserTemps.length} temp reactions): ${reaction.emoji}`);
               return {
                 ...msg,
                 reactions: [...reactionsWithoutUserTemps, reaction] as Message['reactions'],
