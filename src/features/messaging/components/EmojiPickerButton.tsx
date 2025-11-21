@@ -59,16 +59,15 @@ export function EmojiPickerButton({
         className="w-full p-0 border-none shadow-lg"
         sideOffset={5}
         onInteractOutside={(e) => {
-          // Keep picker open when keepOpen=true (for message input)
-          if (keepOpen) {
-            e.preventDefault();
+          // When keepOpen=true, only prevent closing if clicking INSIDE the picker
+          // Allow closing when clicking outside (anywhere except the picker panel)
+          const target = e.target as HTMLElement;
+          const isClickInsidePicker = target.closest('[role="dialog"]');
+
+          if (keepOpen && isClickInsidePicker) {
+            e.preventDefault(); // Keep open when clicking inside picker
           }
-        }}
-        onPointerDownOutside={(e) => {
-          // Prevent closing when clicking outside if keepOpen=true
-          if (keepOpen) {
-            e.preventDefault();
-          }
+          // If clicking outside, let it close naturally (don't preventDefault)
         }}
       >
         <CustomEmojiPicker onEmojiSelect={handleEmojiSelect} />
