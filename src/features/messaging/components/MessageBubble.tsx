@@ -7,12 +7,13 @@
 
 import { useState, useRef, useEffect, memo, useMemo } from 'react';
 import { format } from 'date-fns';
-import { Check, CheckCheck, Reply, Edit, Trash2 } from 'lucide-react';
+import { Check, CheckCheck, Reply, Edit, Trash2, Smile } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { Message } from '@/types/message';
 import PollDisplay from './PollDisplay';
 import { usePollActions } from '../hooks/usePollActions';
 import { QuickReactionBar } from './QuickReactionBar';
+import { EmojiPickerButton } from './EmojiPickerButton';
 
 interface MessageBubbleProps {
   message: Message;
@@ -391,7 +392,7 @@ export const MessageBubble = memo(function MessageBubble({
       </div>
     </div>
 
-      {/* Context Menu - Simplified (React option removed, use QuickReactionBar instead) */}
+      {/* Context Menu */}
       {contextMenu && (
         <div
           ref={contextMenuRef}
@@ -401,6 +402,27 @@ export const MessageBubble = memo(function MessageBubble({
             top: `${contextMenu.y}px`,
           }}
         >
+          {/* React option with inline emoji picker */}
+          {onReact && !message.poll && (
+            <div className="relative">
+              <EmojiPickerButton
+                onEmojiSelect={(emoji) => {
+                  onReact(message.id, emoji);
+                  setContextMenu(null);
+                }}
+                triggerClassName="w-full px-4 py-2 justify-start text-sm md:text-base hover:bg-gray-100 flex items-center gap-2 text-gray-700 transition rounded-none h-auto"
+                triggerIcon={
+                  <>
+                    <Smile className="w-4 h-4 md:w-5 md:h-5" />
+                    <span>React</span>
+                  </>
+                }
+                side="right"
+                align="start"
+                ariaLabel="React to message"
+              />
+            </div>
+          )}
           {onReply && (
             <button
               onClick={() => handleMenuAction(() => onReply(message))}
