@@ -17,6 +17,7 @@ interface EmojiPickerButtonProps {
   side?: 'top' | 'right' | 'bottom' | 'left';
   align?: 'start' | 'center' | 'end';
   ariaLabel?: string;
+  keepOpen?: boolean; // Keep picker open after selection (for message input)
 }
 
 export function EmojiPickerButton({
@@ -25,13 +26,18 @@ export function EmojiPickerButton({
   triggerClassName,
   side = 'top',
   align = 'end',
-  ariaLabel = 'Select emoji'
+  ariaLabel = 'Select emoji',
+  keepOpen = false
 }: EmojiPickerButtonProps) {
   const [open, setOpen] = useState(false);
 
   const handleEmojiSelect = (emoji: string) => {
     onEmojiSelect(emoji);
-    setOpen(false);
+    // Only auto-close if keepOpen is false (for reactions)
+    // Keep open if keepOpen is true (for message input multiple emoji selection)
+    if (!keepOpen) {
+      setOpen(false);
+    }
   };
 
   return (
