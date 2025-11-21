@@ -41,6 +41,8 @@ export function EmojiPickerButton({
   };
 
   const handleOpenChange = (newOpen: boolean) => {
+    console.log('[EmojiPickerButton] handleOpenChange called:', { newOpen, keepOpen, currentOpen: open });
+
     // Always allow opening
     if (newOpen) {
       setOpen(true);
@@ -55,6 +57,7 @@ export function EmojiPickerButton({
 
     // When keepOpen is true and trying to close, ignore it
     // The picker will only close via onPointerDownOutside or ESC key
+    console.log('[EmojiPickerButton] Blocking auto-close because keepOpen=true');
     return;
   };
 
@@ -77,23 +80,32 @@ export function EmojiPickerButton({
         className="w-full p-0 border-none shadow-lg"
         sideOffset={5}
         onPointerDownOutside={(e) => {
+          console.log('[EmojiPickerButton] onPointerDownOutside fired', { keepOpen });
+
           if (!keepOpen) return; // If not keepOpen, use default behavior
 
           // When keepOpen=true, only close on clicks truly outside the picker
           const target = e.target as HTMLElement;
+          console.log('[EmojiPickerButton] Click target:', target);
+
           const isInsidePicker =
             target.closest('[data-radix-popper-content-wrapper]') ||
             target.closest('.EmojiPickerReact') ||
             target.closest('[class*="emoji"]');
 
+          console.log('[EmojiPickerButton] isInsidePicker:', isInsidePicker);
+
           if (!isInsidePicker) {
             // Real click outside - close the picker
+            console.log('[EmojiPickerButton] Click outside detected - closing picker');
             setOpen(false);
+          } else {
+            console.log('[EmojiPickerButton] Click inside detected - staying open');
           }
           // If inside picker, do nothing (let the picker handle it)
         }}
         onEscapeKeyDown={() => {
-          // Allow ESC key to close
+          console.log('[EmojiPickerButton] ESC key pressed - closing picker');
           setOpen(false);
         }}
       >
