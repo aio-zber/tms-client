@@ -436,6 +436,7 @@ export const MessageBubble = memo(function MessageBubble({
                 side="right"
                 align="start"
                 ariaLabel="React to message"
+                keepOpen={true}
               />
             </div>
           )}
