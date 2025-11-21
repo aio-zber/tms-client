@@ -61,18 +61,38 @@ export function EmojiPickerButton({
         onInteractOutside={(e) => {
           if (!keepOpen) return; // If not keepOpen, allow default close behavior
 
-          // When keepOpen=true, only allow closing if clicking truly OUTSIDE
-          const target = e.target as HTMLElement;
-
-          // Check if click is inside the popover content (emoji picker panel)
-          const popoverContent = target.closest('[data-radix-popper-content-wrapper]');
-          const emojiPicker = target.closest('.EmojiPickerReact') || target.closest('[class*="emoji"]');
-
-          if (popoverContent || emojiPicker) {
-            // Click is inside picker - prevent closing
+          // When keepOpen=true, prevent ALL outside interactions from closing
+          // This includes scrolling, clicking, etc.
+          e.preventDefault();
+        }}
+        onFocusOutside={(e) => {
+          // Prevent closing on focus loss when keepOpen is true
+          if (keepOpen) {
             e.preventDefault();
           }
-          // Otherwise, allow closing (click is outside)
+        }}
+        onPointerDownOutside={(e) => {
+          // Only allow closing on actual clicks outside, not scroll events
+          if (!keepOpen) return;
+
+          // Check if this is a real click outside (not inside the picker)
+          const target = e.target as HTMLElement;
+          const isInsidePicker =
+            target.closest('[data-radix-popper-content-wrapper]') ||
+            target.closest('.EmojiPickerReact') ||
+            target.closest('[class*="emoji"]');
+
+          if (!isInsidePicker) {
+            // Real click outside - allow closing
+            setOpen(false);
+          } else {
+            // Click inside picker - prevent closing
+            e.preventDefault();
+          }
+        }}
+        onEscapeKeyDown={() => {
+          // Allow ESC key to close even when keepOpen is true
+          setOpen(false);
         }}
       >
         <CustomEmojiPicker onEmojiSelect={handleEmojiSelect} />
