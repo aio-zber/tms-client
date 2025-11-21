@@ -12,7 +12,6 @@ import { motion } from 'framer-motion';
 import type { Message } from '@/types/message';
 import PollDisplay from './PollDisplay';
 import { usePollActions } from '../hooks/usePollActions';
-import { QuickReactionBar } from './QuickReactionBar';
 import { EmojiPickerButton } from './EmojiPickerButton';
 
 interface MessageBubbleProps {
@@ -54,12 +53,11 @@ export const MessageBubble = memo(function MessageBubble({
   const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showTimestamp, setShowTimestamp] = useState(false);
-  const [isHovered, setIsHovered] = useState(false); // Messenger-style hover detection
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const { voteOnPoll, closePoll } = usePollActions();
 
-  // Common emojis for quick reactions
+  // Common emojis for quick reactions (legacy, used by old emoji picker)
   const quickEmojis = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥'];
 
   /**
@@ -266,21 +264,7 @@ export const MessageBubble = memo(function MessageBubble({
             isSent ? 'items-end' : 'items-start'
           }`}
           onContextMenu={handleContextMenu}
-          onMouseEnter={() => setIsHovered(true)}
-          onMouseLeave={() => setIsHovered(false)}
         >
-          {/* Quick Reaction Bar - Messenger-style hover (Desktop only) */}
-          {isHovered && onReact && !message.poll && (
-            <div className="hidden md:block">
-              <QuickReactionBar
-                onReact={(emoji) => {
-                  onReact(message.id, emoji);
-                  setIsHovered(false); // Hide after clicking
-                }}
-                isSent={isSent}
-              />
-            </div>
-          )}
           {/* Sender Name (for group chats) */}
           {showSender && !isSent && senderName && (
             <span className="text-xs md:text-sm text-gray-600 mb-1 px-3">{senderName}</span>
