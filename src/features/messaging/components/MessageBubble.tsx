@@ -349,43 +349,43 @@ export const MessageBubble = memo(function MessageBubble({
             {formatTime(message.createdAt)}
           </div>
         )}
+
+        {/* Reactions - Messenger style (below message bubble, small and compact) */}
+        {message.reactions && message.reactions.length > 0 && (
+          <div className={`absolute -bottom-3 left-0 flex flex-wrap gap-1 z-10`}>
+            {/* Group reactions by emoji - now memoized */}
+            {Object.entries(groupedReactions).map(([emoji, count]) => {
+              const hasUserReacted = userReactions.has(emoji);
+
+              return (
+                <motion.button
+                  key={emoji}
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0, opacity: 0 }}
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.95 }}
+                  transition={{
+                    type: "spring",
+                    damping: 20,
+                    stiffness: 400
+                  }}
+                  title={getReactorNames(emoji)}
+                  className={`px-1.5 py-0.5 rounded-full text-xs flex items-center gap-0.5 transition-all shadow-sm border ${
+                    hasUserReacted
+                      ? 'bg-white border-viber-purple text-viber-purple font-semibold'
+                      : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-200'
+                  }`}
+                  onClick={() => onReact && onReact(message.id, emoji)}
+                >
+                  <span className="text-sm leading-none">{emoji}</span>
+                  <span className="text-[10px] font-medium leading-none">{count}</span>
+                </motion.button>
+              );
+            })}
+          </div>
+        )}
       </div>
-
-      {/* Reactions - Messenger style (overlapping bottom of message bubble) */}
-      {message.reactions && message.reactions.length > 0 && (
-        <div className={`absolute -bottom-2 ${isSent ? 'right-2' : 'left-2'} flex flex-wrap gap-1 z-10`}>
-          {/* Group reactions by emoji - now memoized */}
-          {Object.entries(groupedReactions).map(([emoji, count]) => {
-            const hasUserReacted = userReactions.has(emoji);
-
-            return (
-              <motion.button
-                key={emoji}
-                initial={{ scale: 0, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0, opacity: 0 }}
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
-                transition={{
-                  type: "spring",
-                  damping: 20,
-                  stiffness: 400
-                }}
-                title={getReactorNames(emoji)}
-                className={`px-2 py-0.5 rounded-full text-xs flex items-center gap-1 transition-all shadow-md ${
-                  hasUserReacted
-                    ? 'bg-white border-2 border-viber-purple text-viber-purple font-semibold'
-                    : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-300'
-                }`}
-                onClick={() => onReact && onReact(message.id, emoji)}
-              >
-                <span className="text-sm">{emoji}</span>
-                <span className="text-[11px] font-medium">{count}</span>
-              </motion.button>
-            );
-          })}
-        </div>
-      )}
     </div>
 
       {/* Context Menu */}
