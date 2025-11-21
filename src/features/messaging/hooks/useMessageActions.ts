@@ -463,11 +463,11 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
                     msg.id === messageId
                       ? {
                           ...msg,
-                          // Remove ALL reactions by current user, then add new one
-                          // This handles rapid switching where oldEmoji might be stale
+                          // Remove ONLY the old emoji reaction, keep others
+                          // This allows WebSocket events to properly reconcile
                           reactions: [
                             ...(msg.reactions || []).filter(
-                              (r) => r.userId !== currentUserId
+                              (r) => !(r.userId === currentUserId && r.emoji === oldEmoji)
                             ),
                             optimisticReaction
                           ] as Message['reactions'],
@@ -481,6 +481,7 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
         });
 
         console.log('[useMessageActions] ✅ Optimistically switched reaction in cache:', messageId, oldEmoji, '->', newEmoji);
+        console.log('[useMessageActions] 🔍 Added temp reaction with ID:', optimisticReaction.id);
 
         // Backend now handles atomic switching - just call addReaction
         // If user has an existing reaction, backend will remove it first automatically
