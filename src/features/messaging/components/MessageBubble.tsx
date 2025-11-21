@@ -7,7 +7,7 @@
 
 import { useState, useRef, useEffect, memo, useMemo } from 'react';
 import { format } from 'date-fns';
-import { Check, CheckCheck, Reply, Edit, Trash2, Smile } from 'lucide-react';
+import { Check, CheckCheck, Reply, Trash2, Smile } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { Message } from '@/types/message';
 import PollDisplay from './PollDisplay';
@@ -42,7 +42,7 @@ export const MessageBubble = memo(function MessageBubble({
   showSender = false,
   senderName,
   currentUserId,
-  onEdit,
+  onEdit: _onEdit, // Keep prop for compatibility but don't use in context menu
   onDelete,
   onReply,
   onReact,
@@ -240,7 +240,7 @@ export const MessageBubble = memo(function MessageBubble({
   return (
     <>
       <div className={`flex gap-2 ${isSent ? 'justify-end' : 'justify-start'}`}>
-        {/* Message Content */}
+        {/* Message Content - relative positioning for absolute reactions */}
         <div
           className={`max-w-[85%] sm:max-w-[75%] md:max-w-[70%] lg:max-w-[60%] flex flex-col relative ${
             isSent ? 'items-end' : 'items-start'
@@ -351,9 +351,9 @@ export const MessageBubble = memo(function MessageBubble({
         )}
       </div>
 
-      {/* Reactions - Telegram style (below message bubble) */}
+      {/* Reactions - Messenger style (overlapping bottom of message bubble) */}
       {message.reactions && message.reactions.length > 0 && (
-        <div className={`flex flex-wrap gap-1 mt-1 ${isSent ? 'justify-end' : 'justify-start'}`}>
+        <div className={`absolute -bottom-2 ${isSent ? 'right-2' : 'left-2'} flex flex-wrap gap-1 z-10`}>
           {/* Group reactions by emoji - now memoized */}
           {Object.entries(groupedReactions).map(([emoji, count]) => {
             const hasUserReacted = userReactions.has(emoji);
@@ -372,15 +372,15 @@ export const MessageBubble = memo(function MessageBubble({
                   stiffness: 400
                 }}
                 title={getReactorNames(emoji)}
-                className={`px-2 py-1 rounded-full text-xs md:text-sm flex items-center gap-1 transition-all ${
+                className={`px-2 py-0.5 rounded-full text-xs flex items-center gap-1 transition-all shadow-md ${
                   hasUserReacted
-                    ? 'bg-viber-purple-light/20 border-2 border-viber-purple text-viber-purple font-semibold shadow-sm'
-                    : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300'
+                    ? 'bg-white border-2 border-viber-purple text-viber-purple font-semibold'
+                    : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-300'
                 }`}
                 onClick={() => onReact && onReact(message.id, emoji)}
               >
-                <span className="text-base md:text-lg">{emoji}</span>
-                <span className="text-xs font-medium">{count}</span>
+                <span className="text-sm">{emoji}</span>
+                <span className="text-[11px] font-medium">{count}</span>
               </motion.button>
             );
           })}
@@ -426,17 +426,6 @@ export const MessageBubble = memo(function MessageBubble({
             >
               <Reply className="w-4 h-4 md:w-5 md:h-5" />
               Reply
-            </button>
-          )}
-
-          {/* Edit - only for own messages */}
-          {currentUserId && message.senderId === currentUserId && onEdit && (
-            <button
-              onClick={() => handleMenuAction(() => onEdit(message.id))}
-              className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-gray-100 flex items-center gap-2 text-gray-700 transition"
-            >
-              <Edit className="w-4 h-4 md:w-5 md:h-5" />
-              Edit
             </button>
           )}
 
