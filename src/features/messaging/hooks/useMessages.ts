@@ -208,12 +208,18 @@ export function useMessages(
 
       const { message_id, reaction: rawReaction } = data as {
         message_id: string;
-        reaction: { id: string; userId: string; emoji: string; createdAt: string };
+        reaction: { id: string; userId?: string; user_id?: string; emoji: string; createdAt: string; created_at?: string };
       };
 
-      // Add messageId to reaction object (required by MessageReaction type)
+      // Debug: Log raw reaction to see actual structure
+      console.log(`[useMessages] 🔍 Raw reaction from server:`, JSON.stringify(rawReaction));
+
+      // Normalize reaction object - handle both camelCase and snake_case from server
       const reaction = {
-        ...rawReaction,
+        id: rawReaction.id,
+        userId: rawReaction.userId || rawReaction.user_id,
+        emoji: rawReaction.emoji,
+        createdAt: rawReaction.createdAt || rawReaction.created_at,
         messageId: message_id,
       };
 

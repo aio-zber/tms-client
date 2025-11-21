@@ -463,12 +463,11 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
                     msg.id === messageId
                       ? {
                           ...msg,
-                          // Remove ONLY the old emoji reaction, keep others
-                          // This allows WebSocket events to properly reconcile
+                          // DON'T remove old reaction here - let WebSocket reaction_removed handle it
+                          // Just add the new temp reaction alongside
+                          // The reaction_added WebSocket event will replace this temp reaction
                           reactions: [
-                            ...(msg.reactions || []).filter(
-                              (r) => !(r.userId === currentUserId && r.emoji === oldEmoji)
-                            ),
+                            ...(msg.reactions || []),
                             optimisticReaction
                           ] as Message['reactions'],
                         }
