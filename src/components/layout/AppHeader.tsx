@@ -13,7 +13,6 @@ import { useState, useEffect } from 'react';
 import { authService } from '@/features/auth/services/authService';
 import { STORAGE_KEYS } from '@/lib/constants';
 import {
-  Settings,
   Sun,
   Moon,
   Monitor,
@@ -23,10 +22,8 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useRouter } from 'next/navigation';
 
 export function AppHeader() {
-  const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('light');
@@ -169,17 +166,6 @@ export function AppHeader() {
               <p className="text-sm text-gray-700">Working on TMA</p>
             </div>
           </div>
-
-          <DropdownMenuSeparator />
-
-          {/* Profile Settings */}
-          <DropdownMenuItem
-            className="cursor-pointer"
-            onClick={() => router.push('/settings')}
-          >
-            <Settings className="w-4 h-4 mr-3" />
-            <span>Profile Settings</span>
-          </DropdownMenuItem>
 
           <DropdownMenuSeparator />
 
