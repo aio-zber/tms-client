@@ -8,7 +8,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, memo, useMemo } from 'react';
 import { format, isToday, isYesterday } from 'date-fns';
 import { MessageBubble } from './MessageBubble';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ChevronDown } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import type { Message } from '@/types/message';
 import { useMessageVisibilityBatch } from '../hooks/useMessageVisibility';
 import { useInView } from 'react-intersection-observer';
@@ -171,6 +172,7 @@ export function MessageList({
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
+  const [showScrollButton, setShowScrollButton] = useState(false);
   const previousMessageCountRef = useRef(messages?.length || 0);
   const previousScrollHeightRef = useRef(0);
   const wasFetchingNextPageRef = useRef(false);
@@ -320,8 +322,12 @@ export function MessageList({
     if (!scrollArea) return;
 
     const { scrollTop, scrollHeight, clientHeight } = scrollArea;
-    const isAtBottom = scrollHeight - scrollTop - clientHeight < 100;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    const isAtBottom = distanceFromBottom < 100;
+
     setAutoScroll(isAtBottom);
+    // Show scroll-to-bottom button when user scrolls up >100px (Telegram/Messenger pattern)
+    setShowScrollButton(distanceFromBottom > 100);
 
     // Load more when scrolling to top (only if not already loading)
     // Prevent infinite loop by checking isLoadingMoreRef flag
@@ -334,6 +340,21 @@ export function MessageList({
       console.log('[MessageList] 🔄 Loading more messages (scroll triggered)');
       onLoadMore();
     }
+  };
+
+  // Scroll to bottom handler (Telegram/Messenger pattern)
+  const scrollToBottom = () => {
+    const scrollArea = scrollAreaRef.current;
+    if (!scrollArea) return;
+
+    scrollArea.scrollTo({
+      top: scrollArea.scrollHeight,
+      behavior: 'smooth'
+    });
+
+    setAutoScroll(true); // Re-enable auto-scroll
+    setShowScrollButton(false); // Hide button immediately
+    console.log('[MessageList] 📍 Scrolled to bottom via button');
   };
 
   if (loading && (!messages || messages.length === 0)) {
@@ -462,6 +483,23 @@ export function MessageList({
         {/* Scroll Anchor */}
         <div ref={bottomRef} />
       </div>
+
+      {/* Scroll to Bottom Button - Telegram/Messenger Pattern */}
+      <AnimatePresence>
+        {showScrollButton && (
+          <motion.button
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            transition={{ duration: 0.2 }}
+            onClick={scrollToBottom}
+            className="fixed bottom-24 right-6 z-40 w-12 h-12 md:w-14 md:h-14 bg-viber-purple hover:bg-viber-purple-dark text-white rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-110 active:scale-95"
+            aria-label="Scroll to bottom"
+          >
+            <ChevronDown className="w-6 h-6 md:w-7 md:h-7" />
+          </motion.button>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
