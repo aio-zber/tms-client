@@ -74,7 +74,11 @@ export function useConversationEvents({
       console.log('[useConversationEvents] member_added event:', data);
 
       const eventData = data as unknown as MemberAddedEvent;
-      if (eventData.conversation_id !== conversationId) return;
+      console.log('[useConversationEvents] member_added - conversationId:', conversationId, 'event conversationId:', eventData.conversation_id);
+      if (eventData.conversation_id !== conversationId) {
+        console.log('[useConversationEvents] Skipping member_added - different conversation');
+        return;
+      }
 
       // Create system message for member added
       const addedMemberIds = eventData.added_members.map(m => m.user_id);
