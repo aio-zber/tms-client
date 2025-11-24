@@ -77,8 +77,9 @@ export function EmojiPickerButton({
       <PopoverContent
         side={side}
         align={align}
-        className="w-full p-0 border-none shadow-lg"
+        className="w-[95vw] sm:w-[350px] max-w-[400px] p-0 border-none shadow-lg"
         sideOffset={5}
+        collisionPadding={10}
         onPointerDownOutside={(e) => {
           console.log('[EmojiPickerButton] onPointerDownOutside fired', { keepOpen });
 
