@@ -26,6 +26,8 @@ import ConversationSettingsDialog from '@/features/conversations/components/Conv
 import { useConversationEvents } from '@/features/conversations/hooks/useConversationEvents';
 import { ChatHeader } from './ChatHeader';
 import { UserProfileDialog } from '@/features/users/components/UserProfileDialog';
+import { generateMessageDeletedMessage } from '@/features/messaging/utils/systemMessages';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface ChatProps {
   conversationId: string;
@@ -50,6 +52,7 @@ export function Chat({
   const [showProfileDialog, setShowProfileDialog] = useState(false);
 
   // Hooks - Use existing hooks instead of manual implementation
+  const queryClient = useQueryClient();
   const { conversation, loading: loadingConversation } = useConversation(conversationId);
   const { user: currentUser } = useCurrentUser();
   const currentUserId = currentUser?.id || '';
@@ -185,11 +188,27 @@ export function Chat({
         : 'Delete this message for you? Others will still see it.';
 
       if (confirm(confirmMsg)) {
+        // For "delete for everyone", create a system message trace
+        if (scope === 'everyone' && currentUser) {
+          const userName = currentUser.name || currentUser.username || currentUser.email;
+          const systemMessage = generateMessageDeletedMessage(
+            conversationId,
+            currentUserId,
+            userName
+          );
+
+          // Add system message to cache
+          queryClient.setQueryData<Message[]>(
+            ['messages', conversationId],
+            (old) => old ? [...old, systemMessage] : [systemMessage]
+          );
+        }
+
         await deleteMessage(messageId);
         // No need to refresh - WebSocket will push the deletion
       }
     },
-    [deleteMessage]
+    [deleteMessage, conversationId, currentUser, currentUserId, queryClient]
   );
 
   const handleReply = (message: Message) => {

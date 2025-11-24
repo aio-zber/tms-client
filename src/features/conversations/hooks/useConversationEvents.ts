@@ -15,6 +15,13 @@ import type {
   MemberLeftEvent,
   ConversationUpdatedEvent
 } from '@/types/conversation';
+import {
+  generateMemberAddedMessage,
+  generateMemberRemovedMessage,
+  generateMemberLeftMessage,
+  generateConversationUpdatedMessage,
+} from '@/features/messaging/utils/systemMessages';
+import type { Message } from '@/types/message';
 
 interface UseConversationEventsOptions {
   conversationId: string;
@@ -69,6 +76,23 @@ export function useConversationEvents({
       const eventData = data as unknown as MemberAddedEvent;
       if (eventData.conversation_id !== conversationId) return;
 
+      // Create system message for member added
+      const addedMemberIds = eventData.added_members.map(m => m.user_id);
+      const addedMemberNames = eventData.added_members.map(m => m.full_name);
+      const systemMessage = generateMemberAddedMessage(
+        conversationId,
+        eventData.added_by,
+        'Someone', // We don't have the actor name from the event
+        addedMemberIds,
+        addedMemberNames
+      );
+
+      // Add system message to cache
+      queryClient.setQueryData<Message[]>(
+        ['messages', conversationId],
+        (old) => old ? [...old, systemMessage] : [systemMessage]
+      );
+
       // Invalidate conversation query to refetch with new members
       queryClient.invalidateQueries({
         queryKey: ['conversation', conversationId],
@@ -95,6 +119,21 @@ export function useConversationEvents({
       const eventData = data as unknown as MemberRemovedEvent;
       if (eventData.conversation_id !== conversationId) return;
 
+      // Create system message for member removed
+      const systemMessage = generateMemberRemovedMessage(
+        conversationId,
+        eventData.removed_by,
+        'Someone', // We don't have the actor name from the event
+        eventData.removed_user_id,
+        'Member' // We don't have the removed user's name from the event
+      );
+
+      // Add system message to cache
+      queryClient.setQueryData<Message[]>(
+        ['messages', conversationId],
+        (old) => old ? [...old, systemMessage] : [systemMessage]
+      );
+
       // Invalidate conversation query to refetch with updated members
       queryClient.invalidateQueries({
         queryKey: ['conversation', conversationId],
@@ -119,6 +158,19 @@ export function useConversationEvents({
       const eventData = data as unknown as MemberLeftEvent;
       if (eventData.conversation_id !== conversationId) return;
 
+      // Create system message for member left
+      const systemMessage = generateMemberLeftMessage(
+        conversationId,
+        eventData.user_id,
+        eventData.user_name
+      );
+
+      // Add system message to cache
+      queryClient.setQueryData<Message[]>(
+        ['messages', conversationId],
+        (old) => old ? [...old, systemMessage] : [systemMessage]
+      );
+
       // Invalidate conversation query
       queryClient.invalidateQueries({
         queryKey: ['conversation', conversationId],
@@ -142,6 +194,23 @@ export function useConversationEvents({
 
       const eventData = data as unknown as ConversationUpdatedEvent;
       if (eventData.conversation_id !== conversationId) return;
+
+      // Create system message for conversation updated
+      const systemMessage = generateConversationUpdatedMessage(
+        conversationId,
+        eventData.updated_by,
+        'Someone', // We don't have the actor name from the event
+        {
+          name: eventData.name,
+          avatarUrl: eventData.avatar_url,
+        }
+      );
+
+      // Add system message to cache
+      queryClient.setQueryData<Message[]>(
+        ['messages', conversationId],
+        (old) => old ? [...old, systemMessage] : [systemMessage]
+      );
 
       // Invalidate conversation query to refetch updated details
       queryClient.invalidateQueries({

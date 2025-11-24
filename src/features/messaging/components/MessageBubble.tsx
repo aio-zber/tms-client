@@ -329,6 +329,17 @@ export const MessageBubble = memo(function MessageBubble({
     console.log(`[MessageBubble] message.replyTo data:`, message.replyTo);
   }
 
+  // System messages have special centered rendering
+  if (message.type === 'SYSTEM') {
+    return (
+      <div className="flex justify-center my-2">
+        <div className="text-xs md:text-sm text-gray-500 text-center px-4 py-1">
+          {message.content}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       <div className={`flex gap-2 ${isSent ? 'justify-end' : 'justify-start'}`}>
