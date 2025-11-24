@@ -1,4 +1,4 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ProfileInfoCard } from './ProfileInfoCard';
 import { useUserProfile } from '../hooks/useUserProfile';
@@ -71,6 +71,9 @@ export function UserProfileDialog({
       <DialogContent className="max-w-md max-h-[90vh] p-0 gap-0 overflow-hidden">
         <DialogHeader className="px-6 pt-6 pb-2">
           <DialogTitle className="text-xl font-bold">Profile</DialogTitle>
+          <DialogDescription className="sr-only">
+            View user profile information
+          </DialogDescription>
         </DialogHeader>
 
         <div className="overflow-y-auto px-6 pb-6">
