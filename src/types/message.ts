@@ -2,7 +2,7 @@
  * Message-related type definitions
  */
 
-export type MessageType = 'TEXT' | 'IMAGE' | 'FILE' | 'VOICE' | 'POLL' | 'CALL';
+export type MessageType = 'TEXT' | 'IMAGE' | 'FILE' | 'VOICE' | 'POLL' | 'CALL' | 'SYSTEM';
 
 export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
 
@@ -46,6 +46,17 @@ export interface Poll {
   userVotes: string[]; // Option IDs the current user voted for
 }
 
+export interface SystemMessageMetadata {
+  eventType: 'member_added' | 'member_removed' | 'member_left' | 'message_deleted' | 'conversation_updated';
+  actorId: string;
+  actorName: string;
+  targetUserId?: string;
+  targetUserName?: string;
+  addedMemberIds?: string[];
+  addedMemberNames?: string[];
+  details?: Record<string, unknown>;
+}
+
 export interface MessageMetadata {
   // For image/file messages
   fileName?: string;
@@ -64,6 +75,9 @@ export interface MessageMetadata {
   callId?: string;
   callType?: 'voice' | 'video';
   callDuration?: number;
+
+  // For system messages
+  system?: SystemMessageMetadata;
 }
 
 export interface MessageReaction {
