@@ -87,11 +87,28 @@ export function useConversationEvents({
         addedMemberNames
       );
 
-      // Add system message to cache
-      queryClient.setQueryData<Message[]>(
-        ['messages', conversationId],
-        (old) => old ? [...old, systemMessage] : [systemMessage]
-      );
+      // Add system message to infinite query cache
+      const queryKey = ['messages', conversationId, { limit: 50 }];
+      queryClient.setQueryData(queryKey, (old: unknown) => {
+        if (!old || typeof old !== 'object') return old;
+
+        const cachedData = old as { pages: Array<{ data: Message[]; pagination?: unknown }>; pageParams: unknown[] };
+
+        // Add system message to the last page (most recent messages)
+        const lastPageIndex = cachedData.pages.length - 1;
+        if (lastPageIndex < 0) return old; // No pages yet
+
+        const updatedPages = [...cachedData.pages];
+        updatedPages[lastPageIndex] = {
+          ...updatedPages[lastPageIndex],
+          data: [...updatedPages[lastPageIndex].data, systemMessage],
+        };
+
+        return {
+          ...cachedData,
+          pages: updatedPages,
+        };
+      });
 
       // Invalidate conversation query to refetch with new members
       queryClient.invalidateQueries({
@@ -128,11 +145,27 @@ export function useConversationEvents({
         'Member' // We don't have the removed user's name from the event
       );
 
-      // Add system message to cache
-      queryClient.setQueryData<Message[]>(
-        ['messages', conversationId],
-        (old) => old ? [...old, systemMessage] : [systemMessage]
-      );
+      // Add system message to infinite query cache
+      const queryKey = ['messages', conversationId, { limit: 50 }];
+      queryClient.setQueryData(queryKey, (old: unknown) => {
+        if (!old || typeof old !== 'object') return old;
+
+        const cachedData = old as { pages: Array<{ data: Message[]; pagination?: unknown }>; pageParams: unknown[] };
+
+        const lastPageIndex = cachedData.pages.length - 1;
+        if (lastPageIndex < 0) return old;
+
+        const updatedPages = [...cachedData.pages];
+        updatedPages[lastPageIndex] = {
+          ...updatedPages[lastPageIndex],
+          data: [...updatedPages[lastPageIndex].data, systemMessage],
+        };
+
+        return {
+          ...cachedData,
+          pages: updatedPages,
+        };
+      });
 
       // Invalidate conversation query to refetch with updated members
       queryClient.invalidateQueries({
@@ -165,11 +198,27 @@ export function useConversationEvents({
         eventData.user_name
       );
 
-      // Add system message to cache
-      queryClient.setQueryData<Message[]>(
-        ['messages', conversationId],
-        (old) => old ? [...old, systemMessage] : [systemMessage]
-      );
+      // Add system message to infinite query cache
+      const queryKey = ['messages', conversationId, { limit: 50 }];
+      queryClient.setQueryData(queryKey, (old: unknown) => {
+        if (!old || typeof old !== 'object') return old;
+
+        const cachedData = old as { pages: Array<{ data: Message[]; pagination?: unknown }>; pageParams: unknown[] };
+
+        const lastPageIndex = cachedData.pages.length - 1;
+        if (lastPageIndex < 0) return old;
+
+        const updatedPages = [...cachedData.pages];
+        updatedPages[lastPageIndex] = {
+          ...updatedPages[lastPageIndex],
+          data: [...updatedPages[lastPageIndex].data, systemMessage],
+        };
+
+        return {
+          ...cachedData,
+          pages: updatedPages,
+        };
+      });
 
       // Invalidate conversation query
       queryClient.invalidateQueries({
@@ -206,11 +255,27 @@ export function useConversationEvents({
         }
       );
 
-      // Add system message to cache
-      queryClient.setQueryData<Message[]>(
-        ['messages', conversationId],
-        (old) => old ? [...old, systemMessage] : [systemMessage]
-      );
+      // Add system message to infinite query cache
+      const queryKey = ['messages', conversationId, { limit: 50 }];
+      queryClient.setQueryData(queryKey, (old: unknown) => {
+        if (!old || typeof old !== 'object') return old;
+
+        const cachedData = old as { pages: Array<{ data: Message[]; pagination?: unknown }>; pageParams: unknown[] };
+
+        const lastPageIndex = cachedData.pages.length - 1;
+        if (lastPageIndex < 0) return old;
+
+        const updatedPages = [...cachedData.pages];
+        updatedPages[lastPageIndex] = {
+          ...updatedPages[lastPageIndex],
+          data: [...updatedPages[lastPageIndex].data, systemMessage],
+        };
+
+        return {
+          ...cachedData,
+          pages: updatedPages,
+        };
+      });
 
       // Invalidate conversation query to refetch updated details
       queryClient.invalidateQueries({
