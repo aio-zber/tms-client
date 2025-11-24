@@ -7,7 +7,7 @@ import type { User } from '@/types/user';
 import { Mail, Briefcase, Building2, User as UserIcon } from 'lucide-react';
 
 interface ProfileInfoCardProps {
-  user: User;
+  user: Partial<User> & Pick<User, 'id'>;
   variant?: 'full' | 'compact';
   showOrganization?: boolean;
   className?: string;
@@ -34,16 +34,17 @@ export function ProfileInfoCard({
   showOrganization = true,
   className = '',
 }: ProfileInfoCardProps) {
-  const displayName = getUserDisplayName(user);
-  const initials = getUserInitials(user);
-  const orgPath = getOrganizationPath(user);
+  const displayName = getUserDisplayName(user as User);
+  const initials = getUserInitials(user as User);
+  const orgPath = user.division || user.department || user.section ? getOrganizationPath(user as User) : null;
 
   // Determine role badge
   const getRoleBadge = () => {
-    if (isAdmin(user)) {
+    if (!user.role) return null;
+    if (isAdmin(user as User)) {
       return <Badge className="bg-viber-purple text-white">Admin</Badge>;
     }
-    if (isLeader(user)) {
+    if (isLeader(user as User)) {
       return <Badge className="bg-blue-500 text-white">Leader</Badge>;
     }
     return <Badge variant="secondary">Member</Badge>;

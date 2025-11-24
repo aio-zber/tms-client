@@ -49,6 +49,7 @@ export default function ConversationSettingsDialog({
   const [showAddMembers, setShowAddMembers] = useState(false);
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [selectedMemberProfile, setSelectedMemberProfile] = useState<string | undefined>(undefined);
+  const [selectedMemberData, setSelectedMemberData] = useState<any>(undefined);
   const [showProfileDialog, setShowProfileDialog] = useState(false);
 
   const {
@@ -375,6 +376,7 @@ export default function ConversationSettingsDialog({
                             className="flex items-center gap-3 flex-1 cursor-pointer"
                             onClick={() => {
                               setSelectedMemberProfile(member.userId);
+                              setSelectedMemberData(member.user);
                               setShowProfileDialog(true);
                             }}
                           >
@@ -423,6 +425,7 @@ export default function ConversationSettingsDialog({
       {/* User Profile Dialog */}
       <UserProfileDialog
         userId={selectedMemberProfile}
+        userData={selectedMemberData}
         open={showProfileDialog}
         onOpenChange={setShowProfileDialog}
         showSendMessageButton={selectedMemberProfile !== currentUserId}

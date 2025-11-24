@@ -93,12 +93,19 @@ export function ChatHeader({
                 <DropdownMenuSeparator />
               </>
             )}
-            {conversation.type === 'group' && currentUserIsAdmin && (
+            {conversation.type === 'group' && (
               <>
-                <DropdownMenuItem onClick={onOpenSettings}>
-                  <Users className="w-4 h-4 mr-2" />
-                  Manage Members
-                </DropdownMenuItem>
+                {currentUserIsAdmin ? (
+                  <DropdownMenuItem onClick={onOpenSettings}>
+                    <Users className="w-4 h-4 mr-2" />
+                    Manage Members
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem onClick={onOpenSettings}>
+                    <Users className="w-4 h-4 mr-2" />
+                    View Details
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
               </>
             )}
