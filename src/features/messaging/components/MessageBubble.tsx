@@ -9,10 +9,12 @@ import { useState, useRef, useEffect, memo, useMemo } from 'react';
 import { format } from 'date-fns';
 import { Check, CheckCheck, Reply, Trash2, Smile } from 'lucide-react';
 import { motion } from 'framer-motion';
+import * as Dialog from '@radix-ui/react-dialog';
 import type { Message } from '@/types/message';
 import PollDisplay from './PollDisplay';
 import { usePollActions } from '../hooks/usePollActions';
 import { EmojiPickerButton } from './EmojiPickerButton';
+import { CustomEmojiPicker } from '@/components/ui/emoji-picker';
 
 interface MessageBubbleProps {
   message: Message;
@@ -53,6 +55,7 @@ export const MessageBubble = memo(function MessageBubble({
   const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showTimestamp, setShowTimestamp] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const { voteOnPoll, closePoll } = usePollActions();
@@ -69,6 +72,17 @@ export const MessageBubble = memo(function MessageBubble({
     const FORTY_EIGHT_HOURS = 48 * 60 * 60 * 1000;
     return messageAge < FORTY_EIGHT_HOURS;
   }, [message.createdAt]);
+
+  // Mobile detection for responsive emoji picker
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 640); // sm breakpoint
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // DEBUG: Log context menu props when opened
   useEffect(() => {
@@ -465,23 +479,47 @@ export const MessageBubble = memo(function MessageBubble({
           {/* React option with inline emoji picker */}
           {onReact && !message.poll && (
             <div className="relative">
-              <EmojiPickerButton
-                onEmojiSelect={(emoji) => {
-                  onReact(message.id, emoji);
-                  setContextMenu(null);
-                }}
-                triggerClassName="w-full px-4 py-2 justify-start text-sm md:text-base hover:bg-gray-100 flex items-center gap-2 text-gray-700 transition rounded-none h-auto"
-                triggerIcon={
-                  <>
-                    <Smile className="w-4 h-4 md:w-5 md:h-5" />
-                    <span>React</span>
-                  </>
-                }
-                side="right"
-                align="start"
-                ariaLabel="React to message"
-                keepOpen={true}
-              />
+              {isMobile ? (
+                // Mobile: Use Dialog (centered modal) to prevent overflow
+                <Dialog.Root>
+                  <Dialog.Trigger asChild>
+                    <button className="w-full px-4 py-2 justify-start text-sm md:text-base hover:bg-gray-100 flex items-center gap-2 text-gray-700 transition rounded-none h-auto">
+                      <Smile className="w-4 h-4 md:w-5 md:h-5" />
+                      <span>React</span>
+                    </button>
+                  </Dialog.Trigger>
+                  <Dialog.Portal>
+                    <Dialog.Overlay className="fixed inset-0 bg-black/50 z-50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+                    <Dialog.Content className="fixed left-[50%] top-[50%] translate-x-[-50%] translate-y-[-50%] z-50 w-[95vw] max-w-[400px] bg-white rounded-lg shadow-lg p-0 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+                      <CustomEmojiPicker
+                        onEmojiSelect={(emoji) => {
+                          onReact(message.id, emoji);
+                          setContextMenu(null);
+                        }}
+                      />
+                    </Dialog.Content>
+                  </Dialog.Portal>
+                </Dialog.Root>
+              ) : (
+                // Desktop: Use Popover (side positioning)
+                <EmojiPickerButton
+                  onEmojiSelect={(emoji) => {
+                    onReact(message.id, emoji);
+                    setContextMenu(null);
+                  }}
+                  triggerClassName="w-full px-4 py-2 justify-start text-sm md:text-base hover:bg-gray-100 flex items-center gap-2 text-gray-700 transition rounded-none h-auto"
+                  triggerIcon={
+                    <>
+                      <Smile className="w-4 h-4 md:w-5 md:h-5" />
+                      <span>React</span>
+                    </>
+                  }
+                  side="right"
+                  align="start"
+                  ariaLabel="React to message"
+                  keepOpen={true}
+                />
+              )}
             </div>
           )}
           {onReply && (
