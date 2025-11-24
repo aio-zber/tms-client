@@ -25,7 +25,7 @@ import { useConversationEvents } from '../hooks/useConversationEvents';
 import { useConversation } from '../hooks/useConversation';
 import { useUserSearch } from '@/features/users/hooks/useUserSearch';
 import { UserProfileDialog } from '@/features/users/components/UserProfileDialog';
-import type { Conversation } from '@/types/conversation';
+import type { Conversation, ConversationMember } from '@/types/conversation';
 import toast from 'react-hot-toast';
 
 interface ConversationSettingsDialogProps {
@@ -49,7 +49,7 @@ export default function ConversationSettingsDialog({
   const [showAddMembers, setShowAddMembers] = useState(false);
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [selectedMemberProfile, setSelectedMemberProfile] = useState<string | undefined>(undefined);
-  const [selectedMemberData, setSelectedMemberData] = useState<any>(undefined);
+  const [selectedMemberData, setSelectedMemberData] = useState<ConversationMember['user'] | undefined>(undefined);
   const [showProfileDialog, setShowProfileDialog] = useState(false);
 
   const {
