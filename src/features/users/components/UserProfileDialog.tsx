@@ -36,7 +36,8 @@ export function UserProfileDialog({
   showSendMessageButton = true,
   userData,
 }: UserProfileDialogProps) {
-  const { user: fetchedUser, loading, error } = useUserProfile(userId);
+  // Skip fetching if userData is already provided
+  const { user: fetchedUser, loading, error } = useUserProfile(userId, { skip: !!userData });
   const router = useRouter();
   const { conversations } = useConversations();
 
