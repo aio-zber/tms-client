@@ -25,6 +25,7 @@ import { useUserDisplayName } from '@/features/users/hooks/useUserDisplayName';
 import ConversationSettingsDialog from '@/features/conversations/components/ConversationSettingsDialog';
 import { useConversationEvents } from '@/features/conversations/hooks/useConversationEvents';
 import { ChatHeader } from './ChatHeader';
+import { UserProfileDialog } from '@/features/users/components/UserProfileDialog';
 
 interface ChatProps {
   conversationId: string;
@@ -45,6 +46,8 @@ export function Chat({
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
+  const [selectedUserProfile, setSelectedUserProfile] = useState<string | undefined>(undefined);
+  const [showProfileDialog, setShowProfileDialog] = useState(false);
 
   // Hooks - Use existing hooks instead of manual implementation
   const { conversation, loading: loadingConversation } = useConversation(conversationId);
@@ -312,8 +315,13 @@ export function Chat({
             conversation={conversation}
             conversationTitle={getConversationTitle()}
             currentUserIsAdmin={currentUserIsAdmin}
+            currentUserId={currentUserId}
             onOpenSearch={() => setIsSearchOpen(true)}
             onOpenSettings={() => setShowSettingsDialog(true)}
+            onViewProfile={(userId) => {
+              setSelectedUserProfile(userId);
+              setShowProfileDialog(true);
+            }}
             onClearConversation={handleClearConversation}
             onLeaveConversation={handleLeaveConversationWithNav}
             onMobileMenuToggle={() => setIsMobileDrawerOpen(true)}
@@ -379,6 +387,15 @@ export function Chat({
             onLeave={handleLeaveConversationWithNav}
           />
         )}
+
+        {/* User Profile Dialog */}
+        <UserProfileDialog
+          userId={selectedUserProfile}
+          userData={selectedUserProfile ? conversation?.members.find(m => m.userId === selectedUserProfile)?.user : undefined}
+          open={showProfileDialog}
+          onOpenChange={setShowProfileDialog}
+          showSendMessageButton={selectedUserProfile !== currentUserId}
+        />
       </div>
     </>
   );

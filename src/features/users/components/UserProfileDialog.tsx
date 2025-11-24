@@ -5,12 +5,14 @@ import { useUserProfile } from '../hooks/useUserProfile';
 import { Loader2, MessageCircle, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useConversations } from '@/features/conversations/hooks/useConversations';
+import type { User } from '@/types/user';
 
 interface UserProfileDialogProps {
   userId: string | undefined;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   showSendMessageButton?: boolean;
+  userData?: Partial<User>; // Allow passing user data directly from conversation members
 }
 
 /**
@@ -32,10 +34,14 @@ export function UserProfileDialog({
   open,
   onOpenChange,
   showSendMessageButton = true,
+  userData,
 }: UserProfileDialogProps) {
-  const { user, loading, error } = useUserProfile(userId);
+  const { user: fetchedUser, loading, error } = useUserProfile(userId);
   const router = useRouter();
   const { conversations } = useConversations();
+
+  // Use provided userData if available (from conversation members), otherwise use fetched user
+  const user = userData ? { ...fetchedUser, ...userData } as User : fetchedUser;
 
   // Find existing DM conversation with this user
   const findDMConversation = () => {

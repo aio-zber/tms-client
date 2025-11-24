@@ -15,6 +15,7 @@ export default function MainLayout({
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuthStore();
   const isChatsRoute = pathname.startsWith('/chats');
+  const isSettingsRoute = pathname.startsWith('/settings');
 
   // Redirect to root if not authenticated
   useEffect(() => {
@@ -54,9 +55,9 @@ export default function MainLayout({
             <CenterPanel />
           </aside>
 
-          {/* Right Panel - Chat View (children) */}
+          {/* Right Panel - Chat View or Settings (children) */}
           <main className="bg-gray-50 overflow-hidden">
-            {isChatsRoute ? (
+            {isChatsRoute || isSettingsRoute ? (
               children
             ) : (
               <div className="h-full flex items-center justify-center">
