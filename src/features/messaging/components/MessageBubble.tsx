@@ -491,6 +491,8 @@ export const MessageBubble = memo(function MessageBubble({
                   <Dialog.Portal>
                     <Dialog.Overlay className="fixed inset-0 bg-black/50 z-50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
                     <Dialog.Content className="fixed left-[50%] top-[50%] translate-x-[-50%] translate-y-[-50%] z-50 w-[95vw] max-w-[400px] bg-white rounded-lg shadow-lg p-0 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+                      <Dialog.Title className="sr-only">Select emoji reaction</Dialog.Title>
+                      <Dialog.Description className="sr-only">Choose an emoji to react to this message</Dialog.Description>
                       <CustomEmojiPicker
                         onEmojiSelect={(emoji) => {
                           onReact(message.id, emoji);
