@@ -168,16 +168,47 @@ export const MessageBubble = memo(function MessageBubble({
   // Close context menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (contextMenuRef.current && !contextMenuRef.current.contains(event.target as Node)) {
-        setContextMenu(null);
-        setShowTimestamp(false); // Hide timestamp when closing menu
+      const target = event.target as Node;
+
+      // Check if click is inside emoji picker (which is inside context menu)
+      const clickedElement = target as HTMLElement;
+      const isInsideEmojiPicker =
+        clickedElement.closest('.EmojiPickerReact') ||
+        clickedElement.closest('[data-radix-popper-content-wrapper]') ||
+        clickedElement.closest('[class*="emoji"]');
+
+      if (isInsideEmojiPicker) {
+        console.log('[MessageBubble] Click inside emoji picker - keeping context menu open');
+        return; // Don't close anything
       }
-      if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target as Node)) {
+
+      // Close context menu if clicking outside
+      if (contextMenuRef.current && !contextMenuRef.current.contains(target)) {
+        console.log('[MessageBubble] Click outside context menu - closing');
+        setContextMenu(null);
+        setShowTimestamp(false);
+      }
+
+      // Close old emoji picker if clicking outside
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(target)) {
         setShowEmojiPicker(false);
       }
     };
 
-    const handleScroll = () => {
+    const handleScroll = (event: Event) => {
+      // Don't close context menu if scrolling inside the emoji picker
+      const target = event.target as HTMLElement;
+      const isScrollInsideEmojiPicker =
+        target.closest('.EmojiPickerReact') ||
+        target.closest('[data-radix-popper-content-wrapper]') ||
+        target.closest('[class*="emoji"]');
+
+      if (isScrollInsideEmojiPicker) {
+        console.log('[MessageBubble] Scroll inside emoji picker detected - keeping context menu open');
+        return; // Don't close context menu
+      }
+
+      console.log('[MessageBubble] Scroll outside emoji picker - closing context menu');
       setContextMenu(null);
       setShowEmojiPicker(false);
       setShowTimestamp(false); // Hide timestamp on scroll
