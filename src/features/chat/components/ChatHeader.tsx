@@ -1,6 +1,6 @@
 'use client';
 
-import { Menu, MoreVertical, Search, Users, LogOut } from 'lucide-react';
+import { Menu, MoreVertical, Search, Users, LogOut, User } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -15,8 +15,10 @@ interface ChatHeaderProps {
   conversation: Conversation;
   conversationTitle: string;
   currentUserIsAdmin?: boolean;
+  currentUserId?: string;
   onOpenSearch: () => void;
   onOpenSettings: () => void;
+  onViewProfile?: (userId: string) => void;
   onClearConversation: () => void;
   onLeaveConversation: () => void;
   onMobileMenuToggle?: () => void;
@@ -27,13 +29,26 @@ export function ChatHeader({
   conversation,
   conversationTitle,
   currentUserIsAdmin = false,
+  currentUserId,
   onOpenSearch,
   onOpenSettings,
+  onViewProfile,
   onClearConversation,
   onLeaveConversation,
   onMobileMenuToggle,
   showMobileMenu = true,
 }: ChatHeaderProps) {
+  // Get other user ID for DM conversations
+  const getOtherUserId = () => {
+    if (conversation.type === 'dm' && currentUserId) {
+      const otherMember = conversation.members.find((m) => m.userId !== currentUserId);
+      return otherMember?.userId;
+    }
+    return undefined;
+  };
+
+  const otherUserId = getOtherUserId();
+
   return (
     <div className="p-3 md:p-4 border-b border-gray-200 bg-white flex items-center gap-2 md:gap-3">
       {/* Hamburger Menu (Mobile Only) */}
@@ -69,6 +84,15 @@ export function ChatHeader({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
+            {conversation.type === 'dm' && otherUserId && onViewProfile && (
+              <>
+                <DropdownMenuItem onClick={() => onViewProfile(otherUserId)}>
+                  <User className="w-4 h-4 mr-2" />
+                  View Profile
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
             {conversation.type === 'group' && currentUserIsAdmin && (
               <>
                 <DropdownMenuItem onClick={onOpenSettings}>

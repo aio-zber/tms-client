@@ -24,6 +24,7 @@ import { useConversationActions } from '../hooks/useConversationActions';
 import { useConversationEvents } from '../hooks/useConversationEvents';
 import { useConversation } from '../hooks/useConversation';
 import { useUserSearch } from '@/features/users/hooks/useUserSearch';
+import { UserProfileDialog } from '@/features/users/components/UserProfileDialog';
 import type { Conversation } from '@/types/conversation';
 import toast from 'react-hot-toast';
 
@@ -47,6 +48,8 @@ export default function ConversationSettingsDialog({
   const [conversationName, setConversationName] = useState(conversation.name || '');
   const [showAddMembers, setShowAddMembers] = useState(false);
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [selectedMemberProfile, setSelectedMemberProfile] = useState<string | undefined>(undefined);
+  const [showProfileDialog, setShowProfileDialog] = useState(false);
 
   const {
     updateConversation,
@@ -366,9 +369,15 @@ export default function ConversationSettingsDialog({
                       return (
                         <div
                           key={member.userId}
-                          className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50"
+                          className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition"
                         >
-                          <div className="flex items-center gap-3">
+                          <div
+                            className="flex items-center gap-3 flex-1 cursor-pointer"
+                            onClick={() => {
+                              setSelectedMemberProfile(member.userId);
+                              setShowProfileDialog(true);
+                            }}
+                          >
                             <Avatar className="w-10 h-10">
                               <AvatarImage src={userImage} />
                               <AvatarFallback className="bg-viber-purple text-white">
@@ -390,7 +399,10 @@ export default function ConversationSettingsDialog({
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleRemoveMember(member.userId, displayName)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemoveMember(member.userId, displayName);
+                              }}
                               disabled={loading}
                               className="text-red-600 hover:text-red-700 hover:bg-red-50"
                             >
@@ -407,6 +419,14 @@ export default function ConversationSettingsDialog({
           )}
         </Tabs>
       </DialogContent>
+
+      {/* User Profile Dialog */}
+      <UserProfileDialog
+        userId={selectedMemberProfile}
+        open={showProfileDialog}
+        onOpenChange={setShowProfileDialog}
+        showSendMessageButton={selectedMemberProfile !== currentUserId}
+      />
     </Dialog>
   );
 }
