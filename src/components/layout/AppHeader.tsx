@@ -23,8 +23,10 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useRouter } from 'next/navigation';
 
 export function AppHeader() {
+  const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('light');
@@ -171,7 +173,10 @@ export function AppHeader() {
           <DropdownMenuSeparator />
 
           {/* Profile Settings */}
-          <DropdownMenuItem className="cursor-pointer">
+          <DropdownMenuItem
+            className="cursor-pointer"
+            onClick={() => router.push('/settings')}
+          >
             <Settings className="w-4 h-4 mr-3" />
             <span>Profile Settings</span>
           </DropdownMenuItem>
