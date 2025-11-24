@@ -18,6 +18,19 @@ export function CustomEmojiPicker({ onEmojiSelect, className }: CustomEmojiPicke
     onEmojiSelect(emojiData.emoji);
   };
 
+  // Detect mobile viewport for responsive height
+  const [isMobile, setIsMobile] = React.useState(false);
+
+  React.useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 640); // sm breakpoint
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   return (
     <div className={className}>
       <EmojiPicker
@@ -26,7 +39,7 @@ export function CustomEmojiPicker({ onEmojiSelect, className }: CustomEmojiPicke
         emojiStyle={EmojiStyle.NATIVE}
         searchPlaceHolder="Search emojis..."
         width="100%"
-        height="400px"
+        height={isMobile ? "350px" : "400px"}
         previewConfig={{
           showPreview: false
         }}

@@ -202,7 +202,7 @@ export function MessageInput({
           </button>
 
           {/* Emoji Button */}
-          <div className="mb-1 hidden sm:block">
+          <div className="mb-1">
             <EmojiPickerButton
               onEmojiSelect={handleEmojiSelect}
               triggerClassName="p-2 md:p-2.5 hover:bg-gray-100 rounded-full transition"

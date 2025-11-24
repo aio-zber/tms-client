@@ -227,9 +227,38 @@ export const MessageBubble = memo(function MessageBubble({
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     setShowTimestamp(true); // Show timestamp on right-click
+
+    // Calculate viewport-aware position to prevent overflow on mobile
+    const menuWidth = 200; // Approximate width including padding
+    const menuHeight = 200; // Approximate height for calculation
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const padding = 10; // Edge padding
+
+    let x = e.clientX;
+    let y = e.clientY;
+
+    // Horizontal boundary check - prevent overflow on right
+    if (x + menuWidth > viewportWidth - padding) {
+      x = viewportWidth - menuWidth - padding;
+    }
+    // Prevent overflow on left
+    if (x < padding) {
+      x = padding;
+    }
+
+    // Vertical boundary check - prevent overflow on bottom
+    if (y + menuHeight > viewportHeight - padding) {
+      y = viewportHeight - menuHeight - padding;
+    }
+    // Prevent overflow on top
+    if (y < padding) {
+      y = padding;
+    }
+
     setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
+      x,
+      y,
     });
   };
 
@@ -427,7 +456,7 @@ export const MessageBubble = memo(function MessageBubble({
       {contextMenu && (
         <div
           ref={contextMenuRef}
-          className="fixed z-50 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[160px]"
+          className="fixed z-50 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[160px] max-w-[200px] sm:max-w-none"
           style={{
             left: `${contextMenu.x}px`,
             top: `${contextMenu.y}px`,
