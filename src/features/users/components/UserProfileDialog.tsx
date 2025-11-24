@@ -71,13 +71,6 @@ export function UserProfileDialog({
       <DialogContent className="max-w-md max-h-[90vh] p-0 gap-0 overflow-hidden">
         <DialogHeader className="px-6 pt-6 pb-2">
           <DialogTitle className="text-xl font-bold">Profile</DialogTitle>
-          <button
-            onClick={() => onOpenChange(false)}
-            className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none"
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
         </DialogHeader>
 
         <div className="overflow-y-auto px-6 pb-6">
