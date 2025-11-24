@@ -197,11 +197,26 @@ export function Chat({
             userName
           );
 
-          // Add system message to cache
-          queryClient.setQueryData<Message[]>(
-            ['messages', conversationId],
-            (old) => old ? [...old, systemMessage] : [systemMessage]
-          );
+          // Add system message to infinite query cache
+          const queryKey = ['messages', conversationId, { limit: 50 }];
+          queryClient.setQueryData(queryKey, (old: unknown) => {
+            if (!old || typeof old !== 'object') return old;
+
+            const cachedData = old as { pages: Array<{ data: Message[]; pagination?: unknown }>; pageParams: unknown[] };
+
+            // Add system message to the last page (most recent messages)
+            const lastPageIndex = cachedData.pages.length - 1;
+            const updatedPages = [...cachedData.pages];
+            updatedPages[lastPageIndex] = {
+              ...updatedPages[lastPageIndex],
+              data: [...updatedPages[lastPageIndex].data, systemMessage],
+            };
+
+            return {
+              ...cachedData,
+              pages: updatedPages,
+            };
+          });
         }
 
         await deleteMessage(messageId);
