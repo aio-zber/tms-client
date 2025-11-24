@@ -15,13 +15,6 @@ import type {
   MemberLeftEvent,
   ConversationUpdatedEvent
 } from '@/types/conversation';
-import {
-  generateMemberAddedMessage,
-  generateMemberRemovedMessage,
-  generateMemberLeftMessage,
-  generateConversationUpdatedMessage,
-} from '@/features/messaging/utils/systemMessages';
-import type { Message } from '@/types/message';
 
 interface UseConversationEventsOptions {
   conversationId: string;
@@ -74,45 +67,9 @@ export function useConversationEvents({
       console.log('[useConversationEvents] member_added event:', data);
 
       const eventData = data as unknown as MemberAddedEvent;
-      console.log('[useConversationEvents] member_added - conversationId:', conversationId, 'event conversationId:', eventData.conversation_id);
-      if (eventData.conversation_id !== conversationId) {
-        console.log('[useConversationEvents] Skipping member_added - different conversation');
-        return;
-      }
+      if (eventData.conversation_id !== conversationId) return;
 
-      // Create system message for member added
-      const addedMemberIds = eventData.added_members.map(m => m.user_id);
-      const addedMemberNames = eventData.added_members.map(m => m.full_name);
-      const systemMessage = generateMemberAddedMessage(
-        conversationId,
-        eventData.added_by,
-        'Someone', // We don't have the actor name from the event
-        addedMemberIds,
-        addedMemberNames
-      );
-
-      // Add system message to infinite query cache
-      const queryKey = ['messages', conversationId, { limit: 50 }];
-      queryClient.setQueryData(queryKey, (old: unknown) => {
-        if (!old || typeof old !== 'object') return old;
-
-        const cachedData = old as { pages: Array<{ data: Message[]; pagination?: unknown }>; pageParams: unknown[] };
-
-        // Add system message to the last page (most recent messages)
-        const lastPageIndex = cachedData.pages.length - 1;
-        if (lastPageIndex < 0) return old; // No pages yet
-
-        const updatedPages = [...cachedData.pages];
-        updatedPages[lastPageIndex] = {
-          ...updatedPages[lastPageIndex],
-          data: [...updatedPages[lastPageIndex].data, systemMessage],
-        };
-
-        return {
-          ...cachedData,
-          pages: updatedPages,
-        };
-      });
+      // NOTE: System message creation is now handled by useGlobalConversationEvents
 
       // Invalidate conversation query to refetch with new members
       queryClient.invalidateQueries({
@@ -140,36 +97,7 @@ export function useConversationEvents({
       const eventData = data as unknown as MemberRemovedEvent;
       if (eventData.conversation_id !== conversationId) return;
 
-      // Create system message for member removed
-      const systemMessage = generateMemberRemovedMessage(
-        conversationId,
-        eventData.removed_by,
-        'Someone', // We don't have the actor name from the event
-        eventData.removed_user_id,
-        'Member' // We don't have the removed user's name from the event
-      );
-
-      // Add system message to infinite query cache
-      const queryKey = ['messages', conversationId, { limit: 50 }];
-      queryClient.setQueryData(queryKey, (old: unknown) => {
-        if (!old || typeof old !== 'object') return old;
-
-        const cachedData = old as { pages: Array<{ data: Message[]; pagination?: unknown }>; pageParams: unknown[] };
-
-        const lastPageIndex = cachedData.pages.length - 1;
-        if (lastPageIndex < 0) return old;
-
-        const updatedPages = [...cachedData.pages];
-        updatedPages[lastPageIndex] = {
-          ...updatedPages[lastPageIndex],
-          data: [...updatedPages[lastPageIndex].data, systemMessage],
-        };
-
-        return {
-          ...cachedData,
-          pages: updatedPages,
-        };
-      });
+      // NOTE: System message creation is now handled by useGlobalConversationEvents
 
       // Invalidate conversation query to refetch with updated members
       queryClient.invalidateQueries({
@@ -195,34 +123,7 @@ export function useConversationEvents({
       const eventData = data as unknown as MemberLeftEvent;
       if (eventData.conversation_id !== conversationId) return;
 
-      // Create system message for member left
-      const systemMessage = generateMemberLeftMessage(
-        conversationId,
-        eventData.user_id,
-        eventData.user_name
-      );
-
-      // Add system message to infinite query cache
-      const queryKey = ['messages', conversationId, { limit: 50 }];
-      queryClient.setQueryData(queryKey, (old: unknown) => {
-        if (!old || typeof old !== 'object') return old;
-
-        const cachedData = old as { pages: Array<{ data: Message[]; pagination?: unknown }>; pageParams: unknown[] };
-
-        const lastPageIndex = cachedData.pages.length - 1;
-        if (lastPageIndex < 0) return old;
-
-        const updatedPages = [...cachedData.pages];
-        updatedPages[lastPageIndex] = {
-          ...updatedPages[lastPageIndex],
-          data: [...updatedPages[lastPageIndex].data, systemMessage],
-        };
-
-        return {
-          ...cachedData,
-          pages: updatedPages,
-        };
-      });
+      // NOTE: System message creation is now handled by useGlobalConversationEvents
 
       // Invalidate conversation query
       queryClient.invalidateQueries({
@@ -248,38 +149,7 @@ export function useConversationEvents({
       const eventData = data as unknown as ConversationUpdatedEvent;
       if (eventData.conversation_id !== conversationId) return;
 
-      // Create system message for conversation updated
-      const systemMessage = generateConversationUpdatedMessage(
-        conversationId,
-        eventData.updated_by,
-        'Someone', // We don't have the actor name from the event
-        {
-          name: eventData.name,
-          avatarUrl: eventData.avatar_url,
-        }
-      );
-
-      // Add system message to infinite query cache
-      const queryKey = ['messages', conversationId, { limit: 50 }];
-      queryClient.setQueryData(queryKey, (old: unknown) => {
-        if (!old || typeof old !== 'object') return old;
-
-        const cachedData = old as { pages: Array<{ data: Message[]; pagination?: unknown }>; pageParams: unknown[] };
-
-        const lastPageIndex = cachedData.pages.length - 1;
-        if (lastPageIndex < 0) return old;
-
-        const updatedPages = [...cachedData.pages];
-        updatedPages[lastPageIndex] = {
-          ...updatedPages[lastPageIndex],
-          data: [...updatedPages[lastPageIndex].data, systemMessage],
-        };
-
-        return {
-          ...cachedData,
-          pages: updatedPages,
-        };
-      });
+      // NOTE: System message creation is now handled by useGlobalConversationEvents
 
       // Invalidate conversation query to refetch updated details
       queryClient.invalidateQueries({
