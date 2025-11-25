@@ -154,8 +154,14 @@ export const MessageBubble = memo(function MessageBubble({
   /**
    * Memoized highlighted message content
    * Prevents infinite re-renders by only recalculating when content or query changes
+   * Shows "You removed a message" for deleted messages (Messenger pattern)
    */
   const highlightedContent = useMemo(() => {
+    // Show deleted message placeholder if message is deleted
+    if (message.deletedAt) {
+      return isSent ? 'You removed a message' : `${senderName || 'User'} removed a message`;
+    }
+
     if (!searchQuery || !searchQuery.trim() || !message.content) {
       return message.content;
     }
@@ -177,7 +183,7 @@ export const MessageBubble = memo(function MessageBubble({
         )}
       </>
     );
-  }, [message.content, searchQuery]);
+  }, [message.content, message.deletedAt, searchQuery, isSent, senderName]);
 
   // Close context menu when clicking outside
   useEffect(() => {
@@ -413,7 +419,9 @@ export const MessageBubble = memo(function MessageBubble({
                 isSearchHighlighted ? 'ring-2 ring-yellow-400 bg-yellow-50' : ''
               } transition-all`}
             >
-              <p className="text-sm md:text-[15px] leading-relaxed break-words whitespace-pre-wrap">
+              <p className={`text-sm md:text-[15px] leading-relaxed break-words whitespace-pre-wrap ${
+                message.deletedAt ? 'italic opacity-60' : ''
+              }`}>
                 {highlightedContent}
               </p>
 
@@ -488,7 +496,7 @@ export const MessageBubble = memo(function MessageBubble({
           }}
         >
           {/* React option with inline emoji picker */}
-          {onReact && !message.poll && (
+          {onReact && !message.poll && !message.deletedAt && (
             <div className="relative">
               {isMobile ? (
                 // Mobile: Use Dialog (centered modal) to prevent overflow
@@ -535,7 +543,7 @@ export const MessageBubble = memo(function MessageBubble({
               )}
             </div>
           )}
-          {onReply && (
+          {onReply && !message.deletedAt && (
             <button
               onClick={() => handleMenuAction(() => onReply(message))}
               className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-gray-100 flex items-center gap-2 text-gray-700 transition"
@@ -545,8 +553,8 @@ export const MessageBubble = memo(function MessageBubble({
             </button>
           )}
 
-          {/* Delete for Me - available for ALL messages (own and others) */}
-          {onDelete && (
+          {/* Delete for Me - available for ALL messages (own and others) - but not already deleted */}
+          {onDelete && !message.deletedAt && (
             <button
               onClick={() => handleMenuAction(() => onDelete(message.id, 'me'))}
               className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-gray-100 flex items-center gap-2 text-gray-700 transition"
@@ -556,8 +564,8 @@ export const MessageBubble = memo(function MessageBubble({
             </button>
           )}
 
-          {/* Delete for Everyone - only for own messages */}
-          {currentUserId && message.senderId === currentUserId && onDelete && (
+          {/* Delete for Everyone - only for own messages, not already deleted, and within 48 hours */}
+          {currentUserId && message.senderId === currentUserId && onDelete && !message.deletedAt && canDeleteForEveryone && (
             <button
               onClick={() => handleMenuAction(() => onDelete(message.id, 'everyone'))}
               className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-red-50 flex items-center gap-2 text-red-600 transition"
