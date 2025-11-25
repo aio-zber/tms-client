@@ -9,12 +9,7 @@ import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { socketClient } from '@/lib/socket';
-import type {
-  MemberAddedEvent,
-  MemberRemovedEvent,
-  MemberLeftEvent,
-  ConversationUpdatedEvent
-} from '@/types/conversation';
+import type { ConversationUpdatedEvent } from '@/types/conversation';
 
 interface UseConversationEventsOptions {
   conversationId: string;
@@ -29,10 +24,10 @@ interface UseConversationEventsOptions {
  * Hook to handle real-time conversation events via WebSocket.
  *
  * Automatically registers listeners for:
- * - member_added: New member(s) added to conversation
- * - member_removed: Member removed by admin
- * - member_left: Member left voluntarily
  * - conversation_updated: Name/avatar changed
+ *
+ * NOTE: Member events (added/removed/left) are now handled as system messages
+ * via message:new events, which the useMessages hook handles automatically.
  *
  * @example
  * ```tsx
@@ -60,96 +55,17 @@ export function useConversationEvents({
     console.log('[useConversationEvents] Registering listeners for conversation:', conversationId);
 
     /**
-     * Handle member_added event
-     * Triggered when admin adds new member(s) to the conversation
-     */
-    const handleMemberAdded = (data: Record<string, unknown>) => {
-      console.log('[useConversationEvents] member_added event:', data);
-
-      const eventData = data as unknown as MemberAddedEvent;
-      if (eventData.conversation_id !== conversationId) return;
-
-      // NOTE: System message creation is now handled by useGlobalConversationEvents
-
-      // Invalidate conversation query to refetch with new members
-      queryClient.invalidateQueries({
-        queryKey: ['conversation', conversationId],
-      });
-
-      // Also invalidate conversations list to update member count
-      queryClient.invalidateQueries({
-        queryKey: ['conversations'],
-      });
-
-      if (showNotifications) {
-        const memberNames = eventData.added_members.map(m => m.full_name).join(', ');
-        toast.success(`${memberNames} added to conversation`);
-      }
-    };
-
-    /**
-     * Handle member_removed event
-     * Triggered when admin removes a member from the conversation
-     */
-    const handleMemberRemoved = (data: Record<string, unknown>) => {
-      console.log('[useConversationEvents] member_removed event:', data);
-
-      const eventData = data as unknown as MemberRemovedEvent;
-      if (eventData.conversation_id !== conversationId) return;
-
-      // NOTE: System message creation is now handled by useGlobalConversationEvents
-
-      // Invalidate conversation query to refetch with updated members
-      queryClient.invalidateQueries({
-        queryKey: ['conversation', conversationId],
-      });
-
-      queryClient.invalidateQueries({
-        queryKey: ['conversations'],
-      });
-
-      if (showNotifications) {
-        toast('Member removed from conversation');
-      }
-    };
-
-    /**
-     * Handle member_left event
-     * Triggered when a member voluntarily leaves the conversation
-     */
-    const handleMemberLeft = (data: Record<string, unknown>) => {
-      console.log('[useConversationEvents] member_left event:', data);
-
-      const eventData = data as unknown as MemberLeftEvent;
-      if (eventData.conversation_id !== conversationId) return;
-
-      // NOTE: System message creation is now handled by useGlobalConversationEvents
-
-      // Invalidate conversation query
-      queryClient.invalidateQueries({
-        queryKey: ['conversation', conversationId],
-      });
-
-      queryClient.invalidateQueries({
-        queryKey: ['conversations'],
-      });
-
-      if (showNotifications) {
-        toast(`${eventData.user_name} left the conversation`);
-      }
-    };
-
-    /**
      * Handle conversation_updated event
      * Triggered when conversation name/avatar is updated
+     *
+     * NOTE: Backend now sends system messages for all conversation events via message:new.
+     * We only need to invalidate queries here - system messages are handled by useMessages hook.
      */
     const handleConversationUpdated = (data: Record<string, unknown>) => {
       console.log('[useConversationEvents] conversation_updated event:', data);
 
       const eventData = data as unknown as ConversationUpdatedEvent;
       if (eventData.conversation_id !== conversationId) return;
-
-      // NOTE: System message creation is now handled by useGlobalConversationEvents
 
       // Invalidate conversation query to refetch updated details
       queryClient.invalidateQueries({
@@ -170,20 +86,16 @@ export function useConversationEvents({
     };
 
     // Register WebSocket event listeners
-    socketClient.onMemberAdded(handleMemberAdded);
-    socketClient.onMemberRemoved(handleMemberRemoved);
-    socketClient.onMemberLeft(handleMemberLeft);
+    // NOTE: member_added, member_removed, member_left events are no longer sent by backend.
+    // Backend now sends system messages via message:new event (handled by useMessages hook).
+    // We only listen to conversation_updated for immediate UI updates.
     socketClient.onConversationUpdated(handleConversationUpdated);
 
-    console.log('[useConversationEvents] ✅ All listeners registered');
+    console.log('[useConversationEvents] ✅ Conversation updated listener registered');
 
     // Cleanup: Unregister listeners on unmount
     return () => {
       console.log('[useConversationEvents] Cleaning up listeners for conversation:', conversationId);
-
-      socketClient.off('member_added', handleMemberAdded);
-      socketClient.off('member_removed', handleMemberRemoved);
-      socketClient.off('member_left', handleMemberLeft);
       socketClient.off('conversation_updated', handleConversationUpdated);
     };
   }, [conversationId, queryClient, showNotifications]);
