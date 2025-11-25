@@ -117,3 +117,11 @@ export interface ConversationUpdatedEvent {
   avatar_url?: string;
   timestamp: string;
 }
+
+export interface MessageDeletedEvent {
+  conversation_id: string;
+  message_id: string;
+  deleted_by: string;
+  deleted_by_name?: string;
+  timestamp: string;
+}
