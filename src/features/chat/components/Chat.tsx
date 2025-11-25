@@ -26,8 +26,6 @@ import ConversationSettingsDialog from '@/features/conversations/components/Conv
 import { useConversationEvents } from '@/features/conversations/hooks/useConversationEvents';
 import { ChatHeader } from './ChatHeader';
 import { UserProfileDialog } from '@/features/users/components/UserProfileDialog';
-import { generateMessageDeletedMessage } from '@/features/messaging/utils/systemMessages';
-import { useQueryClient } from '@tanstack/react-query';
 
 interface ChatProps {
   conversationId: string;
@@ -52,7 +50,6 @@ export function Chat({
   const [showProfileDialog, setShowProfileDialog] = useState(false);
 
   // Hooks - Use existing hooks instead of manual implementation
-  const queryClient = useQueryClient();
   const { conversation, loading: loadingConversation } = useConversation(conversationId);
   const { user: currentUser } = useCurrentUser();
   const currentUserId = currentUser?.id || '';
@@ -188,42 +185,12 @@ export function Chat({
         : 'Delete this message for you? Others will still see it.';
 
       if (confirm(confirmMsg)) {
-        // For "delete for everyone", create a system message trace
-        if (scope === 'everyone' && currentUser) {
-          const userName = currentUser.name || currentUser.username || currentUser.email;
-          const systemMessage = generateMessageDeletedMessage(
-            conversationId,
-            currentUserId,
-            userName
-          );
-
-          // Add system message to infinite query cache
-          const queryKey = ['messages', conversationId, { limit: 50 }];
-          queryClient.setQueryData(queryKey, (old: unknown) => {
-            if (!old || typeof old !== 'object') return old;
-
-            const cachedData = old as { pages: Array<{ data: Message[]; pagination?: unknown }>; pageParams: unknown[] };
-
-            // Add system message to the last page (most recent messages)
-            const lastPageIndex = cachedData.pages.length - 1;
-            const updatedPages = [...cachedData.pages];
-            updatedPages[lastPageIndex] = {
-              ...updatedPages[lastPageIndex],
-              data: [...updatedPages[lastPageIndex].data, systemMessage],
-            };
-
-            return {
-              ...cachedData,
-              pages: updatedPages,
-            };
-          });
-        }
-
         await deleteMessage(messageId);
-        // No need to refresh - WebSocket will push the deletion
+        // Backend will create and broadcast system message automatically
+        // No need to refresh - WebSocket will push both the deletion and system message
       }
     },
-    [deleteMessage, conversationId, currentUser, currentUserId, queryClient]
+    [deleteMessage]
   );
 
   const handleReply = (message: Message) => {

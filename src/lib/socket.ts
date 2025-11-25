@@ -169,7 +169,15 @@ class SocketClient {
    * Listen for message deletions
    */
   onMessageDeleted(callback: (data: Record<string, unknown>) => void) {
-    this.socket?.on('message_deleted', callback);
+    console.log('[Socket] Attaching message_deleted listener');
+    if (this.socket) {
+      this.socket.on('message_deleted', callback);
+      console.log('[Socket] ✅ message_deleted listener attached');
+    } else {
+      console.error(
+        '[Socket] ❌ Cannot attach message_deleted listener - socket not initialized'
+      );
+    }
   }
 
   /**

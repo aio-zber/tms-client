@@ -5,7 +5,6 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { CenterPanel } from '@/components/layout/CenterPanel';
-import { useGlobalConversationEvents } from '@/features/conversations/hooks/useGlobalConversationEvents';
 
 export default function MainLayout({
   children,
@@ -16,9 +15,6 @@ export default function MainLayout({
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuthStore();
   const isChatsRoute = pathname.startsWith('/chats');
-
-  // Initialize global conversation event listeners
-  useGlobalConversationEvents();
 
   // Redirect to root if not authenticated
   useEffect(() => {
