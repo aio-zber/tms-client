@@ -65,14 +65,13 @@ export const MessageBubble = memo(function MessageBubble({
   const quickEmojis = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥'];
 
   /**
-   * Check if message can be deleted for everyone (within 48 hours)
-   * Messenger pattern: Only recent messages can be deleted for everyone
+   * Check if message can be deleted for everyone
+   * Users can delete any of their messages for everyone (no time limit)
    */
   const canDeleteForEveryone = useMemo(() => {
-    const messageAge = Date.now() - new Date(message.createdAt).getTime();
-    const FORTY_EIGHT_HOURS = 48 * 60 * 60 * 1000;
-    return messageAge < FORTY_EIGHT_HOURS;
-  }, [message.createdAt]);
+    // Allow deletion of any message by its sender
+    return true;
+  }, []);
 
   // Mobile detection for responsive emoji picker
   useEffect(() => {
@@ -420,11 +419,11 @@ export const MessageBubble = memo(function MessageBubble({
                 isSearchHighlighted ? 'ring-2 ring-yellow-400 bg-yellow-50' : ''
               } transition-all`}
             >
-              <p className={`text-sm md:text-[15px] leading-relaxed break-words whitespace-pre-wrap ${
+              <div className={`text-sm md:text-[15px] leading-relaxed break-words whitespace-pre-wrap ${
                 message.deletedAt ? 'italic opacity-60' : ''
               }`}>
                 {highlightedContent}
-              </p>
+              </div>
 
               {/* Metadata (edited label and status only, NO timestamp) */}
               {(message.isEdited || message.status) && (
