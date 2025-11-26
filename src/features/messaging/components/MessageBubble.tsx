@@ -5,6 +5,7 @@
 
 'use client';
 
+import { log } from '@/lib/logger';
 import { useState, useRef, useEffect, memo, useMemo } from 'react';
 import { format } from 'date-fns';
 import { Check, CheckCheck, Reply, Trash2, Smile } from 'lucide-react';
@@ -87,7 +88,7 @@ export const MessageBubble = memo(function MessageBubble({
   // DEBUG: Log context menu props when opened
   useEffect(() => {
     if (contextMenu) {
-      console.log('[MessageBubble] Context menu opened:', {
+    log.message.debug('[MessageBubble] Context menu opened:', {
         messageId: message.id,
         currentUserId,
         senderId: message.senderId,
@@ -198,13 +199,13 @@ export const MessageBubble = memo(function MessageBubble({
         clickedElement.closest('[class*="emoji"]');
 
       if (isInsideEmojiPicker) {
-        console.log('[MessageBubble] Click inside emoji picker - keeping context menu open');
+    log.message.debug('[MessageBubble] Click inside emoji picker - keeping context menu open');
         return; // Don't close anything
       }
 
       // Close context menu if clicking outside
       if (contextMenuRef.current && !contextMenuRef.current.contains(target)) {
-        console.log('[MessageBubble] Click outside context menu - closing');
+    log.message.debug('[MessageBubble] Click outside context menu - closing');
         setContextMenu(null);
         setShowTimestamp(false);
       }
@@ -224,11 +225,11 @@ export const MessageBubble = memo(function MessageBubble({
         target.closest('[class*="emoji"]');
 
       if (isScrollInsideEmojiPicker) {
-        console.log('[MessageBubble] Scroll inside emoji picker detected - keeping context menu open');
+    log.message.debug('[MessageBubble] Scroll inside emoji picker detected - keeping context menu open');
         return; // Don't close context menu
       }
 
-      console.log('[MessageBubble] Scroll outside emoji picker - closing context menu');
+    log.message.debug('[MessageBubble] Scroll outside emoji picker - closing context menu');
       setContextMenu(null);
       setShowEmojiPicker(false);
       setShowTimestamp(false); // Hide timestamp on scroll
@@ -330,9 +331,9 @@ export const MessageBubble = memo(function MessageBubble({
 
   // Debug: Log reply data
   if (message.replyToId) {
-    console.log(`[MessageBubble] Message ${message.id} has replyToId: ${message.replyToId}`);
-    console.log(`[MessageBubble] message.replyTo present: ${message.replyTo !== undefined}`);
-    console.log(`[MessageBubble] message.replyTo data:`, message.replyTo);
+    log.message.debug(`[MessageBubble] Message ${message.id} has replyToId: ${message.replyToId}`);
+    log.message.debug(`[MessageBubble] message.replyTo present: ${message.replyTo !== undefined}`);
+    log.message.debug(`[MessageBubble] message.replyTo data:`, message.replyTo);
   }
 
   // System messages have special centered rendering

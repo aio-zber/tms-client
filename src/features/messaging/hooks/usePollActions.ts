@@ -3,6 +3,7 @@
  * Handles poll actions with optimistic updates
  */
 
+import { log } from '@/lib/logger';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { pollService, type CreatePollRequest } from '../services/pollService';
 import toast from 'react-hot-toast';
@@ -22,7 +23,7 @@ export function usePollActions() {
       });
     },
     onError: (error) => {
-      console.error('Failed to create poll:', error);
+      log.message.error('Failed to create poll:', error);
       toast.error('Failed to create poll');
     },
   });
@@ -57,7 +58,7 @@ export function usePollActions() {
       if (context?.previousPoll) {
         queryClient.setQueryData(['poll', variables.pollId], context.previousPoll);
       }
-      console.error('Failed to vote on poll:', error);
+      log.message.error('Failed to vote on poll:', error);
       toast.error('Failed to vote on poll');
     },
     onSuccess: (data) => {
@@ -88,7 +89,7 @@ export function usePollActions() {
       toast.success('Poll closed successfully');
     },
     onError: (error) => {
-      console.error('Failed to close poll:', error);
+      log.message.error('Failed to close poll:', error);
       toast.error('Failed to close poll');
     },
   });

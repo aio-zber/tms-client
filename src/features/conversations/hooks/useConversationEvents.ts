@@ -5,6 +5,7 @@
  * Following Telegram/Messenger patterns for instant member management updates.
  */
 
+import { log } from '@/lib/logger';
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -48,11 +49,11 @@ export function useConversationEvents({
     const socket = socketClient.getSocket();
 
     if (!socket) {
-      console.warn('[useConversationEvents] Socket not initialized');
+      log.message.warn('[useConversationEvents] Socket not initialized');
       return;
     }
 
-    console.log('[useConversationEvents] Registering listeners for conversation:', conversationId);
+    log.message.debug('[useConversationEvents] Registering listeners for conversation:', conversationId);
 
     /**
      * Handle conversation_updated event
@@ -62,7 +63,7 @@ export function useConversationEvents({
      * We only need to invalidate queries here - system messages are handled by useMessages hook.
      */
     const handleConversationUpdated = (data: Record<string, unknown>) => {
-      console.log('[useConversationEvents] conversation_updated event:', data);
+      log.message.debug('[useConversationEvents] conversation_updated event:', data);
 
       const eventData = data as unknown as ConversationUpdatedEvent;
       if (eventData.conversation_id !== conversationId) return;
@@ -91,11 +92,11 @@ export function useConversationEvents({
     // We only listen to conversation_updated for immediate UI updates.
     socketClient.onConversationUpdated(handleConversationUpdated);
 
-    console.log('[useConversationEvents] ✅ Conversation updated listener registered');
+    log.message.debug('[useConversationEvents] ✅ Conversation updated listener registered');
 
     // Cleanup: Unregister listeners on unmount
     return () => {
-      console.log('[useConversationEvents] Cleaning up listeners for conversation:', conversationId);
+      log.message.debug('[useConversationEvents] Cleaning up listeners for conversation:', conversationId);
       socketClient.off('conversation_updated', handleConversationUpdated);
     };
   }, [conversationId, queryClient, showNotifications]);

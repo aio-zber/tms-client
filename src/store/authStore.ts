@@ -3,6 +3,7 @@
  * Manages authentication state and actions
  */
 
+import { log } from '@/lib/logger';
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { authService, LoginCredentials, AuthError } from '@/features/auth/services/authService';
@@ -73,11 +74,11 @@ export const useAuthStore = create<AuthState>()(
           try {
             await userService.getCurrentUser();
           } catch (userError) {
-            console.error('Failed to fetch user after login:', userError);
+            log.auth.error('Failed to fetch user after login:', userError);
             // Continue anyway - user data will be fetched on next request
           }
         } catch (error) {
-          console.error('Login error:', error);
+          log.auth.error('Login error:', error);
 
           const errorMessage =
             error instanceof AuthError
@@ -103,7 +104,7 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null });
 
         try {
-          console.log('🔐 SSO: Starting auto-login from GCGC...');
+          log.auth.info('🔐 SSO: Starting auto-login from GCGC...');
 
           // Call auto-login method
           await authService.autoLoginFromGCGC();
@@ -116,17 +117,17 @@ export const useAuthStore = create<AuthState>()(
             error: null,
           });
 
-          console.log('✅ SSO: Auto-login successful');
+          log.auth.info('✅ SSO: Auto-login successful');
 
           // Fetch current user data
           try {
             await userService.getCurrentUser();
           } catch (userError) {
-            console.error('SSO: Failed to fetch user after auto-login:', userError);
+            log.auth.error('SSO: Failed to fetch user after auto-login:', userError);
             // Continue anyway - user data will be fetched on next request
           }
         } catch (error) {
-          console.error('❌ SSO: Auto-login error:', error);
+          log.auth.error('❌ SSO: Auto-login error:', error);
 
           const errorMessage =
             error instanceof AuthError
@@ -209,7 +210,7 @@ export const useAuthStore = create<AuthState>()(
                 : null;
 
               if (storedUserId && userData?.tmsUserId && userData.tmsUserId !== storedUserId) {
-                console.log('Auth check: User ID changed, clearing session');
+                log.auth.info('Auth check: User ID changed, clearing session');
                 await authService.logout();
                 set({
                   token: null,
@@ -243,7 +244,7 @@ export const useAuthStore = create<AuthState>()(
             });
           }
         } catch (error) {
-          console.error('Auth check failed:', error);
+          log.auth.error('Auth check failed:', error);
 
           // On error, assume not authenticated
           await authService.logout();

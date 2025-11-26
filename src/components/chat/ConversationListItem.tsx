@@ -79,17 +79,7 @@ export function ConversationListItem({
   currentUserId,
 }: ConversationListItemProps) {
   const router = useRouter();
-  
-  // Debug: Log conversation data
-  console.log('[ConversationListItem] Conversation:', conversation);
-  console.log('[ConversationListItem] Members:', conversation.members);
-  if (conversation.members && conversation.members.length > 0) {
-    console.log('[ConversationListItem] First member:', conversation.members[0]);
-    const memberData = conversation.members[0] as unknown as Record<string, unknown>;
-    console.log('[ConversationListItem] Member has user field?', 'user' in memberData);
-    console.log('[ConversationListItem] Member user data:', memberData.user);
-  }
-  
+
   const displayName = getConversationDisplayName(conversation, currentUserId);
 
   const handleClick = () => {

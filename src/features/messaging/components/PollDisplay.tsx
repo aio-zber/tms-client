@@ -5,6 +5,7 @@
 
 'use client';
 
+import { log } from '@/lib/logger';
 import { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import type { Poll } from '@/types/message';
@@ -57,7 +58,7 @@ export default function PollDisplay({
         await onVote([optionId]);
       }
     } catch (error) {
-      console.error('Failed to vote:', error);
+      log.error('Failed to vote:', error);
       toast.error('Failed to vote on poll');
     } finally {
       setIsVoting(false);
@@ -75,7 +76,7 @@ export default function PollDisplay({
       await onClose();
       toast.success('Poll closed successfully');
     } catch (error) {
-      console.error('Failed to close poll:', error);
+      log.error('Failed to close poll:', error);
       toast.error('Failed to close poll');
     } finally {
       setIsClosing(false);

@@ -1,4 +1,5 @@
 'use client';
+import { log } from '@/lib/logger';
 
 import { useState, useEffect } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -29,7 +30,7 @@ export function CenterPanel() {
         const user = await userService.getCurrentUser();
         setCurrentUserId(user.id);
       } catch (error) {
-        console.error('Failed to fetch current user:', error);
+        log.error('Failed to fetch current user:', error);
       }
     };
 
@@ -45,11 +46,9 @@ export function CenterPanel() {
           limit: 50,
           offset: 0,
         });
-        console.log('[CenterPanel] API Response:', response);
-        console.log('[CenterPanel] Conversations data:', response.data);
         setConversations(response.data || []);
       } catch (error) {
-        console.error('Failed to load conversations:', error);
+        log.error('Failed to load conversations:', error);
         setConversations([]);
       } finally {
         setLoading(false);
@@ -69,7 +68,7 @@ export function CenterPanel() {
         });
         setConversations(response.data || []);
       } catch (error) {
-        console.error('Failed to refresh conversations:', error);
+        log.error('Failed to refresh conversations:', error);
       }
     }, 5000);
 
@@ -122,9 +121,6 @@ export function CenterPanel() {
     return false;
   });
 
-  console.log('[CenterPanel] Conversations:', conversations.length);
-  console.log('[CenterPanel] Filtered:', filteredConversations.length);
-  console.log('[CenterPanel] Conversations data:', conversations);
 
   return (
     <div className="h-full flex flex-col bg-white">

@@ -4,6 +4,7 @@
  * Now uses TanStack Query for proper cache management and server state sync
  */
 
+import { log } from '@/lib/logger';
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { socketClient } from '@/lib/socket';
@@ -43,7 +44,7 @@ export function useConversations(
   useEffect(() => {
     const socket = socketClient.getSocket();
     if (!socket) {
-      console.log('[useConversations] Socket not initialized, skipping WebSocket listeners');
+      log.message.debug('[useConversations] Socket not initialized, skipping WebSocket listeners');
       return;
     }
 
@@ -54,22 +55,22 @@ export function useConversations(
       try {
         const currentUser = await authService.getCurrentUser();
         currentUserId = currentUser?.id || null;
-        console.log('[useConversations] Current user ID:', currentUserId);
+        log.message.debug('[useConversations] Current user ID:', currentUserId);
       } catch (error) {
-        console.warn('[useConversations] Failed to get current user:', error);
+        log.message.warn('[useConversations] Failed to get current user:', error);
       }
     };
 
     initializeUser();
 
-    console.log('[useConversations] Setting up WebSocket listeners for query invalidation');
+    log.message.debug('[useConversations] Setting up WebSocket listeners for query invalidation');
 
     // Listen for new messages - invalidate unread count queries
     const handleNewMessage = (message: Record<string, unknown>) => {
       const conversationId = (message.conversation_id || message.conversationId) as string;
       const senderId = (message.sender_id || message.senderId) as string;
 
-      console.log('[useConversations] New message received:', { conversationId, senderId, currentUserId });
+      log.message.debug('[useConversations] New message received:', { conversationId, senderId, currentUserId });
 
       // Invalidate unread count queries to refetch from server
       // Server automatically excludes current user's messages
@@ -80,7 +81,7 @@ export function useConversations(
         queryClient.invalidateQueries({
           queryKey: queryKeys.unreadCount.total(),
         });
-        console.log('[useConversations] Invalidated unread count queries for conversation:', conversationId);
+        log.message.debug('[useConversations] Invalidated unread count queries for conversation:', conversationId);
       }
 
       // Also invalidate conversations list to update last message preview
@@ -95,7 +96,7 @@ export function useConversations(
       const conversationId = data.conversation_id as string;
       const userId = data.user_id as string;
 
-      console.log('[useConversations] Message status update:', { status, conversationId, userId, currentUserId });
+      log.message.debug('[useConversations] Message status update:', { status, conversationId, userId, currentUserId });
 
       // If current user marked message as read, invalidate unread count
       if (status === 'read' && userId === currentUserId && conversationId) {
@@ -105,7 +106,7 @@ export function useConversations(
         queryClient.invalidateQueries({
           queryKey: queryKeys.unreadCount.total(),
         });
-        console.log('[useConversations] Invalidated unread count after mark as read');
+        log.message.debug('[useConversations] Invalidated unread count after mark as read');
       }
     };
 
@@ -114,7 +115,7 @@ export function useConversations(
       const conversationId = data.conversation_id as string;
       const addedMembers = data.added_members as Array<unknown>;
 
-      console.log('[useConversations] Member(s) added:', {
+      log.message.debug('[useConversations] Member(s) added:', {
         conversationId,
         count: addedMembers?.length || 0,
       });
@@ -135,14 +136,14 @@ export function useConversations(
       const conversationId = data.conversation_id as string;
       const removedUserId = data.removed_user_id as string;
 
-      console.log('[useConversations] Member removed:', {
+      log.message.debug('[useConversations] Member removed:', {
         conversationId,
         removedUserId,
       });
 
       // Check if current user was removed
       if (currentUserId && removedUserId === currentUserId) {
-        console.log('[useConversations] Current user was removed from conversation');
+        log.message.debug('[useConversations] Current user was removed from conversation');
         // Invalidate to remove from list
         queryClient.invalidateQueries({
           queryKey: queryKeys.conversations.all,
@@ -163,14 +164,14 @@ export function useConversations(
       const conversationId = data.conversation_id as string;
       const userId = data.user_id as string;
 
-      console.log('[useConversations] Member left:', {
+      log.message.debug('[useConversations] Member left:', {
         conversationId,
         userId,
       });
 
       // Check if current user left
       if (currentUserId && userId === currentUserId) {
-        console.log('[useConversations] Current user left conversation');
+        log.message.debug('[useConversations] Current user left conversation');
         // Remove from list
         queryClient.invalidateQueries({
           queryKey: queryKeys.conversations.all,
@@ -191,7 +192,7 @@ export function useConversations(
       const conversationId = data.conversation_id as string;
       const name = data.name as string | undefined;
 
-      console.log('[useConversations] Conversation updated:', {
+      log.message.debug('[useConversations] Conversation updated:', {
         conversationId,
         hasNameChange: !!name,
       });
@@ -216,7 +217,7 @@ export function useConversations(
 
     // Cleanup
     return () => {
-      console.log('[useConversations] Cleaning up WebSocket listeners');
+      log.message.debug('[useConversations] Cleaning up WebSocket listeners');
       socketClient.off('new_message', handleNewMessage);
       socketClient.off('message_status', handleMessageStatus);
       socketClient.off('member_added', handleMemberAdded);

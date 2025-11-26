@@ -3,6 +3,7 @@
  * Manages user state, authentication, and user data caching.
  */
 
+import { log } from '@/lib/logger';
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { User, UserSearchResult, UserSearchParams } from '@/types/user';
@@ -104,7 +105,7 @@ export const useUserStore = create<UserState>()(
           // Cache the user
           get().cacheUser(user);
         } catch (error: unknown) {
-          console.error('Failed to fetch current user:', error);
+          log.auth.error('Failed to fetch current user:', error);
 
           // If we have cached data and the error is network-related, keep using cache
           const currentState = get();
@@ -166,7 +167,7 @@ export const useUserStore = create<UserState>()(
           get().cacheUser(user as User); // UserProfile is compatible with User
           return user as User;
         } catch (error) {
-          console.error(`Failed to fetch user ${userId}:`, error);
+          log.auth.error(`Failed to fetch user ${userId}:`, error);
           return null;
         }
       },
@@ -211,7 +212,7 @@ export const useUserStore = create<UserState>()(
             get().cacheUser(user as User);
           });
         } catch (error: unknown) {
-          console.error('User search failed:', error);
+          log.auth.error('User search failed:', error);
           set({
             searchResults: [],
             isSearching: false,

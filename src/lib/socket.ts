@@ -4,6 +4,7 @@
  */
 
 import { io, Socket } from 'socket.io-client';
+import { log } from './logger';
 
 const SOCKET_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || 'http://localhost:8000';
 
@@ -18,15 +19,8 @@ class SocketClient {
   connect(token: string): Socket {
     // If socket already exists (even if disconnected), reuse it
     if (this.socket) {
-      console.log('[SocketClient] Socket already exists, reusing instance');
-      console.log('[SocketClient] Socket connected:', this.socket.connected);
       return this.socket;
     }
-
-    console.log('[SocketClient] Creating NEW socket instance');
-    console.log('[SocketClient] Connecting to:', SOCKET_URL);
-    console.log('[SocketClient] Path:', '/socket.io');
-    console.log('[SocketClient] Full URL:', `${SOCKET_URL}/socket.io/`);
 
     // CRITICAL PATH CONFIGURATION:
     // Server wraps FastAPI with Socket.IO ASGIApp (socketio.ASGIApp(sio, fastapi_app))
@@ -51,11 +45,6 @@ class SocketClient {
 
     this.setupEventHandlers();
 
-    // Log connection status immediately
-    console.log('[SocketClient] Socket created, connecting...');
-    console.log('[SocketClient] Socket ID:', this.socket.id);
-    console.log('[SocketClient] Connected:', this.socket.connected);
-
     return this.socket;
   }
 
@@ -65,32 +54,31 @@ class SocketClient {
   private setupEventHandlers() {
     if (!this.socket) return;
 
+    // Essential log #1: Connection established
     this.socket.on('connect', () => {
-      console.log('[Socket] Connected to server');
+      log.ws.info('Connected to server');
       this.reconnectAttempts = 0;
     });
 
+    // Essential log #2: Disconnected (with reason)
     this.socket.on('disconnect', (reason) => {
-      console.log('[Socket] Disconnected:', reason);
+      log.ws.warn('Disconnected:', reason);
     });
 
+    // Essential log #3 & #4: Connection error & max reconnection attempts
     this.socket.on('connect_error', (error) => {
-      console.error('[Socket] Connection error:', error);
+      log.ws.error('Connection error:', error);
       this.reconnectAttempts++;
 
       if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-        console.error('[Socket] Max reconnection attempts reached');
+        log.ws.error('Max reconnection attempts reached');
         this.socket?.disconnect();
       }
     });
 
+    // Essential log #5: General errors
     this.socket.on('error', (error) => {
-      console.error('[Socket] Error:', error);
-    });
-
-    // Debug: Log ALL incoming events to diagnose missing messages
-    this.socket.onAny((eventName, ...args) => {
-      console.log(`[Socket] 📨 Event received: "${eventName}"`, args);
+      log.ws.error('Error:', error);
     });
   }
 
@@ -99,19 +87,12 @@ class SocketClient {
    */
   joinConversation(conversationId: string) {
     if (!this.socket) {
-      console.warn('[Socket] Cannot join conversation - socket not initialized');
+      log.ws.warn('Cannot join conversation - socket not initialized');
       return;
     }
 
-    console.log('[Socket] Joining conversation:', conversationId);
-    console.log('[Socket] Socket connected state:', this.socket.connected);
-    
     // Emit join event - Socket.IO will queue if not connected yet
     this.socket.emit('join_conversation', { conversation_id: conversationId });
-
-    this.socket.once('joined_conversation', (data) => {
-      console.log('[Socket] ✅ Successfully joined conversation:', data.conversation_id);
-    });
   }
 
   /**
@@ -145,16 +126,11 @@ class SocketClient {
    * Listen for new messages
    */
   onNewMessage(callback: (message: Record<string, unknown>) => void) {
-    console.log('[Socket] Attaching new_message listener');
-    console.log('[Socket] Socket exists:', !!this.socket);
-    console.log('[Socket] Socket connected:', this.socket?.connected);
-    
     if (this.socket) {
       // Don't wrap - use callback directly so off() works
       this.socket.on('new_message', callback);
-      console.log('[Socket] ✅ new_message listener attached');
     } else {
-      console.error('[Socket] ❌ Cannot attach new_message listener - socket not initialized');
+      log.ws.error('Cannot attach new_message listener - socket not initialized');
     }
   }
 
@@ -169,14 +145,10 @@ class SocketClient {
    * Listen for message deletions
    */
   onMessageDeleted(callback: (data: Record<string, unknown>) => void) {
-    console.log('[Socket] Attaching message_deleted listener');
     if (this.socket) {
       this.socket.on('message_deleted', callback);
-      console.log('[Socket] ✅ message_deleted listener attached');
     } else {
-      console.error(
-        '[Socket] ❌ Cannot attach message_deleted listener - socket not initialized'
-      );
+      log.ws.error('Cannot attach message_deleted listener - socket not initialized');
     }
   }
 
@@ -251,14 +223,10 @@ class SocketClient {
    * Listen for member added events
    */
   onMemberAdded(callback: (data: Record<string, unknown>) => void) {
-    console.log('[Socket] Attaching member_added listener');
     if (this.socket) {
       this.socket.on('member_added', callback);
-      console.log('[Socket] ✅ member_added listener attached');
     } else {
-      console.error(
-        '[Socket] ❌ Cannot attach member_added listener - socket not initialized'
-      );
+      log.ws.error('Cannot attach member_added listener - socket not initialized');
     }
   }
 
@@ -266,14 +234,10 @@ class SocketClient {
    * Listen for member removed events
    */
   onMemberRemoved(callback: (data: Record<string, unknown>) => void) {
-    console.log('[Socket] Attaching member_removed listener');
     if (this.socket) {
       this.socket.on('member_removed', callback);
-      console.log('[Socket] ✅ member_removed listener attached');
     } else {
-      console.error(
-        '[Socket] ❌ Cannot attach member_removed listener - socket not initialized'
-      );
+      log.ws.error('Cannot attach member_removed listener - socket not initialized');
     }
   }
 
@@ -281,14 +245,10 @@ class SocketClient {
    * Listen for member left events
    */
   onMemberLeft(callback: (data: Record<string, unknown>) => void) {
-    console.log('[Socket] Attaching member_left listener');
     if (this.socket) {
       this.socket.on('member_left', callback);
-      console.log('[Socket] ✅ member_left listener attached');
     } else {
-      console.error(
-        '[Socket] ❌ Cannot attach member_left listener - socket not initialized'
-      );
+      log.ws.error('Cannot attach member_left listener - socket not initialized');
     }
   }
 
@@ -296,14 +256,10 @@ class SocketClient {
    * Listen for conversation updated events
    */
   onConversationUpdated(callback: (data: Record<string, unknown>) => void) {
-    console.log('[Socket] Attaching conversation_updated listener');
     if (this.socket) {
       this.socket.on('conversation_updated', callback);
-      console.log('[Socket] ✅ conversation_updated listener attached');
     } else {
-      console.error(
-        '[Socket] ❌ Cannot attach conversation_updated listener - socket not initialized'
-      );
+      log.ws.error('Cannot attach conversation_updated listener - socket not initialized');
     }
   }
 

@@ -24,50 +24,6 @@ export class ApiError extends Error {
 }
 
 class ApiClient {
-  constructor() {
-    // Install fetch interceptor for debugging (can be removed after issue is resolved)
-    this.installFetchInterceptor();
-  }
-
-  /**
-   * Install fetch interceptor to log ALL HTTP requests
-   * This helps debug cases where requests go to unexpected URLs
-   */
-  private installFetchInterceptor(): void {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (typeof window === 'undefined' || (window as any).__fetchInterceptorInstalled) {
-      return; // Already installed or server-side
-    }
-
-    const originalFetch = window.fetch;
-    window.fetch = function(...args: Parameters<typeof fetch>) {
-      // Extract URL from different input types
-      let url: string;
-      if (typeof args[0] === 'string') {
-        url = args[0];
-      } else if (args[0] instanceof URL) {
-        url = args[0].toString();
-      } else {
-        // Request object
-        url = args[0].url;
-      }
-
-      const options = args[1] || {};
-
-      console.log('[Fetch Interceptor] Request:', {
-        url,
-        method: options.method || 'GET',
-        hasBody: !!options.body,
-        timestamp: new Date().toISOString(),
-      });
-
-      return originalFetch.apply(this, args);
-    };
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (window as any).__fetchInterceptorInstalled = true;
-    console.log('[Fetch Interceptor] Installed successfully');
-  }
 
   /**
    * Get base URL dynamically at runtime to ensure correct HTTPS usage.
@@ -174,21 +130,7 @@ class ApiClient {
    * Perform POST request.
    */
   async post<T, D = unknown>(endpoint: string, data?: D): Promise<T> {
-    const baseURL = this.getBaseURL();
-    const url = `${baseURL}${endpoint}`;
-
-    // Comprehensive debug logging (enabled everywhere for debugging)
-    if (typeof window !== 'undefined') {
-      console.log('[API Client] POST Request:', {
-        endpoint,
-        baseURL,
-        fullURL: url,
-        hasData: !!data,
-        dataKeys: data ? Object.keys(data as object) : [],
-      });
-    }
-
-    const response = await fetch(url, {
+    const response = await fetch(`${this.getBaseURL()}${endpoint}`, {
       method: 'POST',
       headers: this.getHeaders(),
       credentials: 'include', // Include session cookies

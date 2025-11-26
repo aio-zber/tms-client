@@ -3,6 +3,7 @@
  * Syncs unread counts with WebSocket events for real-time updates
  */
 
+import { log } from '@/lib/logger';
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { socketClient } from '@/lib/socket';
@@ -18,13 +19,13 @@ export function useUnreadCountSync() {
   useEffect(() => {
     const socket = socketClient.getSocket();
     if (!socket) {
-      console.warn('[useUnreadCountSync] Socket not initialized');
+      log.message.warn('[useUnreadCountSync] Socket not initialized');
       return;
     }
 
     // Listen for message_read events
     const handleMessageRead = (data: Record<string, unknown>) => {
-      console.log('[useUnreadCountSync] Message read event received:', data);
+      log.message.debug('[useUnreadCountSync] Message read event received:', data);
 
       const conversationId = data.conversation_id as string;
 
@@ -43,7 +44,7 @@ export function useUnreadCountSync() {
 
     // Listen for new_message events (increment count)
     const handleNewMessage = (data: Record<string, unknown>) => {
-      console.log('[useUnreadCountSync] New message event received:', data);
+      log.message.debug('[useUnreadCountSync] New message event received:', data);
 
       const conversationId = data.conversation_id as string;
 
@@ -62,7 +63,7 @@ export function useUnreadCountSync() {
 
     // Listen for message_status events (Telegram/Messenger pattern)
     const handleMessageStatus = (data: Record<string, unknown>) => {
-      console.log('[useUnreadCountSync] Message status event received:', data);
+      log.message.debug('[useUnreadCountSync] Message status event received:', data);
 
       const { status, conversation_id } = data as {
         status: string;
@@ -72,7 +73,7 @@ export function useUnreadCountSync() {
 
       // If message is marked as READ, decrement unread count
       if (status === 'READ' || status === 'read') {
-        console.log('[useUnreadCountSync] Message marked as READ - updating unread counts');
+        log.message.debug('[useUnreadCountSync] Message marked as READ - updating unread counts');
 
         // Optimistically decrement unread count for this conversation
         if (conversation_id) {

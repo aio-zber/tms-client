@@ -5,6 +5,7 @@
 
 'use client';
 
+import { log } from '@/lib/logger';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Search, X, Users, MessageCircle } from 'lucide-react';
 import {
@@ -78,7 +79,7 @@ export default function NewConversationDialog({
 
       setAllUsers(transformedUsers);
     } catch (error) {
-      console.error('Failed to load users:', error);
+      log.error('Failed to load users:', error);
       // Fallback: trigger a search with a common letter
       search('a');
     } finally {
@@ -97,30 +98,12 @@ export default function NewConversationDialog({
   const displayUsers = useMemo(() => {
     const users = query ? results : allUsers;
 
-    // Debug: Log current user info for troubleshooting
-    if (currentUser) {
-      console.log('[NewConversationDialog] Current user filter:', {
-        currentUserId: currentUser.id,
-        currentUserTmsUserId: currentUser.tmsUserId,
-        currentUserEmail: currentUser.email,
-        totalUsers: users.length,
-      });
-    }
-
     // Exclude current user from selectable users by comparing TMS user IDs
     const filtered = users.filter(user => {
       const shouldExclude = user.tmsUserId === currentUser?.tmsUserId;
-      if (shouldExclude) {
-        console.log('[NewConversationDialog] Filtering out current user:', {
-          userId: user.id,
-          tmsUserId: user.tmsUserId,
-          email: user.email,
-        });
-      }
       return !shouldExclude;
     });
 
-    console.log(`[NewConversationDialog] Filtered ${users.length - filtered.length} user(s), showing ${filtered.length} users`);
     return filtered;
   }, [query, results, allUsers, currentUser]);
 
@@ -160,14 +143,6 @@ export default function NewConversationDialog({
       return;
     }
 
-    // Debug log before creating conversation
-    console.log('[NewConversationDialog] Creating conversation:', {
-      type: conversationType,
-      member_ids: selectedUsers,
-      name: conversationType === 'group' ? groupName.trim() : undefined,
-      currentUserTmsId: currentUser?.tmsUserId,
-    });
-
     try {
       const conversation = await createConversation({
         type: conversationType,
@@ -187,7 +162,7 @@ export default function NewConversationDialog({
         toast.error('Failed to create conversation');
       }
     } catch (error) {
-      console.error('Error creating conversation:', error);
+      log.error('Error creating conversation:', error);
 
       // Extract error message from different error formats
       let errorMessage = 'Failed to create conversation';

@@ -6,6 +6,7 @@
  * Enhanced with search result highlighting support
  */
 
+import { log } from '@/lib/logger';
 import { useCallback, useRef, useState } from 'react';
 
 interface UseJumpToMessageReturn {
@@ -102,7 +103,7 @@ export function useJumpToMessage(): UseJumpToMessageReturn {
           }, highlightDuration);
         }
       } else {
-        console.warn(`[useJumpToMessage] Message element not found for ID: ${messageId}`);
+        log.message.warn(`[useJumpToMessage] Message element not found for ID: ${messageId}`);
         // TODO: If message not loaded, fetch messages around target message
       }
     },

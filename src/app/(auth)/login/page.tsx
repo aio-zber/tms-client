@@ -1,5 +1,6 @@
 'use client';
 
+import { log } from '@/lib/logger';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -44,7 +45,7 @@ export default function LoginPage() {
   useEffect(() => {
     const gcgcToken = authService.extractSessionToken();
     if (gcgcToken) {
-      console.log('🔐 SSO: GCGC session detected on login page, redirecting to root for auto-login...');
+      log.auth.info('🔐 SSO: GCGC session detected on login page, redirecting to root for auto-login...');
       router.push('/');
     } else {
       // No GCGC session, redirect to GCGC login

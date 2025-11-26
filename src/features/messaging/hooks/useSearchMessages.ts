@@ -3,6 +3,7 @@
  * Handles message search functionality
  */
 
+import { log } from '@/lib/logger';
 import { useState, useCallback } from 'react';
 import { messageService } from '../services/messageService';
 import type { Message, SearchMessagesRequest } from '@/types/message';
@@ -42,7 +43,7 @@ export function useSearchMessages(): UseSearchMessagesReturn {
         setHasMore(response.pagination?.has_more ?? false);
       } catch (err) {
         setError(err as Error);
-        console.error('Failed to search messages:', err);
+        log.message.error('Failed to search messages:', err);
       } finally {
         setSearching(false);
       }

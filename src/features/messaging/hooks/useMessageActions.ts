@@ -10,6 +10,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { messageService } from '../services/messageService';
 import { queryKeys } from '@/lib/queryClient';
 import type { EditMessageRequest, Message } from '@/types/message';
+import { log } from '@/lib/logger';
 
 // Module-level tracking of pending operations to prevent WebSocket race conditions
 // These Sets track operations initiated by the current user to prevent duplicate cache updates
@@ -51,9 +52,9 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
       setError(null);
 
       // Mark as pending to prevent WebSocket handler from overwriting optimistic update
-      const startTime = Date.now();
+      
       pendingEdits.add(messageId);
-      console.log(`[useMessageActions] ⏱️ [${startTime}] Edit started for message:`, messageId);
+      
 
       // Get all message query keys to update all conversations this message might appear in
       const allQueries = queryClient.getQueriesData({
@@ -98,23 +99,23 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
           }
         });
 
-        console.log('[useMessageActions] ✅ Optimistically updated message in cache:', messageId);
+        
 
         // Now make the actual API call in background
         const updatedMessage = await messageService.editMessage(messageId, data);
 
-        const apiTime = Date.now();
-        console.log(`[useMessageActions] ✅ [${apiTime}] API confirmed edit (${apiTime - startTime}ms):`, updatedMessage.id);
+        
+        
 
         // Clear pending flag immediately - deduplication not needed (TanStack Query handles it)
-        const clearTime = Date.now();
-        console.log(`[useMessageActions] 🔓 [${clearTime}] Clearing pending flag (${clearTime - startTime}ms total):`, messageId);
+        
+        
         pendingEdits.delete(messageId);
 
         return updatedMessage;
       } catch (err) {
         // ROLLBACK: Restore previous cache state on error
-        console.error('[useMessageActions] ❌ Edit failed, rolling back cache:', err);
+        log.message.error('Edit failed, rolling back:', err);
 
         previousData.forEach(([queryKey, oldData]) => {
           queryClient.setQueryData(queryKey, oldData);
@@ -173,12 +174,12 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
         }
       });
 
-      console.log('[useMessageActions] ✅ Optimistically removed message from cache:', messageId);
+      
 
       // Now make the actual API call in background
       await messageService.deleteMessage(messageId);
 
-      console.log('[useMessageActions] ✅ API confirmed deletion:', messageId);
+      
 
       // Clear pending flag immediately
       pendingDeletes.delete(messageId);
@@ -186,7 +187,7 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
       return true;
     } catch (err) {
       // ROLLBACK: Restore previous cache state on error
-      console.error('[useMessageActions] ❌ Delete failed, rolling back cache:', err);
+      log.message.error('Delete failed, rolling back:', err);
 
       previousData.forEach(([queryKey, oldData]) => {
         queryClient.setQueryData(queryKey, oldData);
@@ -206,21 +207,21 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
     setError(null);
 
     if (!currentUserId) {
-      console.warn('[useMessageActions] No currentUserId provided, skipping optimistic update');
+      log.message.warn('No currentUserId, skipping optimistic update');
       try {
         await messageService.addReaction(messageId, { emoji });
         return true;
       } catch (err) {
         setError(err as Error);
-        console.error('Failed to add reaction:', err);
+        log.message.error('Failed to add reaction:', err);
         return false;
       }
     }
 
     // Mark as pending to prevent WebSocket handler from overwriting optimistic update
-    const startTime = Date.now();
+    
     pendingReactions.set(messageId, { emoji, action: 'add' });
-    console.log(`[useMessageActions] ⏱️ [${startTime}] Add reaction started:`, messageId, emoji);
+    
 
     // Get all message query keys to update all conversations
     const allQueries = queryClient.getQueriesData({
@@ -277,27 +278,27 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
         }
       });
 
-      console.log('[useMessageActions] ✅ Optimistically added reaction to cache:', messageId, emoji);
+      
 
       // Now make the actual API call in background
       await messageService.addReaction(messageId, { emoji });
 
-      const apiTime = Date.now();
-      console.log(`[useMessageActions] ✅ [${apiTime}] API confirmed reaction (${apiTime - startTime}ms):`, messageId, emoji);
+      
+      
 
       // Don't invalidate queries - let WebSocket events update the cache
       // The WebSocket handler will replace temp reactions with real server data
       // This prevents flashing by avoiding a refetch
 
       // Clear pending flag immediately
-      const clearTime = Date.now();
-      console.log(`[useMessageActions] 🔓 [${clearTime}] Clearing pending reaction flag (${clearTime - startTime}ms total):`, messageId, emoji);
+      
+      
       pendingReactions.delete(messageId);
 
       return true;
     } catch (err) {
       // ROLLBACK: Restore previous cache state on error
-      console.error('[useMessageActions] ❌ Add reaction failed, rolling back cache:', err);
+      log.message.error('Add reaction failed:', err);
 
       previousData.forEach(([queryKey, oldData]) => {
         queryClient.setQueryData(queryKey, oldData);
@@ -316,13 +317,13 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
       setError(null);
 
       if (!currentUserId) {
-        console.warn('[useMessageActions] No currentUserId provided, skipping optimistic update');
+        log.message.warn('No currentUserId, skipping optimistic update');
         try {
           await messageService.removeReaction(messageId, emoji);
           return true;
         } catch (err) {
           setError(err as Error);
-          console.error('Failed to remove reaction:', err);
+          log.message.error('Failed to remove reaction:', err);
           return false;
         }
       }
@@ -373,12 +374,12 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
           }
         });
 
-        console.log('[useMessageActions] ✅ Optimistically removed reaction from cache:', messageId, emoji);
+        
 
         // Now make the actual API call in background
         await messageService.removeReaction(messageId, emoji);
 
-        console.log('[useMessageActions] ✅ API confirmed reaction removal:', messageId, emoji);
+        
 
         // Clear pending flag immediately
         pendingReactions.delete(messageId);
@@ -386,7 +387,7 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
         return true;
       } catch (err) {
         // ROLLBACK: Restore previous cache state on error
-        console.error('[useMessageActions] ❌ Remove reaction failed, rolling back cache:', err);
+        log.message.error('Remove reaction failed:', err);
 
         previousData.forEach(([queryKey, oldData]) => {
           queryClient.setQueryData(queryKey, oldData);
@@ -407,7 +408,7 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
       setError(null);
 
       if (!currentUserId) {
-        console.warn('[useMessageActions] No currentUserId provided, skipping optimistic update');
+        log.message.warn('No currentUserId, skipping optimistic update');
         try {
           // Sequentially remove old and add new
           await messageService.removeReaction(messageId, oldEmoji);
@@ -415,7 +416,7 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
           return true;
         } catch (err) {
           setError(err as Error);
-          console.error('Failed to switch reaction:', err);
+          log.message.error('Failed to switch reaction:', err);
           return false;
         }
       }
@@ -479,14 +480,11 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
           }
         });
 
-        console.log('[useMessageActions] ✅ Optimistically switched reaction in cache:', messageId, oldEmoji, '->', newEmoji);
-        console.log('[useMessageActions] 🔍 Added temp reaction with ID:', optimisticReaction.id);
-
         // Backend now handles atomic switching - just call addReaction
         // If user has an existing reaction, backend will remove it first automatically
         await messageService.addReaction(messageId, { emoji: newEmoji });
 
-        console.log('[useMessageActions] ✅ API confirmed reaction switch:', messageId, newEmoji);
+        
 
         // Don't invalidate queries - let WebSocket events update the cache
         // The WebSocket handler will replace temp reactions with real server data
@@ -498,7 +496,7 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
         return true;
       } catch (err) {
         // ROLLBACK: Restore previous cache state on error
-        console.error('[useMessageActions] ❌ Switch reaction failed, rolling back cache:', err);
+        log.message.error('Switch reaction failed:', err);
 
         previousData.forEach(([queryKey, oldData]) => {
           queryClient.setQueryData(queryKey, oldData);

@@ -4,6 +4,7 @@
  * All requests route through TMS Server (not GCGC directly).
  */
 
+import { log } from '@/lib/logger';
 import { tmsApi } from '@/lib/tmsApi';
 import { getApiBaseUrl, STORAGE_KEYS } from '@/lib/constants';
 import {
@@ -27,7 +28,7 @@ class UserService {
    *
    * @example
    * const currentUser = await userService.getCurrentUser();
-   * console.log(currentUser.displayName);
+   * log.debug(currentUser.displayName);
    */
   async getCurrentUser(): Promise<User> {
     try {
@@ -83,7 +84,7 @@ class UserService {
 
       return user;
     } catch (error) {
-      console.error('Failed to fetch current user:', error);
+      log.error('Failed to fetch current user:', error);
 
       // If offline or API error, try to return cached data
       if (typeof window !== 'undefined') {
@@ -153,7 +154,7 @@ class UserService {
         isActive: tmsUser.isActive,
       }));
     } catch (error) {
-      console.error('Failed to search users from Team Management System:', error);
+      log.error('Failed to search users from Team Management System:', error);
       throw error;
     }
   }
@@ -168,7 +169,7 @@ class UserService {
    *
    * @example
    * const result = await userService.syncUsers(['tms-123', 'tms-456'], true);
-   * console.log(`Synced ${result.synced_count} users`);
+   * log.debug(`Synced ${result.synced_count} users`);
    */
   async syncUsers(_userIds?: string[], _force: boolean = false): Promise<{
     success: boolean;
@@ -206,7 +207,7 @@ class UserService {
    * @example
    * const cachedUser = userService.getCachedCurrentUser();
    * if (cachedUser) {
-   *   console.log('Welcome back,', cachedUser.displayName);
+   *   log.debug('Welcome back,', cachedUser.displayName);
    * }
    */
   getCachedCurrentUser(): User | null {
@@ -218,7 +219,7 @@ class UserService {
         return JSON.parse(cached);
       }
     } catch (error) {
-      console.error('Failed to parse cached user data:', error);
+      log.error('Failed to parse cached user data:', error);
     }
 
     return null;

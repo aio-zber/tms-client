@@ -3,6 +3,7 @@
  * Manages a single conversation's data and state
  */
 
+import { log } from '@/lib/logger';
 import { useState, useEffect, useCallback } from 'react';
 import { conversationService } from '../services/conversationService';
 import type { Conversation } from '@/types/conversation';
@@ -40,7 +41,7 @@ export function useConversation(
       setConversation(data);
     } catch (err) {
       setError(err as Error);
-      console.error('Failed to load conversation:', err);
+      log.message.error('Failed to load conversation:', err);
     } finally {
       setLoading(false);
     }

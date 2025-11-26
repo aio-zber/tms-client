@@ -1,4 +1,5 @@
 'use client';
+import { log } from '@/lib/logger';
 
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -16,20 +17,20 @@ function AuthCallbackContent() {
   useEffect(() => {
     async function handleCallback() {
       try {
-        console.log('🔐 SSO Callback: Starting authentication...');
+        log.auth.info('🔐 SSO Callback: Starting authentication...');
 
         // Step 1: Get token from URL query parameter
         const gcgcToken = searchParams?.get('gcgc_token');
 
         if (!gcgcToken) {
-          console.error('❌ SSO Callback: No token in URL parameters');
+          log.auth.error('❌ SSO Callback: No token in URL parameters');
           throw new Error('No token received from GCGC');
         }
 
-        console.log('✅ SSO Callback: GCGC token received from URL');
+        log.auth.info('✅ SSO Callback: GCGC token received from URL');
 
         // Step 2: Login to TMS-Server with GCGC token
-        console.log('🔐 SSO Callback: Logging into TMS-Server...');
+        log.auth.info('🔐 SSO Callback: Logging into TMS-Server...');
         const tmsResponse = await fetch(
           `${TMS_SERVER_URL}/api/v1/auth/login`,
           {
@@ -44,7 +45,7 @@ function AuthCallbackContent() {
 
         if (!tmsResponse.ok) {
           const errorText = await tmsResponse.text();
-          console.error('❌ SSO Callback: Failed to login to TMS:', errorText);
+          log.auth.error('❌ SSO Callback: Failed to login to TMS:', errorText);
           throw new Error(`Failed to login to TMS: ${tmsResponse.status}`);
         }
 
@@ -52,16 +53,16 @@ function AuthCallbackContent() {
         const tmsToken = tmsData.token;
 
         if (!tmsToken) {
-          console.error('❌ SSO Callback: No token in TMS response:', tmsData);
+          log.auth.error('❌ SSO Callback: No token in TMS response:', tmsData);
           throw new Error('No token received from TMS');
         }
 
-        console.log('✅ SSO Callback: TMS token received');
+        log.auth.info('✅ SSO Callback: TMS token received');
 
         // Step 3: Store user ID BEFORE token (atomic initialization to prevent race conditions)
         if (tmsData.user?.tms_user_id) {
           localStorage.setItem('current_user_id', tmsData.user.tms_user_id);
-          console.log('✅ SSO Callback: User ID stored:', tmsData.user.tms_user_id);
+          log.auth.info('✅ SSO Callback: User ID stored:', tmsData.user.tms_user_id);
         }
 
         // Then store token and session flag
@@ -69,18 +70,18 @@ function AuthCallbackContent() {
         localStorage.setItem('tms_session_active', 'true');
 
         setToken(tmsToken); // Update auth store state immediately
-        console.log('✅ SSO Callback: Token stored and auth state updated');
+        log.auth.info('✅ SSO Callback: Token stored and auth state updated');
 
         // Step 4: Redirect to /chats
-        console.log('🔐 SSO Callback: Redirecting to /chats...');
+        log.auth.info('🔐 SSO Callback: Redirecting to /chats...');
         router.replace('/chats');
       } catch (error) {
-        console.error('❌ SSO Callback: Error during authentication:', error);
+        log.auth.error('❌ SSO Callback: Error during authentication:', error);
         setError(error instanceof Error ? error.message : 'Authentication failed');
 
         // Wait a bit to show error, then redirect to home
         setTimeout(() => {
-          console.log('🔐 SSO Callback: Redirecting to home page...');
+          log.auth.info('🔐 SSO Callback: Redirecting to home page...');
           router.replace('/');
         }, 3000);
       }

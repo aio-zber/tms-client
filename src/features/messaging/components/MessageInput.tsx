@@ -5,6 +5,7 @@
 
 'use client';
 
+import { log } from '@/lib/logger';
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { Send, X, BarChart3 } from 'lucide-react';
 import type { Message } from '@/types/message';
@@ -107,7 +108,7 @@ export function MessageInput({
         textareaRef.current.style.height = 'auto';
       }
     } catch (error) {
-      console.error('Failed to send/edit message:', error);
+      log.error('Failed to send/edit message:', error);
     }
   };
 
@@ -133,7 +134,7 @@ export function MessageInput({
         multiple_choice: multipleChoice,
       });
     } catch (error) {
-      console.error('Failed to create poll:', error);
+      log.error('Failed to create poll:', error);
       throw error;
     }
   };

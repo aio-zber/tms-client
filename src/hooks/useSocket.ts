@@ -3,6 +3,7 @@
  * Manages Socket.IO connection with authentication
  */
 
+import { log } from '@/lib/logger';
 import { useEffect, useState } from 'react';
 import { socketClient } from '@/lib/socket';
 
@@ -13,36 +14,36 @@ export function useSocket() {
     const token = localStorage.getItem('auth_token');
 
     if (!token) {
-      console.warn('[Socket] No auth token found - cannot connect');
+      log.warn('[Socket] No auth token found - cannot connect');
       return;
     }
 
-    console.log('[Socket] Initializing WebSocket connection...');
-    console.log('[Socket] Token preview (first 30 chars):', token.substring(0, 30) + '...');
-    console.log('[Socket] Token length:', token.length);
+    log.debug('[Socket] Initializing WebSocket connection...');
+    log.debug('[Socket] Token preview (first 30 chars):', token.substring(0, 30) + '...');
+    log.debug('[Socket] Token length:', token.length);
 
     const socket = socketClient.connect(token);
 
     // Update connection status
     socket.on('connect', () => {
-      console.log('[Socket] WebSocket connected successfully');
+      log.debug('[Socket] WebSocket connected successfully');
       setIsConnected(true);
     });
 
     socket.on('disconnect', () => {
-      console.log('[Socket] WebSocket disconnected');
+      log.debug('[Socket] WebSocket disconnected');
       setIsConnected(false);
     });
 
     socket.on('connect_error', (error) => {
-      console.error('[Socket] Connection error:', error.message);
+      log.error('[Socket] Connection error:', error.message);
       setIsConnected(false);
     });
 
     // Keep connection alive - don't disconnect on unmount
     // Socket should stay connected for the entire session
     return () => {
-      console.log('[Socket] Component unmounting but keeping connection alive');
+      log.debug('[Socket] Component unmounting but keeping connection alive');
       // Don't call socketClient.disconnect() here
       // Connection will be cleaned up when user logs out or closes tab
     };

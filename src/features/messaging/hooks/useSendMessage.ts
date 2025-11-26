@@ -3,6 +3,7 @@
  * Handles sending messages with optimistic updates
  */
 
+import { log } from '@/lib/logger';
 import { useState, useCallback } from 'react';
 import { messageService } from '../services/messageService';
 import type { SendMessageRequest, Message } from '@/types/message';
@@ -34,14 +35,14 @@ export function useSendMessage(): UseSendMessageReturn {
         // Call optimistic add callback if provided
         // This allows the parent component to immediately add the message to UI
         if (message && onOptimisticAdd) {
-          console.log('[useSendMessage] Calling optimistic add callback with message:', message);
+          log.message.debug('[useSendMessage] Calling optimistic add callback with message:', message);
           onOptimisticAdd(message);
         }
         
         return message;
       } catch (err) {
         setError(err as Error);
-        console.error('Failed to send message:', err);
+        log.message.error('Failed to send message:', err);
         return null;
       } finally {
         setSending(false);
