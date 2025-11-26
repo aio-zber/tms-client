@@ -139,10 +139,10 @@ export function useMessages(
 
       const messageId = updatedMessage.message_id as string;
       const newContent = updatedMessage.content as string;
+      const deletedAt = updatedMessage.deleted_at as string | undefined; // Handle deletions via message:edit
 
       // Apply WebSocket update (deduplication not needed - TanStack Query handles it)
-      console.log(`[useMessages] ✅ [${wsTime}] Applying WebSocket edit update`);
-
+      console.log(`[useMessages] ✅ [${wsTime}] Applying WebSocket edit update${deletedAt ? ' (deletion)' : ''}`);
 
       // Update cache for other users who didn't initiate the edit
       queryClient.setQueryData(
@@ -160,7 +160,8 @@ export function useMessages(
                   ? {
                       ...msg,
                       content: newContent,
-                      isEdited: true,
+                      isEdited: !deletedAt, // Don't mark as edited if deleted
+                      deletedAt: deletedAt, // Set deletedAt timestamp if present
                       updatedAt: new Date().toISOString()
                     }
                   : msg
@@ -171,7 +172,7 @@ export function useMessages(
       );
     };
 
-    // Listen for message deletions - optimistic cache update (regular function, not useCallback)
+    // Listen for message deletions - update with deletedAt instead of removing (Messenger pattern)
     const handleMessageDeleted = (data: Record<string, unknown>) => {
       console.log('[useMessages] Message deleted via WebSocket:', data);
 
@@ -183,7 +184,8 @@ export function useMessages(
         return;
       }
 
-      // Remove message from cache for other users who didn't initiate the delete
+      // UPDATE message with deletedAt timestamp (DON'T remove it from cache)
+      // This allows MessageBubble to show "User removed a message" placeholder
       queryClient.setQueryData(
         queryKeys.messages.list(conversationId, { limit }),
         (oldData: unknown) => {
@@ -194,7 +196,11 @@ export function useMessages(
             ...queryData,
             pages: queryData.pages.map(page => ({
               ...page,
-              data: page.data.filter(msg => msg.id !== messageId)
+              data: page.data.map(msg =>
+                msg.id === messageId
+                  ? { ...msg, deletedAt: new Date().toISOString() }
+                  : msg
+              )
             }))
           };
         }
