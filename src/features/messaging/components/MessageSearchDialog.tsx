@@ -180,9 +180,9 @@ export default function MessageSearchDialog({
                         </span>
                       </div>
 
-                      <p className="text-sm text-gray-700 break-words">
+                      <div className="text-sm text-gray-700 break-words">
                         {highlightText(message.content, searchQuery)}
-                      </p>
+                      </div>
 
                       {message.isEdited && (
                         <span className="text-xs text-gray-400 italic mt-1">
