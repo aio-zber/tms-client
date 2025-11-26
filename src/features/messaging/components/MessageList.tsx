@@ -97,11 +97,12 @@ const MessageWithVisibility = memo(function MessageWithVisibility({
       hasConversationId: !!conversationId
     });
 
-    if (!enableAutoRead || !conversationId || isSent || message.status === 'read') {
+    // FIX: Removed isSent check - user can mark their own messages as read
+    // This allows unread count to clear when user views the conversation
+    if (!enableAutoRead || !conversationId || message.status === 'read') {
       console.log('[MessageVisibility] Skipping mark-as-read:', {
         reason: !enableAutoRead ? 'autoRead disabled' :
                 !conversationId ? 'no conversationId' :
-                isSent ? 'user sent this message' :
                 'already read'
       });
       return;
@@ -119,7 +120,7 @@ const MessageWithVisibility = memo(function MessageWithVisibility({
 
       return () => clearTimeout(timer);
     }
-  }, [inView, isSent, message.status, message.id, enableAutoRead, conversationId, trackMessage]);
+  }, [inView, message.status, message.id, enableAutoRead, conversationId, trackMessage]);
 
   return (
     <div
