@@ -110,6 +110,27 @@ export function useMessageVisibility({
       });
     },
     onSuccess: () => {
+      // OPTIMISTIC UPDATE: Immediately clear unread count in conversation list
+      queryClient.setQueryData(
+        queryKeys.conversations.all,
+        (oldData: unknown) => {
+          if (!oldData) return oldData;
+
+          const data = oldData as { pages: Array<{ data: Array<{ id: string; unreadCount: number }> }> };
+          return {
+            ...data,
+            pages: data.pages.map(page => ({
+              ...page,
+              data: page.data.map(conv =>
+                conv.id === conversationId
+                  ? { ...conv, unreadCount: 0 }
+                  : conv
+              )
+            }))
+          };
+        }
+      );
+
       // Invalidate messages query to refresh status
       queryClient.invalidateQueries({
         queryKey: queryKeys.messages.all,
@@ -122,6 +143,11 @@ export function useMessageVisibility({
 
       queryClient.invalidateQueries({
         queryKey: queryKeys.unreadCount.total(),
+      });
+
+      // Force conversation list refresh
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.all,
       });
     },
   });
@@ -185,11 +211,35 @@ export function useMessageVisibilityBatch(conversationId: string, _currentUserId
     },
     onSuccess: () => {
       console.log('[useMessageVisibilityBatch] Invalidating queries after successful mark-as-read');
+
+      // OPTIMISTIC UPDATE: Immediately clear unread count in conversation list
+      // Provides instant UI feedback (Messenger/Telegram pattern)
+      queryClient.setQueryData(
+        queryKeys.conversations.all,
+        (oldData: unknown) => {
+          if (!oldData) return oldData;
+
+          const data = oldData as { pages: Array<{ data: Array<{ id: string; unreadCount: number }> }> };
+          return {
+            ...data,
+            pages: data.pages.map(page => ({
+              ...page,
+              data: page.data.map(conv =>
+                conv.id === conversationId
+                  ? { ...conv, unreadCount: 0 }
+                  : conv
+              )
+            }))
+          };
+        }
+      );
+
+      // Invalidate messages query
       queryClient.invalidateQueries({
         queryKey: queryKeys.messages.all,
       });
 
-      // Invalidate unread count (standardized query keys)
+      // Invalidate unread count queries (for server reconciliation)
       queryClient.invalidateQueries({
         queryKey: queryKeys.unreadCount.conversation(conversationId),
       });
@@ -198,9 +248,14 @@ export function useMessageVisibilityBatch(conversationId: string, _currentUserId
         queryKey: queryKeys.unreadCount.total(),
       });
 
+      // CRITICAL: Force conversation list refresh to sync with server
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.all,
+      });
+
       // Clear batch
       batchRef.current.clear();
-      console.log('[useMessageVisibilityBatch] Batch cleared, queries invalidated');
+      console.log('[useMessageVisibilityBatch] Batch cleared, unread count cleared optimistically, queries invalidated');
     },
     onError: (error) => {
       console.error('[useMessageVisibilityBatch] ❌ Failed to mark messages as read:', error);
