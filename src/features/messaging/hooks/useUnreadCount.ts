@@ -3,6 +3,7 @@
  * Manages unread message counts
  */
 
+import { log } from '@/lib/logger';
 import { useState, useEffect, useCallback } from 'react';
 import { messageService } from '../services/messageService';
 
@@ -40,7 +41,7 @@ export function useUnreadCount(
       setUnreadCount(response.unread_count ?? 0);
     } catch (err) {
       setError(err as Error);
-      console.error('Failed to load unread count:', err);
+      log.message.error('Failed to load unread count:', err);
     } finally {
       setLoading(false);
     }

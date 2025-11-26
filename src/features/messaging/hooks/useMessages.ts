@@ -12,6 +12,7 @@ import { queryKeys } from '@/lib/queryClient';
 import { useMessagesQuery } from './useMessagesQuery';
 import { isPendingDelete } from './useMessageActions';
 import type { Message } from '@/types/message';
+import { log } from '@/lib/logger';
 
 interface UseMessagesOptions {
   limit?: number;
@@ -54,7 +55,7 @@ export function useMessages(
 
   // Add message optimistically (for sender's own messages)
   const addOptimisticMessage = useCallback((message: Message) => {
-    console.log('[useMessages] Adding optimistic message:', message);
+    log.message.debug('Adding optimistic message:', message.id);
 
     // Optimistically add to query cache
     queryClient.setQueryData(
@@ -86,7 +87,7 @@ export function useMessages(
 
     const socket = socketClient.getSocket();
     if (!socket) {
-      console.warn('[useMessages] Socket not initialized');
+      log.ws.warn('Socket not initialized');
       return;
     }
 
@@ -94,27 +95,18 @@ export function useMessages(
 
     // Join the conversation room
     const joinRoom = () => {
-      if (hasJoined) {
-        console.log('[useMessages] Already joined room, skipping');
-        return;
-      }
-
-      console.log('[useMessages] Joining conversation room:', conversationId);
+      if (hasJoined) return;
       socketClient.joinConversation(conversationId);
       hasJoined = true;
     };
 
     // Try to join immediately if already connected
     if (socketClient.isConnected()) {
-      console.log('[useMessages] Socket already connected, joining immediately');
       joinRoom();
-    } else {
-      console.log('[useMessages] Socket not connected, waiting for connection event...');
     }
 
     // Listen for connection events in case we're not connected yet
     const handleConnect = () => {
-      console.log('[useMessages] Socket connect event fired!');
       if (!hasJoined) {
         joinRoom();
       }
@@ -124,7 +116,7 @@ export function useMessages(
 
     // Listen for new messages - invalidate query to refetch
     const handleNewMessage = (message: Record<string, unknown>) => {
-      console.log('[useMessages] New message received via WebSocket:', message);
+      log.message.debug('New message received:', message);
 
       // Invalidate messages query to refetch from server
       queryClient.invalidateQueries({
@@ -134,15 +126,11 @@ export function useMessages(
 
     // Listen for message edits - optimistic cache update (regular function, not useCallback)
     const handleMessageEdited = (updatedMessage: Record<string, unknown>) => {
-      const wsTime = Date.now();
-      console.log(`[useMessages] 📨 [${wsTime}] Message edited via WebSocket:`, updatedMessage);
-
       const messageId = updatedMessage.message_id as string;
       const newContent = updatedMessage.content as string;
       const deletedAt = updatedMessage.deleted_at as string | undefined; // Handle deletions via message:edit
 
-      // Apply WebSocket update (deduplication not needed - TanStack Query handles it)
-      console.log(`[useMessages] ✅ [${wsTime}] Applying WebSocket edit update${deletedAt ? ' (deletion)' : ''}`);
+      log.message.debug(`Message edited:`, { messageId, deletedAt: !!deletedAt });
 
       // Update cache for other users who didn't initiate the edit
       queryClient.setQueryData(
@@ -174,15 +162,15 @@ export function useMessages(
 
     // Listen for message deletions - update with deletedAt instead of removing (Messenger pattern)
     const handleMessageDeleted = (data: Record<string, unknown>) => {
-      console.log('[useMessages] Message deleted via WebSocket:', data);
-
       const messageId = data.message_id as string;
 
       // DEDUPLICATION: Skip if this is the sender's own delete (already optimistically updated)
       if (isPendingDelete(messageId)) {
-        console.log('[useMessages] ⏭️  Skipping WebSocket delete update - sender already updated optimistically');
+        log.message.debug('Skipping duplicate delete (sender optimistic update):', messageId);
         return;
       }
+
+      log.message.debug('Message deleted:', messageId);
 
       // UPDATE message with deletedAt timestamp (DON'T remove it from cache)
       // This allows MessageBubble to show "User removed a message" placeholder
@@ -209,16 +197,10 @@ export function useMessages(
 
     // Listen for reactions added - optimistic cache update (Messenger pattern)
     const handleReactionAdded = (data: Record<string, unknown>) => {
-      const wsTime = Date.now();
-      console.log(`[useMessages] 📨 [${wsTime}] Reaction added via WebSocket:`, data);
-
       const { message_id, reaction: rawReaction } = data as {
         message_id: string;
         reaction: { id: string; userId?: string; user_id?: string; emoji: string; createdAt: string; created_at?: string };
       };
-
-      // Debug: Log raw reaction to see actual structure
-      console.log(`[useMessages] 🔍 Raw reaction from server:`, JSON.stringify(rawReaction));
 
       // Normalize reaction object - handle both camelCase and snake_case from server
       const reaction = {
@@ -229,8 +211,7 @@ export function useMessages(
         messageId: message_id,
       };
 
-      // Apply WebSocket update (deduplication not needed - TanStack Query handles it)
-      console.log(`[useMessages] ✅ [${wsTime}] Applying WebSocket reaction add`);
+      log.message.debug('Reaction added:', { messageId: message_id, emoji: reaction.emoji });
 
       // Add reaction to cache for other users who didn't initiate the reaction
       queryClient.setQueryData(
@@ -248,10 +229,6 @@ export function useMessages(
 
               const currentReactions = msg.reactions || [];
 
-              // Debug: Log current reactions state
-              console.log(`[useMessages] 🔍 Current reactions for ${msg.id}:`, currentReactions.map(r => `${r.emoji}(${r.id.startsWith('temp-') ? 'TEMP' : 'REAL'})`).join(', '));
-              console.log(`[useMessages] 🔍 Looking for: userId=${reaction.userId}, emoji=${reaction.emoji}`);
-
               // FIRST: Check if this exact reaction (same emoji + userId) already exists (temp OR real)
               const existingReactionIndex = currentReactions.findIndex(
                 (r) => r.userId === reaction.userId && r.emoji === reaction.emoji
@@ -259,10 +236,6 @@ export function useMessages(
 
               // If the same emoji reaction exists (temp or real), REPLACE it with server reaction
               if (existingReactionIndex !== -1) {
-                const existingReaction = currentReactions[existingReactionIndex];
-                const wasTemp = existingReaction.id.startsWith('temp-');
-                console.log(`[useMessages] ✅ Replacing ${wasTemp ? 'temp' : 'existing'} reaction with server reaction: ${reaction.emoji} (found at index ${existingReactionIndex})`);
-
                 return {
                   ...msg,
                   reactions: currentReactions.map((r, idx) =>
@@ -275,9 +248,6 @@ export function useMessages(
               const reactionsWithoutUserTemps = currentReactions.filter(
                 (r) => !(r.userId === reaction.userId && r.id.startsWith('temp-'))
               );
-
-              const removedCount = currentReactions.length - reactionsWithoutUserTemps.length;
-              console.log(`[useMessages] ✅ Adding server reaction (removed ${removedCount} temp reactions): ${reaction.emoji}`);
 
               return {
                 ...msg,
@@ -296,16 +266,13 @@ export function useMessages(
 
     // Listen for reactions removed - optimistic cache update (Messenger pattern)
     const handleReactionRemoved = (data: Record<string, unknown>) => {
-      console.log('[useMessages] Reaction removed via WebSocket:', data);
-
       const { message_id, user_id, emoji } = data as {
         message_id: string;
         user_id: string;
         emoji: string;
       };
 
-      // Apply WebSocket update (deduplication not needed - TanStack Query handles it)
-      console.log('[useMessages] ✅ Applying WebSocket reaction remove');
+      log.message.debug('Reaction removed:', { messageId: message_id, emoji });
 
       // Remove reaction from cache
       queryClient.setQueryData(
@@ -341,8 +308,6 @@ export function useMessages(
 
     // Listen for message status updates (Telegram/Messenger pattern)
     const handleMessageStatus = (data: Record<string, unknown>) => {
-      console.log('[useMessages] Message status update via WebSocket:', data);
-
       const { message_id, status, conversation_id } = data as {
         message_id: string;
         status: string;
@@ -353,6 +318,8 @@ export function useMessages(
       if (conversation_id !== conversationId) {
         return;
       }
+
+      log.message.debug('Message status update:', { messageId: message_id, status });
 
       // Optimistic update in cache
       queryClient.setQueryData(
@@ -379,7 +346,6 @@ export function useMessages(
 
       // If status is READ, invalidate unread count
       if (status === 'read') {
-        console.log('[useMessages] Message marked as READ, invalidating unread counts');
         // Invalidate unread count queries (standardized query keys)
         queryClient.invalidateQueries({
           queryKey: queryKeys.unreadCount.conversation(conversationId),
@@ -392,8 +358,6 @@ export function useMessages(
 
     // Listen for bulk messages delivered event
     const handleMessagesDelivered = (data: Record<string, unknown>) => {
-      console.log('[useMessages] Bulk messages delivered via WebSocket:', data);
-
       const { conversation_id, count } = data as {
         conversation_id: string;
         count: number;
@@ -401,7 +365,7 @@ export function useMessages(
 
       // Only handle for this conversation
       if (conversation_id === conversationId) {
-        console.log(`[useMessages] ${count} messages marked as DELIVERED`);
+        log.message.debug(`${count} messages marked as DELIVERED`);
         // Refresh messages to update status
         queryClient.invalidateQueries({
           queryKey: queryKeys.messages.list(conversationId, { limit }),
@@ -411,7 +375,7 @@ export function useMessages(
 
     // Listen for poll events
     const handleNewPoll = (data: Record<string, unknown>) => {
-      console.log('[useMessages] New poll created via WebSocket:', data);
+      log.message.debug('New poll created:', data);
       // Invalidate messages query to show new poll message
       queryClient.invalidateQueries({
         queryKey: queryKeys.messages.list(conversationId, { limit }),
@@ -419,8 +383,8 @@ export function useMessages(
     };
 
     const handlePollVote = (data: Record<string, unknown>) => {
-      console.log('[useMessages] Poll vote update via WebSocket:', data);
       const pollData = data as { poll_id: string; user_id: string; poll: unknown };
+      log.message.debug('Poll vote update:', { pollId: pollData.poll_id });
 
       // Optimistically update poll data in messages cache
       queryClient.setQueryData(
@@ -449,8 +413,8 @@ export function useMessages(
     };
 
     const handlePollClosed = (data: Record<string, unknown>) => {
-      console.log('[useMessages] Poll closed via WebSocket:', data);
       const pollData = data as { poll_id: string; poll: unknown };
+      log.message.debug('Poll closed:', { pollId: pollData.poll_id });
 
       // Optimistically update poll data in messages cache
       queryClient.setQueryData(
@@ -495,7 +459,6 @@ export function useMessages(
 
     // Cleanup
     return () => {
-      console.log('[useMessages] Cleaning up, leaving room:', conversationId);
       socketClient.leaveConversation(conversationId);
       socketClient.off('new_message', handleNewMessage);
       socketClient.off('message_edited', handleMessageEdited);

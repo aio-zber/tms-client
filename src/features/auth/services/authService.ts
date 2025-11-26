@@ -5,6 +5,7 @@
  */
 
 import { STORAGE_KEYS, getApiBaseUrl } from '@/lib/constants';
+import { log } from '@/lib/logger';
 
 export interface LoginCredentials {
   email: string;
@@ -40,7 +41,7 @@ class AuthService {
   async login(credentials: LoginCredentials): Promise<LoginResponse> {
     try {
       const apiBaseUrl = getApiBaseUrl();
-      console.log('🔐 Authenticating with TMS Server...');
+      log.auth.info('🔐 Authenticating with TMS Server...');
 
       // Single call to TMS-Server - handles GCGC auth server-to-server
       // This avoids browser CORS issues by keeping GCGC communication server-side
@@ -59,12 +60,12 @@ class AuthService {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         const errorMessage = errorData.detail?.message || errorData.message || 'Authentication failed';
-        console.error('❌ Authentication failed:', errorMessage);
+        log.auth.error('❌ Authentication failed:', errorMessage);
         throw new AuthError(errorMessage, response.status);
       }
 
       const data = await response.json();
-      console.log('✅ Authentication successful');
+      log.auth.info('✅ Authentication successful');
 
       // Extract JWT token and user data from TMS-Server response
       const jwtToken = data.token;
@@ -73,7 +74,7 @@ class AuthService {
       // Store JWT token in localStorage for API requests
       if (typeof window !== 'undefined' && jwtToken) {
         localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, jwtToken);
-        console.log('✅ JWT token stored');
+        log.auth.info('✅ JWT token stored');
       }
 
       // Store session indicator
@@ -93,7 +94,7 @@ class AuthService {
       if (error instanceof AuthError) {
         throw error;
       }
-      console.error('❌ Login error:', error);
+      log.auth.error('❌ Login error:', error);
       throw new AuthError('Network error. Please check your connection.');
     }
   }
@@ -105,17 +106,17 @@ class AuthService {
    */
   async autoLoginFromGCGC(): Promise<LoginResponse> {
     try {
-      console.log('🔐 SSO: Attempting auto-login from GCGC session...');
+      log.auth.info('🔐 SSO: Attempting auto-login from GCGC session...');
 
       // Extract GCGC NextAuth session token from cookies
       const gcgcSessionToken = this.extractSessionToken();
 
       if (!gcgcSessionToken) {
-        console.error('❌ SSO: No GCGC session token found');
+        log.auth.error('❌ SSO: No GCGC session token found');
         throw new AuthError('No GCGC session found', 401);
       }
 
-      console.log('✅ SSO: GCGC session token detected');
+      log.auth.info('✅ SSO: GCGC session token detected');
 
       // Exchange GCGC session token for TMS JWT via SSO endpoint
       const apiBaseUrl = getApiBaseUrl();
@@ -131,12 +132,12 @@ class AuthService {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         const errorMessage = errorData.detail?.message || errorData.message || 'SSO authentication failed';
-        console.error('❌ SSO: Authentication failed:', errorMessage);
+        log.auth.error('❌ SSO: Authentication failed:', errorMessage);
         throw new AuthError(errorMessage, response.status);
       }
 
       const data = await response.json();
-      console.log('✅ SSO: Authentication successful');
+      log.auth.info('✅ SSO: Authentication successful');
 
       // Extract JWT token and user data from TMS-Server response
       const jwtToken = data.token;
@@ -145,7 +146,7 @@ class AuthService {
       // Store JWT token in localStorage for API requests
       if (typeof window !== 'undefined' && jwtToken) {
         localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, jwtToken);
-        console.log('✅ SSO: JWT token stored');
+        log.auth.info('✅ SSO: JWT token stored');
       }
 
       // Store session indicator
@@ -165,7 +166,7 @@ class AuthService {
       if (error instanceof AuthError) {
         throw error;
       }
-      console.error('❌ SSO: Auto-login error:', error);
+      log.auth.error('❌ SSO: Auto-login error:', error);
       throw new AuthError('SSO authentication failed. Please try logging in again.');
     }
   }
@@ -183,7 +184,7 @@ class AuthService {
         credentials: 'include',
       });
     } catch (error) {
-      console.warn('TMS Server logout failed:', error);
+      log.auth.warn('TMS Server logout failed:', error);
     } finally {
       this.setSessionActive(false);
       if (typeof window !== 'undefined') {

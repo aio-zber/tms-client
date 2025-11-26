@@ -5,6 +5,7 @@
 
 'use client';
 
+import { log } from '@/lib/logger';
 import { useEffect, useLayoutEffect, useRef, useState, memo, useMemo } from 'react';
 import { format, isToday, isYesterday } from 'date-fns';
 import { MessageBubble } from './MessageBubble';
@@ -88,7 +89,7 @@ const MessageWithVisibility = memo(function MessageWithVisibility({
 
   // Track visibility after 1 second delay
   useEffect(() => {
-    console.log('[MessageVisibility] Effect triggered:', {
+    log.message.debug('[MessageVisibility] Effect triggered:', {
       messageId: message.id,
       inView,
       isSent,
@@ -100,7 +101,7 @@ const MessageWithVisibility = memo(function MessageWithVisibility({
     // FIX: Removed isSent check - user can mark their own messages as read
     // This allows unread count to clear when user views the conversation
     if (!enableAutoRead || !conversationId || message.status === 'read') {
-      console.log('[MessageVisibility] Skipping mark-as-read:', {
+      log.message.debug('[MessageVisibility] Skipping mark-as-read:', {
         reason: !enableAutoRead ? 'autoRead disabled' :
                 !conversationId ? 'no conversationId' :
                 'already read'
@@ -109,18 +110,18 @@ const MessageWithVisibility = memo(function MessageWithVisibility({
     }
 
     if (inView) {
-      console.log('[MessageVisibility] Message visible, scheduling mark-as-read in 1s:', message.id);
+      log.message.debug('[MessageVisibility] Message visible, scheduling mark-as-read in 1s:', message.id);
       const timer = setTimeout(() => {
         // Double-check still visible after delay
         if (inView) {
-          console.log('[MessageVisibility] ✅ Calling trackMessage for:', message.id);
+          log.message.debug('[MessageVisibility] ✅ Calling trackMessage for:', message.id);
           trackMessage(message.id);
         }
       }, 1000); // 1 second delay (Telegram/Messenger pattern)
 
       return () => clearTimeout(timer);
     }
-  }, [inView, message.status, message.id, enableAutoRead, conversationId, trackMessage]);
+  }, [inView, message.status, message.id, enableAutoRead, conversationId, trackMessage, isSent]);
 
   return (
     <div
@@ -187,16 +188,16 @@ export function MessageList({
   );
 
   // Debug logging
-  console.log('[MessageList] Props received:', { 
+  log.message.debug('[MessageList] Props received:', { 
     messagesCount: messages?.length, 
     loading, 
     currentUserId,
     messages: messages 
   });
 
-  console.log('[MessageList] 🔍 DETAILED MESSAGE INSPECTION:');
+  log.message.debug('[MessageList] 🔍 DETAILED MESSAGE INSPECTION:');
   (messages || []).forEach((msg, idx) => {
-    console.log(`  [${idx}] id=${msg.id}, createdAt=${msg.createdAt}, content='${msg.content?.substring(0, 20)}...'`);
+    log.message.debug(`  [${idx}] id=${msg.id}, createdAt=${msg.createdAt}, content='${msg.content?.substring(0, 20)}...'`);
   });
 
   // Group messages by date - MEMOIZED to prevent infinite re-renders
@@ -204,13 +205,13 @@ export function MessageList({
     return (messages || []).reduce((groups, message) => {
       // Validate date before formatting
       if (!message.createdAt) {
-        console.log('[MessageList] ⚠️ SKIPPING message with no createdAt:', message);
+        log.message.debug('[MessageList] ⚠️ SKIPPING message with no createdAt:', message);
         return groups;
       }
 
       const messageDate = new Date(message.createdAt);
       if (isNaN(messageDate.getTime())) {
-        console.log('[MessageList] ⚠️ SKIPPING message with invalid createdAt:', message.createdAt, message);
+        log.message.debug('[MessageList] ⚠️ SKIPPING message with invalid createdAt:', message.createdAt, message);
         return groups; // Skip invalid dates
       }
 
@@ -230,7 +231,7 @@ export function MessageList({
     }, [] as MessageGroup[]);
   }, [messages]); // Only recalculate when messages array changes
 
-  console.log('[MessageList] Grouped messages:', {
+  log.message.debug('[MessageList] Grouped messages:', {
     groupCount: groupedMessages.length,
     totalMessages: groupedMessages.reduce((sum, g) => sum + g.messages.length, 0),
     groups: groupedMessages
@@ -270,7 +271,7 @@ export function MessageList({
         // Restore scroll position (keep visual position stable)
         // Add the height difference to maintain the same visual position
         scrollArea.scrollTop = scrollArea.scrollTop + scrollHeightDiff;
-        console.log('[MessageList] ✅ Preserved scroll position after loading more:', {
+        log.message.debug('[MessageList] ✅ Preserved scroll position after loading more:', {
           previousHeight: previousScrollHeight,
           currentHeight: currentScrollHeight,
           diff: scrollHeightDiff,
@@ -298,7 +299,7 @@ export function MessageList({
       setTimeout(() => {
         bottomRef.current?.scrollIntoView({ behavior: 'auto' });
         initialLoadRef.current = false; // Mark as initially loaded
-        console.log('[MessageList] ✅ Initial load complete, scrolled to bottom');
+        log.message.debug('[MessageList] ✅ Initial load complete, scrolled to bottom');
       }, 100);
     }
   }, [messages?.length, loading]);
@@ -306,14 +307,14 @@ export function MessageList({
   // Reset initial load flag when conversation changes
   useEffect(() => {
     initialLoadRef.current = true;
-    console.log('[MessageList] 🔄 Conversation changed, resetting initial load flag');
+    log.message.debug('[MessageList] 🔄 Conversation changed, resetting initial load flag');
   }, [conversationId]);
 
   // Reset loading flag when pagination completes
   useEffect(() => {
     if (!isFetchingNextPage && isLoadingMoreRef.current) {
       isLoadingMoreRef.current = false;
-      console.log('[MessageList] ✅ Pagination complete, resetting loading flag');
+      log.message.debug('[MessageList] ✅ Pagination complete, resetting loading flag');
     }
   }, [isFetchingNextPage]);
 
@@ -338,7 +339,7 @@ export function MessageList({
       isLoadingMoreRef.current = true;
       // Save scroll height before loading more
       previousScrollHeightRef.current = scrollArea.scrollHeight;
-      console.log('[MessageList] 🔄 Loading more messages (scroll triggered)');
+      log.message.debug('[MessageList] 🔄 Loading more messages (scroll triggered)');
       onLoadMore();
     }
   };
@@ -355,7 +356,7 @@ export function MessageList({
 
     setAutoScroll(true); // Re-enable auto-scroll
     setShowScrollButton(false); // Hide button immediately
-    console.log('[MessageList] 📍 Scrolled to bottom via button');
+    log.message.debug('[MessageList] 📍 Scrolled to bottom via button');
   };
 
   if (loading && (!messages || messages.length === 0)) {
@@ -403,7 +404,7 @@ export function MessageList({
                   isLoadingMoreRef.current = true;
                   // Save scroll height before loading more
                   previousScrollHeightRef.current = scrollArea.scrollHeight;
-                  console.log('[MessageList] 🔄 Loading more messages (button clicked)');
+                  log.message.debug('[MessageList] 🔄 Loading more messages (button clicked)');
                   onLoadMore();
                 }
               }}
@@ -439,10 +440,10 @@ export function MessageList({
 
                 // Debug logging for first message
                 if (index === 0) {
-                  console.log('[MessageList] Message senderId:', message.senderId);
-                  console.log('[MessageList] Current userId:', currentUserId);
-                  console.log('[MessageList] isSent:', isSent);
-                  console.log('[MessageList] Match:', message.senderId === currentUserId);
+                  log.message.debug('[MessageList] Message senderId:', message.senderId);
+                  log.message.debug('[MessageList] Current userId:', currentUserId);
+                  log.message.debug('[MessageList] isSent:', isSent);
+                  log.message.debug('[MessageList] Match:', message.senderId === currentUserId);
                 }
 
                 const previousMessage = group.messages[index - 1];

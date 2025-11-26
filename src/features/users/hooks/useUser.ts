@@ -3,6 +3,7 @@
  * Hook for fetching and caching individual users by ID.
  */
 
+import { log } from '@/lib/logger';
 import { useState, useEffect } from 'react';
 import { useUserStore } from '@/store/userStore';
 import { User } from '@/types/user';
@@ -73,7 +74,7 @@ export function useUser(userId: string | null | undefined, autoFetch: boolean = 
           setIsLoading(false);
         })
         .catch((err) => {
-          console.error(`Failed to fetch user ${userId}:`, err);
+          log.error(`Failed to fetch user ${userId}:`, err);
           setError(err.message || 'Failed to fetch user');
           setIsLoading(false);
         });

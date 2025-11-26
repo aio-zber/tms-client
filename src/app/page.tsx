@@ -1,5 +1,6 @@
 'use client';
 
+import { log } from '@/lib/logger';
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
@@ -24,14 +25,14 @@ function HomePageContent() {
 
   useEffect(() => {
     const initializeAuth = async () => {
-      console.log('🔐 SSO: Initializing authentication...');
+      log.auth.info('🔐 SSO: Initializing authentication...');
 
       // Clear re-authentication flags if present
       if (typeof window !== 'undefined') {
         const isReauth = localStorage.getItem('reauthenticating') === 'true';
         if (isReauth) {
           const reason = localStorage.getItem('reauth_reason');
-          console.log('🔐 SSO: Re-authentication flow detected', { reason });
+          log.auth.info('🔐 SSO: Re-authentication flow detected', { reason });
           localStorage.removeItem('reauthenticating');
           localStorage.removeItem('reauth_reason');
         }
@@ -41,7 +42,7 @@ function HomePageContent() {
       const ssoCode = searchParams?.get('sso_code');
 
       if (ssoCode) {
-        console.log('🔐 SSO: Found SSO code in URL, exchanging for JWT...');
+        log.auth.info('🔐 SSO: Found SSO code in URL, exchanging for JWT...');
         setProcessing(true);
 
         try {
@@ -59,14 +60,14 @@ function HomePageContent() {
           }
 
           const data = await response.json();
-          console.log('✅ SSO: Code exchange successful');
+          log.auth.info('✅ SSO: Code exchange successful');
 
           // Detect account switch by comparing old vs new user ID
           const previousUserId = localStorage.getItem('current_user_id');
           const newUserId = data.user?.tms_user_id;
 
           if (previousUserId && newUserId && previousUserId !== newUserId) {
-            console.log('🔐 SSO: Account switch detected, clearing old session', {
+            log.auth.info('🔐 SSO: Account switch detected, clearing old session', {
               oldUserId: previousUserId,
               newUserId: newUserId,
             });
@@ -76,13 +77,13 @@ function HomePageContent() {
             localStorage.removeItem('tms_session_active'); // Old session flag
             localStorage.removeItem('auth_token'); // Old user's token (will be replaced below)
 
-            console.log('✅ SSO: Old session cleared');
+            log.auth.info('✅ SSO: Old session cleared');
           }
 
           // Store user ID BEFORE token (atomic initialization to prevent race conditions)
           if (newUserId) {
             localStorage.setItem('current_user_id', newUserId);
-            console.log('✅ SSO: User ID stored:', newUserId);
+            log.auth.info('✅ SSO: User ID stored:', newUserId);
           }
 
           // Then store token and session flag
@@ -92,12 +93,12 @@ function HomePageContent() {
           }
 
           // Clear SSO code from URL and redirect to chats
-          console.log('✅ SSO: Redirecting to chats...');
+          log.auth.info('✅ SSO: Redirecting to chats...');
           router.replace('/chats');
           return;
 
         } catch (error) {
-          console.error('❌ SSO: Code exchange failed:', error);
+          log.auth.error('❌ SSO: Code exchange failed:', error);
           // Clear invalid code from URL
           router.replace('/');
           setProcessing(false);
@@ -111,7 +112,7 @@ function HomePageContent() {
 
       if (gcgcToken && storedUserId) {
         try {
-          console.log('🔐 SSO: Validating GCGC session matches TMS session...');
+          log.auth.info('🔐 SSO: Validating GCGC session matches TMS session...');
           const response = await fetch(`${TMS_SERVER_URL}/api/v1/auth/validate-gcgc-session`, {
             method: 'POST',
             headers: {
@@ -126,7 +127,7 @@ function HomePageContent() {
 
             // User ID mismatch = account switch detected
             if (gcgcUserId && gcgcUserId !== storedUserId) {
-              console.log('🔐 SSO: Account switch detected, clearing old session', {
+              log.auth.info('🔐 SSO: Account switch detected, clearing old session', {
                 oldUserId: storedUserId,
                 newUserId: gcgcUserId,
               });
@@ -140,30 +141,30 @@ function HomePageContent() {
               // Redirect to SSO for fresh authentication with new user
               const callbackUrl = `${TMS_CLIENT_URL}/auth/callback`;
               const gcgcSsoUrl = `${GCGC_URL}/api/v1/auth/sso?callbackUrl=${encodeURIComponent(callbackUrl)}`;
-              console.log('🔐 SSO: Redirecting to GCGC SSO for re-authentication...');
+              log.auth.info('🔐 SSO: Redirecting to GCGC SSO for re-authentication...');
               window.location.href = gcgcSsoUrl;
               return;
             } else if (gcgcUserId) {
-              console.log('✅ SSO: GCGC session matches TMS session', { userId: gcgcUserId });
+              log.auth.info('✅ SSO: GCGC session matches TMS session', { userId: gcgcUserId });
             }
           } else {
-            console.warn('⚠️ SSO: GCGC session validation failed, continuing with normal flow');
+            log.auth.warn('⚠️ SSO: GCGC session validation failed, continuing with normal flow');
           }
         } catch (error) {
-          console.warn('⚠️ SSO: GCGC session validation error, continuing with normal flow:', error);
+          log.auth.warn('⚠️ SSO: GCGC session validation error, continuing with normal flow:', error);
           // Continue with normal flow - don't block users on validation errors
         }
       }
 
       // Step 3: Check if already authenticated in TMS
-      console.log('🔐 SSO: Checking TMS authentication...');
+      log.auth.info('🔐 SSO: Checking TMS authentication...');
       await checkAuth();
 
       const currentAuthState = useAuthStore.getState().isAuthenticated;
 
       if (currentAuthState) {
         // Already authenticated, go to chats
-        console.log('✅ SSO: Already authenticated, redirecting to chats...');
+        log.auth.info('✅ SSO: Already authenticated, redirecting to chats...');
         router.push('/chats');
         setProcessing(false);
         return;
@@ -171,10 +172,10 @@ function HomePageContent() {
 
       // Step 3: Not authenticated - redirect to GCGC SSO endpoint
       // GCGC SSO will detect if user is already logged in and auto-redirect back with token
-      console.log('🔐 SSO: Not authenticated, initiating SSO with GCGC...');
+      log.auth.info('🔐 SSO: Not authenticated, initiating SSO with GCGC...');
       const callbackUrl = `${TMS_CLIENT_URL}/auth/callback`;
       const gcgcSsoUrl = `${GCGC_URL}/api/v1/auth/sso?callbackUrl=${encodeURIComponent(callbackUrl)}`;
-      console.log('🔐 SSO: Redirecting to GCGC SSO:', gcgcSsoUrl);
+      log.auth.info('🔐 SSO: Redirecting to GCGC SSO:', gcgcSsoUrl);
       window.location.href = gcgcSsoUrl;
     };
 

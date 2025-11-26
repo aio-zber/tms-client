@@ -3,6 +3,7 @@
  * Manages Socket.IO connection for real-time messaging
  */
 
+import { log } from '@/lib/logger';
 import { io, Socket } from 'socket.io-client';
 import { WS_URL } from '@/lib/constants';
 import { authService } from '@/features/auth/services/authService';
@@ -39,7 +40,7 @@ class WebSocketService {
    */
   connect(): void {
     if (this.socket?.connected || this.isConnecting) {
-      console.log('WebSocket already connected or connecting');
+      log.debug('WebSocket already connected or connecting');
       return;
     }
 
@@ -47,14 +48,14 @@ class WebSocketService {
     const token = authService.getStoredToken();
 
     if (!token) {
-      console.error('No auth token available for WebSocket connection');
+      log.error('No auth token available for WebSocket connection');
       this.isConnecting = false;
       return;
     }
 
-    console.log('[WebSocket] Connecting to:', WS_URL);
-    console.log('[WebSocket] Path: /socket.io');
-    console.log('[WebSocket] Full URL:', `${WS_URL}/socket.io/`);
+    log.debug('[WebSocket] Connecting to:', WS_URL);
+    log.debug('[WebSocket] Path: /socket.io');
+    log.debug('[WebSocket] Full URL:', `${WS_URL}/socket.io/`);
 
     this.socket = io(WS_URL, {
       path: '/socket.io',  // FIXED: Socket.IO default path (server wraps FastAPI with socketio.ASGIApp)
@@ -79,29 +80,29 @@ class WebSocketService {
     if (!this.socket) return;
 
     this.socket.on('connect', () => {
-      console.log('✅ WebSocket connected:', this.socket?.id);
+      log.debug('✅ WebSocket connected:', this.socket?.id);
       this.isConnecting = false;
       this.reconnectAttempts = 0;
     });
 
     this.socket.on('disconnect', (reason) => {
-      console.log('❌ WebSocket disconnected:', reason);
+      log.debug('❌ WebSocket disconnected:', reason);
       this.isConnecting = false;
     });
 
     this.socket.on('connect_error', (error) => {
-      console.error('WebSocket connection error:', error);
+      log.error('WebSocket connection error:', error);
       this.isConnecting = false;
       this.reconnectAttempts++;
 
       if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-        console.error('Max reconnection attempts reached');
+        log.error('Max reconnection attempts reached');
         this.disconnect();
       }
     });
 
     this.socket.on('error', (error) => {
-      console.error('WebSocket error:', error);
+      log.error('WebSocket error:', error);
     });
   }
 
@@ -110,11 +111,11 @@ class WebSocketService {
    */
   joinConversation(conversationId: string): void {
     if (!this.socket?.connected) {
-      console.warn('WebSocket not connected, cannot join conversation');
+      log.warn('WebSocket not connected, cannot join conversation');
       return;
     }
 
-    console.log('Joining conversation:', conversationId);
+    log.debug('Joining conversation:', conversationId);
     this.socket.emit('join_conversation', { conversation_id: conversationId });
   }
 
@@ -124,7 +125,7 @@ class WebSocketService {
   leaveConversation(conversationId: string): void {
     if (!this.socket?.connected) return;
 
-    console.log('Leaving conversation:', conversationId);
+    log.debug('Leaving conversation:', conversationId);
     this.socket.emit('leave_conversation', { conversation_id: conversationId });
   }
 
@@ -258,7 +259,7 @@ class WebSocketService {
    */
   disconnect(): void {
     if (this.socket) {
-      console.log('Disconnecting WebSocket');
+      log.debug('Disconnecting WebSocket');
       this.socket.disconnect();
       this.socket = null;
       this.isConnecting = false;

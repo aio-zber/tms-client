@@ -1,4 +1,5 @@
 'use client';
+import { log } from '@/lib/logger';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -64,7 +65,7 @@ export function AppHeader() {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
       } catch (error) {
-        console.error('Failed to load user data:', error);
+        log.error('Failed to load user data:', error);
         // On error, clear auth and redirect to login
         localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
         localStorage.removeItem('tms_session_active');
@@ -80,13 +81,11 @@ export function AppHeader() {
   const handleThemeChange = (newTheme: 'light' | 'dark' | 'system') => {
     setTheme(newTheme);
     // TODO: Implement actual theme switching
-    console.log('Theme changed to:', newTheme);
   };
 
   const toggleNotifications = () => {
     setNotificationsEnabled(!notificationsEnabled);
     // TODO: Implement actual notification toggle
-    console.log('Notifications:', !notificationsEnabled);
   };
 
   const handleLogout = async () => {
@@ -96,7 +95,7 @@ export function AppHeader() {
       // Redirect to login page
       window.location.href = '/login';
     } catch (error) {
-      console.error('Logout failed:', error);
+      log.error('Logout failed:', error);
       // Even if logout fails, redirect to login for security
       window.location.href = '/login';
     }

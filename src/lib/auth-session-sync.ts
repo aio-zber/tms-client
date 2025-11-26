@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useRef } from 'react';
+import { log } from '@/lib/logger';
 
 const TMS_SERVER_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') ||
                        'https://tms-server-staging.up.railway.app';
@@ -67,27 +68,27 @@ export function useSessionSync() {
 
     // Don't validate during SSO flow - let page.tsx handle authentication
     if (!token || hasSsoCode || isCallbackPage || (isRootPage && !token)) {
-      if (DEBUG) console.log('[Session Sync] Skipping validation during SSO flow');
+      if (DEBUG) log.auth.info('[Session Sync] Skipping validation during SSO flow');
       return true; // Return true to prevent logout during SSO
     }
 
     // Prevent concurrent validations
     if (validationInProgress.current) {
-      if (DEBUG) console.log('[Session Sync] Validation already in progress, skipping');
+      if (DEBUG) log.auth.info('[Session Sync] Validation already in progress, skipping');
       return true;
     }
 
     // Rate limiting: Don't validate more than once per 5 seconds
     const now = Date.now();
     if (now - lastValidation.current < RATE_LIMIT_WINDOW) {
-      if (DEBUG) console.log('[Session Sync] Rate limit: skipping validation');
+      if (DEBUG) log.auth.info('[Session Sync] Rate limit: skipping validation');
       return true;
     }
 
     // Cross-tab validation coordination: Check if another tab validated recently
     const lastGlobalValidation = localStorage.getItem('last_validation_timestamp');
     if (lastGlobalValidation && now - parseInt(lastGlobalValidation) < RATE_LIMIT_WINDOW) {
-      if (DEBUG) console.log('[Session Sync] Another tab validated recently, skipping');
+      if (DEBUG) log.auth.info('[Session Sync] Another tab validated recently, skipping');
       return true;
     }
 
@@ -101,7 +102,7 @@ export function useSessionSync() {
       localStorage.setItem('last_validation_timestamp', now.toString());
 
       const startTime = Date.now();
-      if (DEBUG) console.log('[Session Sync] Validating session...');
+      if (DEBUG) log.auth.info('[Session Sync] Validating session...');
 
       const response = await fetch(`${TMS_SERVER_URL}/api/v1/auth/validate`, {
         method: 'POST',
@@ -114,13 +115,13 @@ export function useSessionSync() {
       const latency = Date.now() - startTime;
 
       if (response.status === 401) {
-        console.log('[Session Sync] Token invalid (401) - clearing session');
+        log.auth.info('[Session Sync] Token invalid (401) - clearing session');
         clearSession('invalid_token');
         return false;
       }
 
       if (!response.ok) {
-        console.warn(`[Session Sync] Validation failed with status ${response.status}`);
+        log.auth.warn(`[Session Sync] Validation failed with status ${response.status}`);
         // Don't logout on server errors - might be temporary
         return true;
       }
@@ -128,14 +129,14 @@ export function useSessionSync() {
       const data: SessionValidationResponse = await response.json();
 
       if (!data.valid) {
-        console.log('[Session Sync] Session invalid - clearing session');
+        log.auth.info('[Session Sync] Session invalid - clearing session');
         clearSession('invalid_token');
         return false;
       }
 
       // Check if user changed - only if current_user_id was already set
       if (currentUserId && data.user?.tms_user_id && data.user.tms_user_id !== currentUserId) {
-        console.log('[Session Sync] User changed - clearing session', {
+        log.auth.info('[Session Sync] User changed - clearing session', {
           oldUserId: currentUserId,
           newUserId: data.user.tms_user_id,
         });
@@ -147,12 +148,12 @@ export function useSessionSync() {
       if (!currentUserId && data.user?.tms_user_id) {
         localStorage.setItem('current_user_id', data.user.tms_user_id);
         if (DEBUG) {
-          console.log('[Session Sync] Initialized stored user ID:', data.user.tms_user_id);
+          log.auth.info('[Session Sync] Initialized stored user ID:', data.user.tms_user_id);
         }
       }
 
       if (DEBUG) {
-        console.log('[Session Sync] Session valid', {
+        log.auth.info('[Session Sync] Session valid', {
           userId: data.user?.tms_user_id,
           latency: `${latency}ms`,
         });
@@ -160,7 +161,7 @@ export function useSessionSync() {
 
       return true;
     } catch (error) {
-      console.error('[Session Sync] Validation error:', error);
+      log.auth.error('[Session Sync] Validation error:', error);
       // Don't logout on network errors - might be temporary connection issue
       return true;
     } finally {
@@ -175,7 +176,7 @@ export function useSessionSync() {
   const clearSession = (reason?: 'invalid_token' | 'user_mismatch' | 'logout') => {
     if (typeof window === 'undefined') return;
 
-    console.log('[Session Sync] Clearing local session', { reason });
+    log.auth.info('[Session Sync] Clearing local session', { reason });
 
     const oldUserId = localStorage.getItem('current_user_id');
 
@@ -190,7 +191,7 @@ export function useSessionSync() {
     const isCallbackPage = window.location.pathname === '/auth/callback';
 
     if (hasSsoCode || isCallbackPage) {
-      console.log('[Session Sync] SSO flow detected, not redirecting (page will handle it)');
+      log.auth.info('[Session Sync] SSO flow detected, not redirecting (page will handle it)');
       return; // Let the main page flow handle redirect
     }
 
@@ -210,7 +211,7 @@ export function useSessionSync() {
       const callbackUrl = `${TMS_CLIENT_URL}/auth/callback`;
       const gcgcSsoUrl = `${GCGC_URL}/api/v1/auth/sso?callbackUrl=${encodeURIComponent(callbackUrl)}`;
 
-      console.log('[Session Sync] Redirecting to GCGC SSO for re-authentication');
+      log.auth.info('[Session Sync] Redirecting to GCGC SSO for re-authentication');
       window.location.href = gcgcSsoUrl;
       return;
     }
@@ -218,7 +219,7 @@ export function useSessionSync() {
     // For root page: let page.tsx handle the flow
     const isRootPage = window.location.pathname === '/';
     if (isRootPage) {
-      console.log('[Session Sync] Root page detected, letting page.tsx handle flow');
+      log.auth.info('[Session Sync] Root page detected, letting page.tsx handle flow');
       return;
     }
 
@@ -227,7 +228,7 @@ export function useSessionSync() {
 
     // Default: redirect to SSO check for other scenarios
     const redirectUrl = `${TMS_SERVER_URL}/api/v1/auth/sso/check`;
-    console.log('[Session Sync] Redirecting to SSO check');
+    log.auth.info('[Session Sync] Redirecting to SSO check');
     window.location.href = redirectUrl;
   };
 
@@ -243,7 +244,7 @@ export function useSessionSync() {
       userId,
     };
 
-    if (DEBUG) console.log('[Session Sync] Broadcasting event:', event);
+    if (DEBUG) log.auth.info('[Session Sync] Broadcasting event:', event);
 
     // Set and immediately remove to trigger storage event in other tabs
     localStorage.setItem('session_event', JSON.stringify(event));
@@ -273,13 +274,13 @@ export function useSessionSync() {
                                 currentPath.startsWith('/profile');
 
     if (isAuthenticatedPage) {
-      if (DEBUG) console.log('[Session Sync] Skipping mount validation on authenticated page:', currentPath);
+      if (DEBUG) log.auth.info('[Session Sync] Skipping mount validation on authenticated page:', currentPath);
       // Validation will still run on focus events and periodic checks
     } else if (!lastGlobalValidation || now - parseInt(lastGlobalValidation) > RATE_LIMIT_WINDOW) {
-      if (DEBUG) console.log('[Session Sync] Mount validation (no recent validation found)');
+      if (DEBUG) log.auth.info('[Session Sync] Mount validation (no recent validation found)');
       validateSession();
     } else {
-      if (DEBUG) console.log('[Session Sync] Skipping mount validation (another tab validated recently)');
+      if (DEBUG) log.auth.info('[Session Sync] Skipping mount validation (another tab validated recently)');
     }
 
     // 2. Validate on window focus
@@ -289,11 +290,11 @@ export function useSessionSync() {
         // This handles the refresh scenario where visibility change fires immediately after mount
         const timeSinceMount = Date.now() - mountTime.current;
         if (timeSinceMount < 2000) {
-          if (DEBUG) console.log('[Session Sync] Skipping focus validation (recent mount, likely refresh)');
+          if (DEBUG) log.auth.info('[Session Sync] Skipping focus validation (recent mount, likely refresh)');
           return;
         }
 
-        if (DEBUG) console.log('[Session Sync] Tab gained focus - validating session');
+        if (DEBUG) log.auth.info('[Session Sync] Tab gained focus - validating session');
         validateSession();
       }
     };
@@ -303,7 +304,7 @@ export function useSessionSync() {
     // 3. Periodic validation (every 60 seconds)
     intervalId.current = setInterval(() => {
       if (!document.hidden) {
-        if (DEBUG) console.log('[Session Sync] Periodic validation');
+        if (DEBUG) log.auth.info('[Session Sync] Periodic validation');
         validateSession();
       }
     }, VALIDATION_INTERVAL);
@@ -315,22 +316,22 @@ export function useSessionSync() {
           const eventData: SessionEvent = JSON.parse(event.newValue);
 
           if (DEBUG) {
-            console.log('[Session Sync] Received event from another tab:', eventData);
+            log.auth.info('[Session Sync] Received event from another tab:', eventData);
           }
 
           if (eventData.type === 'LOGOUT') {
-            console.log('[Session Sync] Logout detected in another tab');
+            log.auth.info('[Session Sync] Logout detected in another tab');
             clearSession();
           } else if (eventData.type === 'USER_CHANGED') {
-            console.log('[Session Sync] User change detected in another tab');
+            log.auth.info('[Session Sync] User change detected in another tab');
             clearSession();
           } else if (eventData.type === 'LOGIN') {
-            console.log('[Session Sync] Login detected in another tab');
+            log.auth.info('[Session Sync] Login detected in another tab');
             // Optionally reload to sync new session
             window.location.reload();
           }
         } catch (error) {
-          console.error('[Session Sync] Failed to parse storage event:', error);
+          log.auth.error('[Session Sync] Failed to parse storage event:', error);
         }
       }
 
@@ -338,14 +339,14 @@ export function useSessionSync() {
       if (event.key === 'auth_token') {
         if (event.oldValue && !event.newValue) {
           // Token was removed (not just changed) - add grace period to prevent false positives
-          console.log('[Session Sync] Token removed in another tab, verifying...');
+          log.auth.info('[Session Sync] Token removed in another tab, verifying...');
           setTimeout(() => {
             // Verify token is still missing after grace period
             if (!localStorage.getItem('auth_token')) {
-              console.log('[Session Sync] Token still missing after grace period - logging out');
+              log.auth.info('[Session Sync] Token still missing after grace period - logging out');
               clearSession();
             } else {
-              if (DEBUG) console.log('[Session Sync] Token was restored - false alarm');
+              if (DEBUG) log.auth.info('[Session Sync] Token was restored - false alarm');
             }
           }, 500); // 500ms grace period
         }

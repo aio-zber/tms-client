@@ -4,6 +4,7 @@
  * All requests go through TMS Server which communicates with GCGC
  */
 
+import { log } from '@/lib/logger';
 import { getApiBaseUrl, STORAGE_KEYS } from './constants';
 import { User } from '@/types';
 
@@ -175,7 +176,7 @@ class TMSApiClient {
     } else if ('results' in data && Array.isArray(data.results)) {
       return data.results;
     } else {
-      console.error('Unexpected TMS API response format:', data);
+      log.error('Unexpected TMS API response format:', data);
       return [];
     }
   }

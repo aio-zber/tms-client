@@ -1,3 +1,4 @@
+import { log } from '@/lib/logger';
 import { useState, useEffect } from 'react';
 import { useUserStore } from '@/store/userStore';
 import type { User } from '@/types/user';
@@ -53,7 +54,7 @@ export function useUserProfile(userId: string | undefined, options?: { skip?: bo
         await fetchUserById(userId);
         setLoading(false);
       } catch (err) {
-        console.error('[useUserProfile] Failed to fetch user:', err);
+        log.error('[useUserProfile] Failed to fetch user:', err);
         setError(err instanceof Error ? err.message : 'Failed to fetch user profile');
         setLoading(false);
       }
@@ -72,7 +73,7 @@ export function useUserProfile(userId: string | undefined, options?: { skip?: bo
       await fetchUserById(userId);
       setLoading(false);
     } catch (err) {
-      console.error('[useUserProfile] Failed to refetch user:', err);
+      log.error('[useUserProfile] Failed to refetch user:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch user profile');
       setLoading(false);
     }

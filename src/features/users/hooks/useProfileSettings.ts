@@ -1,3 +1,4 @@
+import { log } from '@/lib/logger';
 import { useState } from 'react';
 import { useUserStore } from '@/store/userStore';
 import type { UserSettings } from '@/types/user';
@@ -65,10 +66,10 @@ export function useProfileSettings() {
         settings: newSettings,
       });
 
-      console.log('[useProfileSettings] Settings updated successfully:', newSettings);
+      log.debug('[useProfileSettings] Settings updated successfully:', newSettings);
       setIsUpdating(false);
     } catch (err) {
-      console.error('[useProfileSettings] Failed to update settings:', err);
+      log.error('[useProfileSettings] Failed to update settings:', err);
       setError(err instanceof Error ? err.message : 'Failed to update settings');
       setIsUpdating(false);
     }

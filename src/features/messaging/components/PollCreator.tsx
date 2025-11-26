@@ -5,6 +5,7 @@
 
 'use client';
 
+import { log } from '@/lib/logger';
 import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -101,7 +102,7 @@ export default function PollCreator({
       setErrors({});
       onClose();
     } catch (error) {
-      console.error('Failed to create poll:', error);
+      log.error('Failed to create poll:', error);
     } finally {
       setIsCreating(false);
     }

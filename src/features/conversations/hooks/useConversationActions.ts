@@ -4,6 +4,7 @@
  * Now with TanStack Query optimistic updates for markAsRead
  */
 
+import { log } from '@/lib/logger';
 import { useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { conversationService } from '../services/conversationService';
@@ -48,7 +49,7 @@ export function useConversationActions(): UseConversationActionsReturn {
         return conversation;
       } catch (err) {
         setError(err as Error);
-        console.error('Failed to create conversation:', err);
+        log.message.error('Failed to create conversation:', err);
         return null;
       } finally {
         setLoading(false);
@@ -70,7 +71,7 @@ export function useConversationActions(): UseConversationActionsReturn {
         return conversation;
       } catch (err) {
         setError(err as Error);
-        console.error('Failed to update conversation:', err);
+        log.message.error('Failed to update conversation:', err);
         return null;
       } finally {
         setLoading(false);
@@ -91,7 +92,7 @@ export function useConversationActions(): UseConversationActionsReturn {
         return true;
       } catch (err) {
         setError(err as Error);
-        console.error('Failed to add members:', err);
+        log.message.error('Failed to add members:', err);
         return false;
       } finally {
         setLoading(false);
@@ -110,7 +111,7 @@ export function useConversationActions(): UseConversationActionsReturn {
         return true;
       } catch (err) {
         setError(err as Error);
-        console.error('Failed to remove member:', err);
+        log.message.error('Failed to remove member:', err);
         return false;
       } finally {
         setLoading(false);
@@ -128,7 +129,7 @@ export function useConversationActions(): UseConversationActionsReturn {
       return true;
     } catch (err) {
       setError(err as Error);
-      console.error('Failed to leave conversation:', err);
+      log.message.error('Failed to leave conversation:', err);
       return false;
     } finally {
       setLoading(false);
@@ -151,7 +152,7 @@ export function useConversationActions(): UseConversationActionsReturn {
         return true;
       } catch (err) {
         setError(err as Error);
-        console.error('Failed to update settings:', err);
+        log.message.error('Failed to update settings:', err);
         return false;
       } finally {
         setLoading(false);
@@ -188,7 +189,7 @@ export function useConversationActions(): UseConversationActionsReturn {
       return true;
     } catch (err) {
       setError(err as Error);
-      console.error('Failed to mark conversation as read:', err);
+      log.message.error('Failed to mark conversation as read:', err);
 
       // Rollback on error
       if (previousData) {

@@ -6,6 +6,7 @@
 
 'use client';
 
+import { log } from '@/lib/logger';
 import { useState, useEffect, useCallback } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { MessageList } from '@/features/messaging/components/MessageList';
@@ -94,8 +95,8 @@ export function Chat({
 
   // Debug: Log messages whenever they change
   useEffect(() => {
-    console.log('[Chat] Messages updated:', messages);
-    console.log('[Chat] Messages count:', messages?.length);
+    log.debug('[Chat] Messages updated:', messages);
+    log.debug('[Chat] Messages count:', messages?.length);
   }, [messages]);
 
   // Detect if current user is admin
@@ -130,7 +131,7 @@ export function Chat({
   };
 
   const handleSendMessage = async (content: string, replyToId?: string) => {
-    console.log('[Chat] Sending message:', content);
+    log.debug('[Chat] Sending message:', content);
 
     const message = await sendMessage(
       {
@@ -141,17 +142,17 @@ export function Chat({
       },
       // Optimistic update callback - add message immediately to UI
       (sentMessage) => {
-        console.log('[Chat] Message sent successfully, adding to UI optimistically:', sentMessage);
+        log.debug('[Chat] Message sent successfully, adding to UI optimistically:', sentMessage);
         addOptimisticMessage(sentMessage);
         onMessageSent?.(sentMessage);
       }
     );
 
     if (message) {
-      console.log('[Chat] Message confirmed:', message.id);
+      log.debug('[Chat] Message confirmed:', message.id);
       setReplyToMessage(undefined);
     } else {
-      console.error('[Chat] Failed to send message');
+      log.error('[Chat] Failed to send message');
     }
   };
 
@@ -235,7 +236,7 @@ export function Chat({
       // Refresh messages list
       window.location.reload();
     } catch (error) {
-      console.error('Failed to clear conversation:', error);
+      log.error('Failed to clear conversation:', error);
       alert('Failed to clear conversation. Please try again.');
     }
   }, [conversationId]);
