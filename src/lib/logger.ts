@@ -18,13 +18,14 @@
  */
 
 export type LogCategory =
-  | 'auth'       // Authentication & security (always enabled)
-  | 'websocket'  // WebSocket events
-  | 'api'        // HTTP requests
-  | 'message'    // Message operations
-  | 'visibility' // Read/unread tracking
-  | 'query'      // TanStack Query
-  | 'general';   // Uncategorized
+  | 'auth'          // Authentication & security (always enabled)
+  | 'websocket'     // WebSocket events
+  | 'api'           // HTTP requests
+  | 'message'       // Message operations
+  | 'visibility'    // Read/unread tracking
+  | 'query'         // TanStack Query
+  | 'notification'  // Notifications
+  | 'general';      // Uncategorized
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -50,6 +51,7 @@ class Logger {
         message: isDev || forceDebug,
         visibility: isDev || forceDebug,
         query: isDev || forceDebug,
+        notification: isDev || forceDebug,
         general: isDev || forceDebug,
       },
     };
@@ -254,6 +256,14 @@ export const log = {
     info: (msg: string, ...args: unknown[]) => logger.info('query', msg, ...args),
     warn: (msg: string, ...args: unknown[]) => logger.warn('query', msg, ...args),
     error: (msg: string, ...args: unknown[]) => logger.error('query', msg, ...args),
+  },
+
+  // Notification logging
+  notification: {
+    debug: (msg: string, ...args: unknown[]) => logger.debug('notification', msg, ...args),
+    info: (msg: string, ...args: unknown[]) => logger.info('notification', msg, ...args),
+    warn: (msg: string, ...args: unknown[]) => logger.warn('notification', msg, ...args),
+    error: (msg: string, ...args: unknown[]) => logger.error('notification', msg, ...args),
   },
 
   // General logging (fallback)
