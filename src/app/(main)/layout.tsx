@@ -5,6 +5,8 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { CenterPanel } from '@/components/layout/CenterPanel';
+import { NotificationCenter } from '@/features/notifications';
+import { useNotificationEvents } from '@/features/notifications';
 
 export default function MainLayout({
   children,
@@ -15,6 +17,9 @@ export default function MainLayout({
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuthStore();
   const isChatsRoute = pathname.startsWith('/chats');
+
+  // Initialize notification event listeners
+  useNotificationEvents();
 
   // Redirect to root if not authenticated
   useEffect(() => {
@@ -44,6 +49,9 @@ export default function MainLayout({
     <div className="h-screen flex flex-col bg-gray-50">
       {/* App Header with Settings */}
       <AppHeader />
+
+      {/* Notification Center Dialog */}
+      <NotificationCenter />
 
       {/* Main Content Area */}
       <div className="flex-1 overflow-hidden">

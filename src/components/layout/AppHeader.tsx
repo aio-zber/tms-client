@@ -9,6 +9,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { getUserInitials, User } from '@/types';
 import { useState, useEffect } from 'react';
 import { authService } from '@/features/auth/services/authService';
@@ -21,14 +27,17 @@ import {
   BellOff,
   LogOut,
   ChevronDown,
+  Settings,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { NotificationBadge, NotificationSettings } from '@/features/notifications';
 
 export function AppHeader() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('light');
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [notificationSettingsOpen, setNotificationSettingsOpen] = useState(false);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -122,7 +131,16 @@ export function AppHeader() {
         <h1 className="text-lg md:text-xl lg:text-2xl font-bold text-viber-purple">GCG Team Chat</h1>
       </div>
 
-      {/* Settings Dropdown */}
+      {/* Right side actions */}
+      <div className="flex items-center gap-2">
+        {/* Notification Badge */}
+        <NotificationBadge onClick={async () => {
+          const { useNotificationStore } = await import('@/store/notificationStore');
+          const { toggleNotificationCenter } = useNotificationStore.getState();
+          toggleNotificationCenter();
+        }} />
+
+        {/* Settings Dropdown */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button className="flex items-center gap-2 px-2 md:px-3 py-2 rounded-lg hover:bg-gray-100 transition">
@@ -208,7 +226,11 @@ export function AppHeader() {
 
           <DropdownMenuSeparator />
 
-          {/* Notifications Toggle */}
+          {/* Notification Settings */}
+          <DropdownMenuLabel className="text-xs text-gray-500 uppercase font-semibold">
+            Notifications
+          </DropdownMenuLabel>
+
           <DropdownMenuItem
             className="cursor-pointer"
             onClick={toggleNotifications}
@@ -218,7 +240,7 @@ export function AppHeader() {
             ) : (
               <BellOff className="w-4 h-4 mr-3" />
             )}
-            <span>Notifications</span>
+            <span>Quick Toggle</span>
             <div className="ml-auto flex items-center">
               <div
                 className={cn(
@@ -236,6 +258,14 @@ export function AppHeader() {
             </div>
           </DropdownMenuItem>
 
+          <DropdownMenuItem
+            className="cursor-pointer"
+            onClick={() => setNotificationSettingsOpen(true)}
+          >
+            <Settings className="w-4 h-4 mr-3" />
+            <span>Notification Settings</span>
+          </DropdownMenuItem>
+
           <DropdownMenuSeparator />
 
           {/* Logout */}
@@ -248,6 +278,17 @@ export function AppHeader() {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      </div>
+
+      {/* Notification Settings Dialog */}
+      <Dialog open={notificationSettingsOpen} onOpenChange={setNotificationSettingsOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Notification Settings</DialogTitle>
+          </DialogHeader>
+          <NotificationSettings />
+        </DialogContent>
+      </Dialog>
     </header>
   );
 }
