@@ -31,7 +31,8 @@ export function NotificationToast({ notification, toastId: _toastId }: Notificat
   };
 
   // Get initials for avatar fallback
-  const getInitials = (name: string) => {
+  const getInitials = (name?: string) => {
+    if (!name) return '??';
     return name
       .split(' ')
       .map((n) => n[0])
@@ -73,17 +74,17 @@ export function NotificationToast({ notification, toastId: _toastId }: Notificat
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
           <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
-            {notification.senderName}
+            {notification.senderName || 'Unknown'}
           </span>
           <span className="text-lg leading-none">{getNotificationIcon()}</span>
         </div>
 
         <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
-          {notification.content}
+          {notification.content || 'New notification'}
         </p>
 
         <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-          {notification.conversationName}
+          {notification.conversationName || 'Unknown conversation'}
         </p>
       </div>
 
