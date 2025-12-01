@@ -37,7 +37,8 @@ export function NotificationCenter() {
     setOpen(false);
   };
 
-  const getInitials = (name: string) => {
+  const getInitials = (name?: string) => {
+    if (!name) return '??';
     return name
       .split(' ')
       .map((n) => n[0])
@@ -147,7 +148,7 @@ export function NotificationCenter() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-sm font-semibold text-gray-900 truncate">
-                          {notification.senderName}
+                          {notification.senderName || 'Unknown'}
                         </span>
                         <span className="text-lg leading-none">
                           {getNotificationIcon(
@@ -161,11 +162,11 @@ export function NotificationCenter() {
                       </div>
 
                       <p className="text-sm text-gray-700 line-clamp-2 mb-1">
-                        {notification.content}
+                        {notification.content || 'New notification'}
                       </p>
 
                       <div className="flex items-center gap-2 text-xs text-gray-500">
-                        <span>{notification.conversationName}</span>
+                        <span>{notification.conversationName || 'Unknown conversation'}</span>
                         <span>•</span>
                         <span>
                           {formatDistanceToNow(new Date(notification.timestamp), {
