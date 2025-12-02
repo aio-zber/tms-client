@@ -47,12 +47,6 @@ export interface NotificationPreferences {
   dndEnd?: string; // "08:00"
 }
 
-// API Response types
-export interface NotificationPreferencesResponse {
-  success: boolean;
-  data: NotificationPreferences;
-}
-
 export interface NotificationPreferencesUpdate {
   soundEnabled?: boolean;
   soundVolume?: number;

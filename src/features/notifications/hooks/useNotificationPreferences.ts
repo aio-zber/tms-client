@@ -25,6 +25,9 @@ export function useNotificationPreferences() {
   const setPreferences = useNotificationStore((state) => state.setPreferences);
   const setMutedConversations = useNotificationStore((state) => state.setMutedConversations);
 
+  // Get local preferences as fallback
+  const localPreferences = useNotificationStore((state) => state.preferences);
+
   // Fetch preferences from server
   const {
     data: preferences,
@@ -33,14 +36,21 @@ export function useNotificationPreferences() {
   } = useQuery({
     queryKey: QUERY_KEYS.preferences,
     queryFn: async () => {
-      const prefs = await notificationService.getNotificationPreferences();
-      // Sync to local store
-      setPreferences(prefs);
-      return prefs;
+      try {
+        const prefs = await notificationService.getNotificationPreferences();
+        // Sync to local store
+        setPreferences(prefs);
+        return prefs;
+      } catch (err) {
+        // Fallback to local preferences on server error
+        log.notification.warn('Server unavailable, using local preferences', err);
+        return localPreferences;
+      }
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes (formerly cacheTime)
-    retry: 2,
+    retry: false, // Don't retry if server is down
+    refetchOnWindowFocus: false, // Don't refetch if server is down
   });
 
   // Update preferences mutation

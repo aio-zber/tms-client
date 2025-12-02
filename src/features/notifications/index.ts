@@ -9,7 +9,6 @@ export type {
   NotificationPriority,
   NotificationPreferences,
   NotificationPreferencesUpdate,
-  NotificationPreferencesResponse,
 } from './types';
 
 // Hooks
