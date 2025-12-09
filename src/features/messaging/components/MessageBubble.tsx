@@ -8,7 +8,7 @@
 import { log } from '@/lib/logger';
 import { useState, useRef, useEffect, memo, useMemo } from 'react';
 import { format } from 'date-fns';
-import { Check, CheckCheck, Reply, Trash2, Smile } from 'lucide-react';
+import { Check, CheckCheck, Reply, Trash2, Smile, Edit } from 'lucide-react';
 import { motion } from 'framer-motion';
 import * as Dialog from '@radix-ui/react-dialog';
 import type { Message } from '@/types/message';
@@ -44,7 +44,7 @@ export const MessageBubble = memo(function MessageBubble({
   showSender = false,
   senderName,
   currentUserId,
-  onEdit: _onEdit, // Keep prop for compatibility but don't use in context menu
+  onEdit,
   onDelete,
   onReply,
   onReact,
@@ -550,6 +550,17 @@ export const MessageBubble = memo(function MessageBubble({
             >
               <Reply className="w-4 h-4 md:w-5 md:h-5" />
               Reply
+            </button>
+          )}
+
+          {/* Edit - only for own messages, not system messages, and not deleted */}
+          {currentUserId && message.senderId === currentUserId && onEdit && !message.deletedAt && message.type !== 'SYSTEM' && (
+            <button
+              onClick={() => handleMenuAction(() => onEdit(message.id))}
+              className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-gray-100 flex items-center gap-2 text-gray-700 transition"
+            >
+              <Edit className="w-4 h-4 md:w-5 md:h-5" />
+              Edit
             </button>
           )}
 
