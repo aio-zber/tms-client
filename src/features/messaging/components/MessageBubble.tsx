@@ -553,8 +553,8 @@ export const MessageBubble = memo(function MessageBubble({
             </button>
           )}
 
-          {/* Edit - only for own messages, not system messages, and not deleted */}
-          {currentUserId && message.senderId === currentUserId && onEdit && !message.deletedAt && message.type !== 'SYSTEM' && (
+          {/* Edit - only for own messages and not deleted (system messages already returned early) */}
+          {currentUserId && message.senderId === currentUserId && onEdit && !message.deletedAt && (
             <button
               onClick={() => handleMenuAction(() => onEdit(message.id))}
               className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-gray-100 flex items-center gap-2 text-gray-700 transition"
