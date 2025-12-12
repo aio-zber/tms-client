@@ -68,6 +68,15 @@ export function useConversationActions(): UseConversationActionsReturn {
           conversationId,
           data
         );
+
+        // Invalidate queries to refetch updated data
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.conversations.detail(conversationId),
+        });
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.conversations.all,
+        });
+
         return conversation;
       } catch (err) {
         setError(err as Error);
@@ -77,7 +86,7 @@ export function useConversationActions(): UseConversationActionsReturn {
         setLoading(false);
       }
     },
-    []
+    [queryClient]
   );
 
   const addMembers = useCallback(
@@ -89,6 +98,15 @@ export function useConversationActions(): UseConversationActionsReturn {
         await conversationService.addMembers(conversationId, {
           user_ids: memberIds,
         });
+
+        // Invalidate queries to refetch updated data
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.conversations.detail(conversationId),
+        });
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.conversations.all,
+        });
+
         return true;
       } catch (err) {
         setError(err as Error);
@@ -98,7 +116,7 @@ export function useConversationActions(): UseConversationActionsReturn {
         setLoading(false);
       }
     },
-    []
+    [queryClient]
   );
 
   const removeMember = useCallback(
@@ -108,6 +126,15 @@ export function useConversationActions(): UseConversationActionsReturn {
 
       try {
         await conversationService.removeMember(conversationId, memberId);
+
+        // Invalidate queries to refetch updated data
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.conversations.detail(conversationId),
+        });
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.conversations.all,
+        });
+
         return true;
       } catch (err) {
         setError(err as Error);
@@ -117,7 +144,7 @@ export function useConversationActions(): UseConversationActionsReturn {
         setLoading(false);
       }
     },
-    []
+    [queryClient]
   );
 
   const leaveConversation = useCallback(async (conversationId: string) => {
@@ -126,6 +153,15 @@ export function useConversationActions(): UseConversationActionsReturn {
 
     try {
       await conversationService.leaveConversation(conversationId);
+
+      // Invalidate queries to refetch updated data
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.detail(conversationId),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.all,
+      });
+
       return true;
     } catch (err) {
       setError(err as Error);
@@ -134,7 +170,7 @@ export function useConversationActions(): UseConversationActionsReturn {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [queryClient]);
 
   const updateSettings = useCallback(
     async (
@@ -149,6 +185,15 @@ export function useConversationActions(): UseConversationActionsReturn {
           conversationId,
           settings
         );
+
+        // Invalidate queries to refetch updated data
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.conversations.detail(conversationId),
+        });
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.conversations.all,
+        });
+
         return true;
       } catch (err) {
         setError(err as Error);
@@ -158,7 +203,7 @@ export function useConversationActions(): UseConversationActionsReturn {
         setLoading(false);
       }
     },
-    []
+    [queryClient]
   );
 
   const markAsRead = useCallback(async (conversationId: string) => {

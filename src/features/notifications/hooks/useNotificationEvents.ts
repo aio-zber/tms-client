@@ -191,9 +191,97 @@ export function useNotificationEvents() {
         sender_name: string;
         sender_avatar?: string;
         content: string;
+        type?: string;
         created_at: string;
+        metadata?: {
+          system?: {
+            eventType: 'member_added' | 'member_removed' | 'member_left' | 'conversation_updated' | 'message_deleted';
+            actorId: string;
+            actorName: string;
+            targetUserId?: string;
+            targetUserName?: string;
+            addedMemberIds?: string[];
+            addedMemberNames?: string[];
+          };
+        };
       };
 
+      // Handle system messages differently
+      if (message.type === 'SYSTEM' && message.metadata?.system) {
+        const systemEvent = message.metadata.system;
+
+        // Don't notify if you were the actor
+        if (systemEvent.actorId === currentUser?.id) {
+          return;
+        }
+
+        // Create notification based on event type
+        if (systemEvent.eventType === 'member_added') {
+          const addedNames = systemEvent.addedMemberNames?.join(', ') || 'members';
+          const notification: Notification = {
+            id: `notif-${message.id}`,
+            type: 'member_activity',
+            conversationId: message.conversation_id,
+            conversationName: message.conversation_name,
+            senderId: systemEvent.actorId,
+            senderName: systemEvent.actorName,
+            content: `${addedNames} was added to the conversation`,
+            timestamp: message.created_at,
+            isRead: false,
+            priority: 'low',
+            metadata: { action: 'added' },
+          };
+          createNotification(notification);
+        } else if (systemEvent.eventType === 'member_removed') {
+          const notification: Notification = {
+            id: `notif-${message.id}`,
+            type: 'member_activity',
+            conversationId: message.conversation_id,
+            conversationName: message.conversation_name,
+            senderId: systemEvent.actorId,
+            senderName: systemEvent.actorName,
+            content: `${systemEvent.targetUserName || 'A member'} was removed from the conversation`,
+            timestamp: message.created_at,
+            isRead: false,
+            priority: 'low',
+            metadata: { action: 'removed' },
+          };
+          createNotification(notification);
+        } else if (systemEvent.eventType === 'member_left') {
+          const notification: Notification = {
+            id: `notif-${message.id}`,
+            type: 'member_activity',
+            conversationId: message.conversation_id,
+            conversationName: message.conversation_name,
+            senderId: systemEvent.actorId,
+            senderName: systemEvent.actorName,
+            content: `${systemEvent.actorName} left the conversation`,
+            timestamp: message.created_at,
+            isRead: false,
+            priority: 'low',
+            metadata: { action: 'left' },
+          };
+          createNotification(notification);
+        } else if (systemEvent.eventType === 'conversation_updated') {
+          const notification: Notification = {
+            id: `notif-${message.id}`,
+            type: 'conversation_update',
+            conversationId: message.conversation_id,
+            conversationName: message.conversation_name,
+            senderId: systemEvent.actorId,
+            senderName: systemEvent.actorName,
+            content: `Conversation settings were updated`,
+            timestamp: message.created_at,
+            isRead: false,
+            priority: 'low',
+          };
+          createNotification(notification);
+        }
+
+        return; // Don't process system messages as regular messages
+      }
+
+      // Handle regular messages
       // Don't notify for own messages
       if (message.sender_id === currentUser?.id) {
         return;
@@ -275,103 +363,9 @@ export function useNotificationEvents() {
       createNotification(notification);
     };
 
-    // Handle member added
-    const handleMemberAdded = (data: Record<string, unknown>) => {
-      const memberData = data as {
-        conversation_id: string;
-        conversation_name: string;
-        user_id: string;
-        user_name: string;
-        added_by_id: string;
-        added_by_name: string;
-      };
-
-      // Don't notify if you were the one who added them
-      if (memberData.added_by_id === currentUser?.id) {
-        return;
-      }
-
-      const notification: Notification = {
-        id: `notif-member-added-${memberData.conversation_id}-${Date.now()}`,
-        type: 'member_activity',
-        conversationId: memberData.conversation_id,
-        conversationName: memberData.conversation_name,
-        senderId: memberData.added_by_id,
-        senderName: memberData.added_by_name,
-        content: `${memberData.user_name} was added to the conversation`,
-        timestamp: new Date().toISOString(),
-        isRead: false,
-        priority: 'low',
-        metadata: {
-          action: 'added',
-        },
-      };
-
-      createNotification(notification);
-    };
-
-    // Handle member removed
-    const handleMemberRemoved = (data: Record<string, unknown>) => {
-      const memberData = data as {
-        conversation_id: string;
-        conversation_name: string;
-        user_id: string;
-        user_name: string;
-        removed_by_id: string;
-        removed_by_name: string;
-      };
-
-      // Don't notify if you were the one who removed them
-      if (memberData.removed_by_id === currentUser?.id) {
-        return;
-      }
-
-      const notification: Notification = {
-        id: `notif-member-removed-${memberData.conversation_id}-${Date.now()}`,
-        type: 'member_activity',
-        conversationId: memberData.conversation_id,
-        conversationName: memberData.conversation_name,
-        senderId: memberData.removed_by_id,
-        senderName: memberData.removed_by_name,
-        content: `${memberData.user_name} was removed from the conversation`,
-        timestamp: new Date().toISOString(),
-        isRead: false,
-        priority: 'low',
-        metadata: {
-          action: 'removed',
-        },
-      };
-
-      createNotification(notification);
-    };
-
-    // Handle member left
-    const handleMemberLeft = (data: Record<string, unknown>) => {
-      const memberData = data as {
-        conversation_id: string;
-        conversation_name: string;
-        user_id: string;
-        user_name: string;
-      };
-
-      const notification: Notification = {
-        id: `notif-member-left-${memberData.conversation_id}-${Date.now()}`,
-        type: 'member_activity',
-        conversationId: memberData.conversation_id,
-        conversationName: memberData.conversation_name,
-        senderId: memberData.user_id,
-        senderName: memberData.user_name,
-        content: `${memberData.user_name} left the conversation`,
-        timestamp: new Date().toISOString(),
-        isRead: false,
-        priority: 'low',
-        metadata: {
-          action: 'left',
-        },
-      };
-
-      createNotification(notification);
-    };
+    // NOTE: Member event handlers (handleMemberAdded, handleMemberRemoved, handleMemberLeft) removed.
+    // Backend now sends system messages via message:new events, which are handled above in handleNewMessage.
+    // See lines 209-281 for system message notification handling.
 
     // Handle conversation updated
     const handleConversationUpdated = (data: Record<string, unknown>) => {
@@ -406,9 +400,6 @@ export function useNotificationEvents() {
     // Register event listeners
     socketClient.onNewMessage(handleNewMessage);
     socketClient.onReactionAdded(handleReactionAdded);
-    socketClient.onMemberAdded(handleMemberAdded);
-    socketClient.onMemberRemoved(handleMemberRemoved);
-    socketClient.onMemberLeft(handleMemberLeft);
     socketClient.onConversationUpdated(handleConversationUpdated);
 
     log.notification.info('Notification event listeners registered');
@@ -417,9 +408,6 @@ export function useNotificationEvents() {
     return () => {
       socketClient.off('new_message', handleNewMessage);
       socketClient.off('reaction_added', handleReactionAdded);
-      socketClient.off('member_added', handleMemberAdded);
-      socketClient.off('member_removed', handleMemberRemoved);
-      socketClient.off('member_left', handleMemberLeft);
       socketClient.off('conversation_updated', handleConversationUpdated);
 
       log.notification.info('Notification event listeners removed');
