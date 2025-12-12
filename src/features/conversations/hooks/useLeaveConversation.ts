@@ -2,12 +2,13 @@
 
 import { useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import toast from 'react-hot-toast';
 import { useConversationActions } from './useConversationActions';
 
 /**
  * Hook to handle leaving a conversation with confirmation and navigation
  * Provides a consistent UX for the leave conversation flow
+ *
+ * Note: Toast notifications are now handled by useConversationActions hook
  *
  * @param conversationId - The ID of the conversation to leave
  * @returns A callback function that handles the complete leave flow
@@ -16,21 +17,16 @@ export function useLeaveConversation(conversationId: string) {
   const router = useRouter();
   const { leaveConversation } = useConversationActions();
 
-  return useCallback(async () => {
+  return useCallback(() => {
     // Confirm before leaving
     if (!confirm('Are you sure you want to leave this conversation?')) {
       return;
     }
 
-    // Attempt to leave
-    const success = await leaveConversation(conversationId);
+    // Leave conversation (toast notifications handled by hook)
+    leaveConversation(conversationId);
 
-    if (success) {
-      toast.success('Left conversation');
-      // Navigate back to chat list
-      router.push('/chats');
-    } else {
-      toast.error('Failed to leave conversation');
-    }
+    // Navigate back to chat list
+    router.push('/chats');
   }, [conversationId, leaveConversation, router]);
 }

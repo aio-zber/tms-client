@@ -57,7 +57,10 @@ export default function ConversationSettingsDialog({
     addMembers,
     removeMember,
     leaveConversation,
-    loading
+    isUpdating,
+    isAddingMembers,
+    isRemovingMember,
+    isLeaving,
   } = useConversationActions();
 
   const { query, results, isSearching, search, clearSearch } = useUserSearch();
@@ -95,64 +98,51 @@ export default function ConversationSettingsDialog({
       .slice(0, 2);
   };
 
-  const handleUpdateName = async () => {
+  const handleUpdateName = () => {
     if (!conversationName.trim() || conversationName === conversation.name) {
       return;
     }
 
-    const updated = await updateConversation(conversation.id, {
+    // Toast notifications now handled by the hook
+    updateConversation(conversation.id, {
       name: conversationName.trim(),
     });
 
-    if (updated) {
-      toast.success('Conversation name updated');
-      onUpdate();
-    } else {
-      toast.error('Failed to update conversation name');
-    }
+    onUpdate();
   };
 
-  const handleAddMembers = async () => {
+  const handleAddMembers = () => {
     if (selectedUsers.length === 0) {
       toast.error('Please select at least one user');
       return;
     }
 
-    const success = await addMembers(conversation.id, selectedUsers);
-    if (success) {
-      toast.success('Members added successfully');
-      setSelectedUsers([]);
-      setShowAddMembers(false);
-      clearSearch();
-      onUpdate();
-    } else {
-      toast.error('Failed to add members');
-    }
+    // Toast notifications now handled by the hook
+    addMembers(conversation.id, selectedUsers);
+
+    setSelectedUsers([]);
+    setShowAddMembers(false);
+    clearSearch();
+    onUpdate();
   };
 
-  const handleRemoveMember = async (memberId: string, memberName: string) => {
+  const handleRemoveMember = (memberId: string, memberName: string) => {
     if (!confirm(`Remove ${memberName} from this conversation?`)) return;
 
-    const success = await removeMember(conversation.id, memberId);
-    if (success) {
-      toast.success('Member removed');
-      onUpdate();
-    } else {
-      toast.error('Failed to remove member');
-    }
+    // Toast notifications now handled by the hook
+    removeMember(conversation.id, memberId);
+
+    onUpdate();
   };
 
-  const handleLeaveConversation = async () => {
+  const handleLeaveConversation = () => {
     if (!confirm('Are you sure you want to leave this conversation?')) return;
 
-    const success = await leaveConversation(conversation.id);
-    if (success) {
-      toast.success('Left conversation');
-      onOpenChange(false);
-      onLeave?.();
-    } else {
-      toast.error('Failed to leave conversation');
-    }
+    // Toast notifications now handled by the hook
+    leaveConversation(conversation.id);
+
+    onOpenChange(false);
+    onLeave?.();
   };
 
   const handleUserToggle = (tmsUserId: string) => {
@@ -202,7 +192,7 @@ export default function ConversationSettingsDialog({
                   />
                   <Button
                     onClick={handleUpdateName}
-                    disabled={loading || !conversationName.trim() || conversationName === conversation.name}
+                    disabled={isUpdating || !conversationName.trim() || conversationName === conversation.name}
                   >
                     Update
                   </Button>
@@ -231,7 +221,7 @@ export default function ConversationSettingsDialog({
                 <Button
                   variant="destructive"
                   onClick={handleLeaveConversation}
-                  disabled={loading}
+                  disabled={isLeaving}
                   className="w-full"
                 >
                   <LogOut className="h-4 w-4 mr-2" />
@@ -342,7 +332,7 @@ export default function ConversationSettingsDialog({
                   {/* Add Button */}
                   <Button
                     onClick={handleAddMembers}
-                    disabled={selectedUsers.length === 0 || loading}
+                    disabled={selectedUsers.length === 0 || isAddingMembers}
                     className="w-full"
                   >
                     Add Selected Members
@@ -400,7 +390,7 @@ export default function ConversationSettingsDialog({
                                 e.stopPropagation();
                                 handleRemoveMember(member.userId, displayName);
                               }}
-                              disabled={loading}
+                              disabled={isRemovingMember}
                               className="text-red-600 hover:text-red-700 hover:bg-red-50"
                             >
                               <UserMinus className="h-4 w-4" />

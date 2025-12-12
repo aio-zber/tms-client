@@ -24,8 +24,21 @@ export const queryClient = new QueryClient({
       gcTime: 1000 * 60 * 5,
     },
     mutations: {
-      // Retry failed mutations once
-      retry: 1,
+      // Smart retry logic: don't retry client errors, retry server errors once
+      retry: (failureCount, error) => {
+        const apiError = error as { statusCode?: number };
+
+        // Don't retry client errors (400-499) - these won't succeed on retry
+        if (apiError.statusCode && apiError.statusCode >= 400 && apiError.statusCode < 500) {
+          return false;
+        }
+
+        // Retry server errors (500-599) and network errors once
+        return failureCount < 1;
+      },
+
+      // Exponential backoff with cap at 30 seconds
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
     },
   },
 });

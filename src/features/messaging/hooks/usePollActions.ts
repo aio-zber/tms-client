@@ -7,6 +7,7 @@ import { log } from '@/lib/logger';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { pollService, type CreatePollRequest } from '../services/pollService';
 import toast from 'react-hot-toast';
+import { getErrorMessage, ERROR_CONTEXTS } from '@/lib/errorMessages';
 
 export function usePollActions() {
   const queryClient = useQueryClient();
@@ -24,7 +25,7 @@ export function usePollActions() {
     },
     onError: (error) => {
       log.message.error('Failed to create poll:', error);
-      toast.error('Failed to create poll');
+      toast.error(getErrorMessage(error, ERROR_CONTEXTS.POLL_CREATE));
     },
   });
 
@@ -59,7 +60,7 @@ export function usePollActions() {
         queryClient.setQueryData(['poll', variables.pollId], context.previousPoll);
       }
       log.message.error('Failed to vote on poll:', error);
-      toast.error('Failed to vote on poll');
+      toast.error(getErrorMessage(error, ERROR_CONTEXTS.POLL_VOTE));
     },
     onSuccess: (data) => {
       // Update with server data
@@ -68,6 +69,15 @@ export function usePollActions() {
       // Also update the poll data in messages cache
       queryClient.invalidateQueries({
         queryKey: ['messages'],
+      });
+
+      // Show success feedback after backend confirms
+      toast.success('Vote recorded');
+    },
+    onSettled: (data, error, variables) => {
+      // Fallback: Always refetch poll data to ensure consistency
+      queryClient.invalidateQueries({
+        queryKey: ['poll', variables.pollId],
       });
     },
   });
@@ -90,7 +100,7 @@ export function usePollActions() {
     },
     onError: (error) => {
       log.message.error('Failed to close poll:', error);
-      toast.error('Failed to close poll');
+      toast.error(getErrorMessage(error, ERROR_CONTEXTS.POLL_CLOSE));
     },
   });
 

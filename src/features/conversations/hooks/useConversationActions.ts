@@ -1,14 +1,16 @@
 /**
  * useConversationActions Hook
  * Handles conversation CRUD operations and member management
- * Now with TanStack Query optimistic updates for markAsRead
+ * Now using TanStack Query mutations for consistent error handling
  */
 
 import { log } from '@/lib/logger';
-import { useState, useCallback } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useCallback } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { conversationService } from '../services/conversationService';
 import { queryKeys } from '@/lib/queryClient';
+import toast from 'react-hot-toast';
+import { getErrorMessage, ERROR_CONTEXTS } from '@/lib/errorMessages';
 import type {
   Conversation,
   CreateConversationRequest,
@@ -18,197 +20,201 @@ import type {
 
 interface UseConversationActionsReturn {
   createConversation: (data: CreateConversationRequest) => Promise<Conversation | null>;
-  updateConversation: (
-    conversationId: string,
-    data: UpdateConversationRequest
-  ) => Promise<Conversation | null>;
-  addMembers: (conversationId: string, memberIds: string[]) => Promise<boolean>;
-  removeMember: (conversationId: string, memberId: string) => Promise<boolean>;
-  leaveConversation: (conversationId: string) => Promise<boolean>;
-  updateSettings: (
-    conversationId: string,
-    settings: UpdateConversationSettingsRequest
-  ) => Promise<boolean>;
+  updateConversation: (conversationId: string, data: UpdateConversationRequest) => void;
+  updateConversationAsync: (conversationId: string, data: UpdateConversationRequest) => Promise<Conversation>;
+  addMembers: (conversationId: string, memberIds: string[]) => void;
+  addMembersAsync: (conversationId: string, memberIds: string[]) => Promise<Conversation>;
+  removeMember: (conversationId: string, memberId: string) => void;
+  removeMemberAsync: (conversationId: string, memberId: string) => Promise<void>;
+  leaveConversation: (conversationId: string) => void;
+  leaveConversationAsync: (conversationId: string) => Promise<void>;
+  updateSettings: (conversationId: string, settings: UpdateConversationSettingsRequest) => void;
+  updateSettingsAsync: (conversationId: string, settings: UpdateConversationSettingsRequest) => Promise<Conversation>;
   markAsRead: (conversationId: string) => Promise<boolean>;
-  loading: boolean;
-  error: Error | null;
+
+  isUpdating: boolean;
+  isAddingMembers: boolean;
+  isRemovingMember: boolean;
+  isLeaving: boolean;
+  isUpdatingSettings: boolean;
 }
 
 export function useConversationActions(): UseConversationActionsReturn {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
   const queryClient = useQueryClient();
 
+  /**
+   * Create a new conversation (keep as-is, needs immediate return value)
+   */
   const createConversation = useCallback(
     async (data: CreateConversationRequest) => {
-      setLoading(true);
-      setError(null);
-
       try {
         const conversation = await conversationService.createConversation(data);
         return conversation;
       } catch (err) {
-        setError(err as Error);
         log.message.error('Failed to create conversation:', err);
         return null;
-      } finally {
-        setLoading(false);
       }
     },
     []
   );
 
-  const updateConversation = useCallback(
-    async (conversationId: string, data: UpdateConversationRequest) => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const conversation = await conversationService.updateConversation(
-          conversationId,
-          data
-        );
-
-        // Invalidate queries to refetch updated data
-        await queryClient.invalidateQueries({
-          queryKey: queryKeys.conversations.detail(conversationId),
-        });
-        await queryClient.invalidateQueries({
-          queryKey: queryKeys.conversations.all,
-        });
-
-        return conversation;
-      } catch (err) {
-        setError(err as Error);
-        log.message.error('Failed to update conversation:', err);
-        return null;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [queryClient]
-  );
-
-  const addMembers = useCallback(
-    async (conversationId: string, memberIds: string[]) => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        await conversationService.addMembers(conversationId, {
-          user_ids: memberIds,
-        });
-
-        // Invalidate queries to refetch updated data
-        await queryClient.invalidateQueries({
-          queryKey: queryKeys.conversations.detail(conversationId),
-        });
-        await queryClient.invalidateQueries({
-          queryKey: queryKeys.conversations.all,
-        });
-
-        return true;
-      } catch (err) {
-        setError(err as Error);
-        log.message.error('Failed to add members:', err);
-        return false;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [queryClient]
-  );
-
-  const removeMember = useCallback(
-    async (conversationId: string, memberId: string) => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        await conversationService.removeMember(conversationId, memberId);
-
-        // Invalidate queries to refetch updated data
-        await queryClient.invalidateQueries({
-          queryKey: queryKeys.conversations.detail(conversationId),
-        });
-        await queryClient.invalidateQueries({
-          queryKey: queryKeys.conversations.all,
-        });
-
-        return true;
-      } catch (err) {
-        setError(err as Error);
-        log.message.error('Failed to remove member:', err);
-        return false;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [queryClient]
-  );
-
-  const leaveConversation = useCallback(async (conversationId: string) => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      await conversationService.leaveConversation(conversationId);
-
+  /**
+   * Update conversation (name, avatar, etc.)
+   */
+  const updateConversationMutation = useMutation({
+    mutationFn: ({ conversationId, data }: {
+      conversationId: string;
+      data: UpdateConversationRequest
+    }) => conversationService.updateConversation(conversationId, data),
+    onSuccess: (data, variables) => {
       // Invalidate queries to refetch updated data
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.conversations.detail(conversationId),
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.detail(variables.conversationId),
       });
-      await queryClient.invalidateQueries({
+      queryClient.invalidateQueries({
         queryKey: queryKeys.conversations.all,
       });
 
-      return true;
-    } catch (err) {
-      setError(err as Error);
-      log.message.error('Failed to leave conversation:', err);
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  }, [queryClient]);
-
-  const updateSettings = useCallback(
-    async (
-      conversationId: string,
-      settings: UpdateConversationSettingsRequest
-    ) => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        await conversationService.updateConversationSettings(
-          conversationId,
-          settings
-        );
-
-        // Invalidate queries to refetch updated data
-        await queryClient.invalidateQueries({
-          queryKey: queryKeys.conversations.detail(conversationId),
-        });
-        await queryClient.invalidateQueries({
-          queryKey: queryKeys.conversations.all,
-        });
-
-        return true;
-      } catch (err) {
-        setError(err as Error);
-        log.message.error('Failed to update settings:', err);
-        return false;
-      } finally {
-        setLoading(false);
-      }
+      toast.success('Conversation updated successfully');
     },
-    [queryClient]
-  );
+    onError: (error, variables) => {
+      log.message.error('Failed to update conversation:', error);
+      toast.error(getErrorMessage(error, ERROR_CONTEXTS.CONVERSATION_UPDATE));
+    },
+    onSettled: (data, error, variables) => {
+      // Fallback: Always refetch to ensure consistency
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.detail(variables.conversationId),
+      });
+    },
+  });
 
+  /**
+   * Add members to conversation
+   */
+  const addMembersMutation = useMutation({
+    mutationFn: ({ conversationId, memberIds }: {
+      conversationId: string;
+      memberIds: string[]
+    }) => conversationService.addMembers(conversationId, { user_ids: memberIds }),
+    onSuccess: (data, variables) => {
+      // Invalidate queries to refetch updated data
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.detail(variables.conversationId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.all,
+      });
+
+      toast.success('Members added successfully');
+    },
+    onError: (error, variables) => {
+      log.message.error('Failed to add members:', error);
+      toast.error(getErrorMessage(error, ERROR_CONTEXTS.MEMBER_ADD));
+    },
+    onSettled: (data, error, variables) => {
+      // Fallback: Always refetch to ensure consistency
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.detail(variables.conversationId),
+      });
+    },
+  });
+
+  /**
+   * Remove member from conversation
+   */
+  const removeMemberMutation = useMutation({
+    mutationFn: ({ conversationId, memberId }: {
+      conversationId: string;
+      memberId: string
+    }) => conversationService.removeMember(conversationId, memberId),
+    onSuccess: (data, variables) => {
+      // Invalidate queries to refetch updated data
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.detail(variables.conversationId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.all,
+      });
+
+      toast.success('Member removed');
+    },
+    onError: (error, variables) => {
+      log.message.error('Failed to remove member:', error);
+      toast.error(getErrorMessage(error, ERROR_CONTEXTS.MEMBER_REMOVE));
+    },
+    onSettled: (data, error, variables) => {
+      // Fallback: Always refetch to ensure consistency
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.detail(variables.conversationId),
+      });
+    },
+  });
+
+  /**
+   * Leave conversation
+   */
+  const leaveConversationMutation = useMutation({
+    mutationFn: (conversationId: string) =>
+      conversationService.leaveConversation(conversationId),
+    onSuccess: (data, conversationId) => {
+      // Invalidate queries to refetch updated data
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.detail(conversationId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.all,
+      });
+
+      toast.success('Left conversation');
+    },
+    onError: (error, conversationId) => {
+      log.message.error('Failed to leave conversation:', error);
+      toast.error(getErrorMessage(error, ERROR_CONTEXTS.MEMBER_LEAVE));
+    },
+    onSettled: (data, error, conversationId) => {
+      // Fallback: Always refetch to ensure consistency
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.detail(conversationId),
+      });
+    },
+  });
+
+  /**
+   * Update conversation settings
+   */
+  const updateSettingsMutation = useMutation({
+    mutationFn: ({ conversationId, settings }: {
+      conversationId: string;
+      settings: UpdateConversationSettingsRequest
+    }) => conversationService.updateConversationSettings(conversationId, settings),
+    onSuccess: (data, variables) => {
+      // Invalidate queries to refetch updated data
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.detail(variables.conversationId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.all,
+      });
+
+      toast.success('Settings updated');
+    },
+    onError: (error, variables) => {
+      log.message.error('Failed to update settings:', error);
+      toast.error(getErrorMessage(error, ERROR_CONTEXTS.CONVERSATION_SETTINGS));
+    },
+    onSettled: (data, error, variables) => {
+      // Fallback: Always refetch to ensure consistency
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.detail(variables.conversationId),
+      });
+    },
+  });
+
+  /**
+   * Mark conversation as read (keep with optimistic updates)
+   */
   const markAsRead = useCallback(async (conversationId: string) => {
-    setError(null);
-
     // Optimistic update: immediately set unread count to 0
     const previousData = queryClient.getQueryData(
       queryKeys.unreadCount.conversation(conversationId)
@@ -233,7 +239,6 @@ export function useConversationActions(): UseConversationActionsReturn {
 
       return true;
     } catch (err) {
-      setError(err as Error);
       log.message.error('Failed to mark conversation as read:', err);
 
       // Rollback on error
@@ -250,13 +255,32 @@ export function useConversationActions(): UseConversationActionsReturn {
 
   return {
     createConversation,
-    updateConversation,
-    addMembers,
-    removeMember,
-    leaveConversation,
-    updateSettings,
+    updateConversation: (conversationId: string, data: UpdateConversationRequest) =>
+      updateConversationMutation.mutate({ conversationId, data }),
+    updateConversationAsync: (conversationId: string, data: UpdateConversationRequest) =>
+      updateConversationMutation.mutateAsync({ conversationId, data }),
+    addMembers: (conversationId: string, memberIds: string[]) =>
+      addMembersMutation.mutate({ conversationId, memberIds }),
+    addMembersAsync: (conversationId: string, memberIds: string[]) =>
+      addMembersMutation.mutateAsync({ conversationId, memberIds }),
+    removeMember: (conversationId: string, memberId: string) =>
+      removeMemberMutation.mutate({ conversationId, memberId }),
+    removeMemberAsync: (conversationId: string, memberId: string) =>
+      removeMemberMutation.mutateAsync({ conversationId, memberId }),
+    leaveConversation: (conversationId: string) =>
+      leaveConversationMutation.mutate(conversationId),
+    leaveConversationAsync: (conversationId: string) =>
+      leaveConversationMutation.mutateAsync(conversationId),
+    updateSettings: (conversationId: string, settings: UpdateConversationSettingsRequest) =>
+      updateSettingsMutation.mutate({ conversationId, settings }),
+    updateSettingsAsync: (conversationId: string, settings: UpdateConversationSettingsRequest) =>
+      updateSettingsMutation.mutateAsync({ conversationId, settings }),
     markAsRead,
-    loading,
-    error,
+
+    isUpdating: updateConversationMutation.isPending,
+    isAddingMembers: addMembersMutation.isPending,
+    isRemovingMember: removeMemberMutation.isPending,
+    isLeaving: leaveConversationMutation.isPending,
+    isUpdatingSettings: updateSettingsMutation.isPending,
   };
 }

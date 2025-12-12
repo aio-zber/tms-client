@@ -36,13 +36,13 @@ export default function EditConversationDialog({
   onUpdate,
 }: EditConversationDialogProps) {
   const [name, setName] = useState(conversation.name || '');
-  const { updateConversation, loading } = useConversationActions();
+  const { updateConversation, isUpdating } = useConversationActions();
 
   useEffect(() => {
     setName(conversation.name || '');
   }, [conversation.name]);
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!name.trim()) {
       toast.error('Please enter a conversation name');
       return;
@@ -53,17 +53,13 @@ export default function EditConversationDialog({
       return;
     }
 
-    const updated = await updateConversation(conversation.id, {
+    // Toast notifications now handled by the hook
+    updateConversation(conversation.id, {
       name: name.trim(),
     });
 
-    if (updated) {
-      toast.success('Conversation updated successfully');
-      onOpenChange(false);
-      onUpdate();
-    } else {
-      toast.error('Failed to update conversation');
-    }
+    onOpenChange(false);
+    onUpdate();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -100,16 +96,16 @@ export default function EditConversationDialog({
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
-            disabled={loading}
+            disabled={isUpdating}
           >
             Cancel
           </Button>
           <Button
             onClick={handleSave}
-            disabled={loading || !name.trim() || name.trim() === conversation.name}
+            disabled={isUpdating || !name.trim() || name.trim() === conversation.name}
             className="bg-viber-purple hover:bg-viber-purple-dark"
           >
-            {loading ? (
+            {isUpdating ? (
               <>
                 <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2" />
                 Saving...
