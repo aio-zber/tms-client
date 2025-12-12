@@ -46,7 +46,7 @@ export default function NewConversationDialog({
   const [loadingInitial, setLoadingInitial] = useState(false);
 
   const { query, results, isSearching, search, clearSearch } = useUserSearch();
-  const { createConversation, loading } = useConversationActions();
+  const { createConversation } = useConversationActions();
   const currentUser = useUserStore((state) => state.currentUser);
 
   // Load all users when dialog opens
