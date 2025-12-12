@@ -63,7 +63,7 @@ export default function ConversationSettingsDialog({
   const { query, results, isSearching, search, clearSearch } = useUserSearch();
 
   // Fetch live conversation data that auto-refreshes
-  const { conversation: liveConversation, refresh } = useConversation(conversation.id, {
+  const { conversation: liveConversation } = useConversation(conversation.id, {
     autoLoad: true
   });
 
@@ -76,16 +76,11 @@ export default function ConversationSettingsDialog({
     showNotifications: false  // Avoid duplicate toasts - we show our own in action handlers
   });
 
-  // Refresh conversation data when WebSocket events occur
-  useEffect(() => {
-    // The useConversationEvents hook triggers query invalidation
-    // We need to manually refresh since we're using a state-based hook
-    const refreshInterval = setInterval(() => {
-      refresh();
-    }, 1000); // Check for updates every second
-
-    return () => clearInterval(refreshInterval);
-  }, [refresh]);
+  // Real-time updates handled automatically via:
+  // 1. useConversationEvents - triggers query invalidation for conversation_updated events
+  // 2. useMessages - triggers query invalidation for system messages (member changes)
+  // 3. useConversationActions - triggers query invalidation after mutations
+  // No polling needed!
 
   useEffect(() => {
     setConversationName(conversation.name || '');

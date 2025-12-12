@@ -110,82 +110,9 @@ export function useConversations(
       }
     };
 
-    // Listen for member added events
-    const handleMemberAdded = (data: Record<string, unknown>) => {
-      const conversationId = data.conversation_id as string;
-      const addedMembers = data.added_members as Array<unknown>;
-
-      log.message.debug('[useConversations] Member(s) added:', {
-        conversationId,
-        count: addedMembers?.length || 0,
-      });
-
-      // Invalidate specific conversation to refetch with new members
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.conversations.detail(conversationId),
-      });
-
-      // Invalidate conversations list to update member count
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.conversations.all,
-      });
-    };
-
-    // Listen for member removed events
-    const handleMemberRemoved = (data: Record<string, unknown>) => {
-      const conversationId = data.conversation_id as string;
-      const removedUserId = data.removed_user_id as string;
-
-      log.message.debug('[useConversations] Member removed:', {
-        conversationId,
-        removedUserId,
-      });
-
-      // Check if current user was removed
-      if (currentUserId && removedUserId === currentUserId) {
-        log.message.debug('[useConversations] Current user was removed from conversation');
-        // Invalidate to remove from list
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.conversations.all,
-        });
-      } else {
-        // Just update member list
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.conversations.detail(conversationId),
-        });
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.conversations.all,
-        });
-      }
-    };
-
-    // Listen for member left events
-    const handleMemberLeft = (data: Record<string, unknown>) => {
-      const conversationId = data.conversation_id as string;
-      const userId = data.user_id as string;
-
-      log.message.debug('[useConversations] Member left:', {
-        conversationId,
-        userId,
-      });
-
-      // Check if current user left
-      if (currentUserId && userId === currentUserId) {
-        log.message.debug('[useConversations] Current user left conversation');
-        // Remove from list
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.conversations.all,
-        });
-      } else {
-        // Update member list for others
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.conversations.detail(conversationId),
-        });
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.conversations.all,
-        });
-      }
-    };
+    // NOTE: Member events (member_added, member_removed, member_left) are no longer sent by backend.
+    // Backend now sends system messages via message:new event, which are handled by useMessages hook.
+    // System messages automatically trigger conversation query invalidation (see useMessages.ts line 128-151).
 
     // Listen for conversation updated events
     const handleConversationUpdated = (data: Record<string, unknown>) => {
@@ -210,9 +137,6 @@ export function useConversations(
 
     socketClient.onNewMessage(handleNewMessage);
     socketClient.onMessageStatus(handleMessageStatus);
-    socketClient.onMemberAdded(handleMemberAdded);
-    socketClient.onMemberRemoved(handleMemberRemoved);
-    socketClient.onMemberLeft(handleMemberLeft);
     socketClient.onConversationUpdated(handleConversationUpdated);
 
     // Cleanup
@@ -220,9 +144,6 @@ export function useConversations(
       log.message.debug('[useConversations] Cleaning up WebSocket listeners');
       socketClient.off('new_message', handleNewMessage);
       socketClient.off('message_status', handleMessageStatus);
-      socketClient.off('member_added', handleMemberAdded);
-      socketClient.off('member_removed', handleMemberRemoved);
-      socketClient.off('member_left', handleMemberLeft);
       socketClient.off('conversation_updated', handleConversationUpdated);
     };
   }, [queryClient]); // Include queryClient in deps

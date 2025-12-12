@@ -118,10 +118,37 @@ export function useMessages(
     const handleNewMessage = (message: Record<string, unknown>) => {
       log.message.debug('New message received:', message);
 
+      const msg = message as Partial<Message>;
+
       // Invalidate messages query to refetch from server
       queryClient.invalidateQueries({
         queryKey: queryKeys.messages.list(conversationId, { limit }),
       });
+
+      // If this is a system message about member/conversation changes,
+      // also invalidate conversation queries for real-time updates across all clients
+      if (msg.type === 'SYSTEM' && msg.metadata?.system) {
+        const eventType = msg.metadata.system.eventType;
+
+        if (
+          eventType === 'member_added' ||
+          eventType === 'member_removed' ||
+          eventType === 'member_left' ||
+          eventType === 'conversation_updated'
+        ) {
+          log.message.debug('System message detected, invalidating conversation queries:', eventType);
+
+          // Invalidate conversation detail query to refetch member list
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.conversations.detail(conversationId),
+          });
+
+          // Invalidate conversations list to update member counts
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.conversations.all,
+          });
+        }
+      }
     };
 
     // Listen for message edits - optimistic cache update (regular function, not useCallback)
