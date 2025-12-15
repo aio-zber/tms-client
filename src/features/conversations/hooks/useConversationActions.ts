@@ -75,7 +75,7 @@ export function useConversationActions(): UseConversationActionsReturn {
         queryKey: queryKeys.conversations.all,
       });
 
-      toast.success('Conversation updated successfully');
+      // No toast here - WebSocket event will notify all clients (including sender)
     },
     onError: (error, _variables) => {
       log.message.error('Failed to update conversation:', error);

@@ -39,9 +39,18 @@ export default function PollDisplay({
 }: PollDisplayProps) {
   const [isVoting, setIsVoting] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
+  const [lastVoteTime, setLastVoteTime] = useState<number>(0);
 
   const handleOptionClick = async (optionId: string) => {
     if (poll.isClosed || isVoting) return;
+
+    // Debounce: Prevent duplicate clicks within 300ms
+    const now = Date.now();
+    if (now - lastVoteTime < 300) {
+      log.message.debug('Debouncing poll vote click');
+      return;
+    }
+    setLastVoteTime(now);
 
     setIsVoting(true);
     try {

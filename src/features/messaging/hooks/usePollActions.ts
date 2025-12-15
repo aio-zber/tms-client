@@ -35,6 +35,16 @@ export function usePollActions() {
   const voteOnPoll = useMutation({
     mutationFn: ({ pollId, optionIds }: { pollId: string; optionIds: string[] }) =>
       pollService.voteOnPoll(pollId, { option_ids: optionIds }),
+
+    // Retry 500 errors once (backend will be idempotent)
+    retry: (failureCount, error) => {
+      const apiError = error as { response?: { status?: number } };
+      if (apiError?.response?.status === 500 && failureCount < 1) {
+        return true;
+      }
+      return false;
+    },
+
     onMutate: async ({ pollId, optionIds }) => {
       // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: ['poll', pollId] });
@@ -60,7 +70,12 @@ export function usePollActions() {
         queryClient.setQueryData(['poll', variables.pollId], context.previousPoll);
       }
       log.message.error('Failed to vote on poll:', error);
-      toast.error(getErrorMessage(error, ERROR_CONTEXTS.POLL_VOTE));
+
+      // Only show error toast for non-500 errors (500s will retry)
+      const apiError = error as { response?: { status?: number } };
+      if (apiError?.response?.status !== 500) {
+        toast.error(getErrorMessage(error, ERROR_CONTEXTS.POLL_VOTE));
+      }
     },
     onSuccess: (data) => {
       // Update with server data
@@ -71,8 +86,7 @@ export function usePollActions() {
         queryKey: ['messages'],
       });
 
-      // Show success feedback after backend confirms
-      toast.success('Vote recorded');
+      // No success toast - WebSocket handles notification
     },
     onSettled: (data, error, variables) => {
       // Fallback: Always refetch poll data to ensure consistency

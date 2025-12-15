@@ -22,7 +22,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useConversationActions } from '../hooks/useConversationActions';
 import { useConversationEvents } from '../hooks/useConversationEvents';
-import { useConversation } from '../hooks/useConversation';
+import { useConversationQuery } from '../hooks/useConversationsQuery';
 import { useUserSearch } from '@/features/users/hooks/useUserSearch';
 import { UserProfileDialog } from '@/features/users/components/UserProfileDialog';
 import type { Conversation, ConversationMember } from '@/types/conversation';
@@ -65,10 +65,8 @@ export default function ConversationSettingsDialog({
 
   const { query, results, isSearching, search, clearSearch } = useUserSearch();
 
-  // Fetch live conversation data that auto-refreshes
-  const { conversation: liveConversation } = useConversation(conversation.id, {
-    autoLoad: true
-  });
+  // Fetch live conversation data with TanStack Query (real-time updates via cache invalidation)
+  const { conversation: liveConversation } = useConversationQuery(conversation.id, true);
 
   // Use live data if available, fallback to prop
   const currentConversation = liveConversation || conversation;
@@ -157,8 +155,8 @@ export default function ConversationSettingsDialog({
 
   const isGroup = currentConversation.type === 'group';
   const members = currentConversation.members || [];
-  const currentUserIsMember = members.some(m => m.userId === currentUserId);
-  const currentUserMember = members.find(m => m.userId === currentUserId);
+  const currentUserIsMember = members.some((m: ConversationMember) => m.userId === currentUserId);
+  const currentUserMember = members.find((m: ConversationMember) => m.userId === currentUserId);
   const currentUserIsAdmin = currentUserMember?.role === 'admin';
 
   return (
@@ -297,7 +295,7 @@ export default function ConversationSettingsDialog({
                     ) : results.length > 0 ? (
                       <div className="p-2">
                         {results
-                          .filter((u) => !members.some((m) => m.userId === u.tmsUserId))
+                          .filter((u) => !members.some((m: ConversationMember) => m.userId === u.tmsUserId))
                           .map((user) => (
                             <button
                               key={user.tmsUserId}
@@ -347,7 +345,7 @@ export default function ConversationSettingsDialog({
                 <Label>Members</Label>
                 <ScrollArea className="h-60 border rounded-lg">
                   <div className="p-2">
-                    {members.map((member) => {
+                    {members.map((member: ConversationMember) => {
                       const isCurrentUser = member.userId === currentUserId;
                       const displayName = member.user?.name || member.user?.email || member.userId;
                       const userImage = member.user?.image;
