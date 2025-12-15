@@ -77,7 +77,7 @@ export function useConversationActions(): UseConversationActionsReturn {
 
       toast.success('Conversation updated successfully');
     },
-    onError: (error, variables) => {
+    onError: (error, _variables) => {
       log.message.error('Failed to update conversation:', error);
       toast.error(getErrorMessage(error, ERROR_CONTEXTS.CONVERSATION_UPDATE));
     },
@@ -108,7 +108,7 @@ export function useConversationActions(): UseConversationActionsReturn {
 
       toast.success('Members added successfully');
     },
-    onError: (error, variables) => {
+    onError: (error, _variables) => {
       log.message.error('Failed to add members:', error);
       toast.error(getErrorMessage(error, ERROR_CONTEXTS.MEMBER_ADD));
     },
@@ -139,7 +139,7 @@ export function useConversationActions(): UseConversationActionsReturn {
 
       toast.success('Member removed');
     },
-    onError: (error, variables) => {
+    onError: (error, _variables) => {
       log.message.error('Failed to remove member:', error);
       toast.error(getErrorMessage(error, ERROR_CONTEXTS.MEMBER_REMOVE));
     },
@@ -168,7 +168,7 @@ export function useConversationActions(): UseConversationActionsReturn {
 
       toast.success('Left conversation');
     },
-    onError: (error, conversationId) => {
+    onError: (error, _conversationId) => {
       log.message.error('Failed to leave conversation:', error);
       toast.error(getErrorMessage(error, ERROR_CONTEXTS.MEMBER_LEAVE));
     },
@@ -199,7 +199,7 @@ export function useConversationActions(): UseConversationActionsReturn {
 
       toast.success('Settings updated');
     },
-    onError: (error, variables) => {
+    onError: (error, _variables) => {
       log.message.error('Failed to update settings:', error);
       toast.error(getErrorMessage(error, ERROR_CONTEXTS.CONVERSATION_SETTINGS));
     },
