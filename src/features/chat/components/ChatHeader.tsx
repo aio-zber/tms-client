@@ -71,9 +71,11 @@ export function ChatHeader({
 
       <div className="flex-1 min-w-0">
         <h1 className="text-base md:text-lg font-semibold truncate">{conversationTitle}</h1>
-        <p className="text-xs md:text-sm text-gray-500">
-          {conversation.members.length} member{conversation.members.length > 1 ? 's' : ''}
-        </p>
+        {conversation.type === 'group' && (
+          <p className="text-xs md:text-sm text-gray-500">
+            {conversation.members.length} member{conversation.members.length > 1 ? 's' : ''}
+          </p>
+        )}
       </div>
 
       <div className="flex items-center gap-1">

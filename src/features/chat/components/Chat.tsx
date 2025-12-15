@@ -19,7 +19,7 @@ import { useSocket } from '@/hooks/useSocket';
 import { messageService } from '@/features/messaging/services/messageService';
 import { CenterPanel } from '@/components/layout/CenterPanel';
 import type { Message } from '@/types';
-import { useConversation } from '@/features/conversations/hooks/useConversation';
+import { useConversationQuery } from '@/features/conversations/hooks/useConversationsQuery';
 import { useCurrentUser } from '@/features/users/hooks/useCurrentUser';
 import { useLeaveConversation } from '@/features/conversations/hooks/useLeaveConversation';
 import { useUserDisplayName } from '@/features/users/hooks/useUserDisplayName';
@@ -51,7 +51,7 @@ export function Chat({
   const [showProfileDialog, setShowProfileDialog] = useState(false);
 
   // Hooks - Use existing hooks instead of manual implementation
-  const { conversation, loading: loadingConversation } = useConversation(conversationId);
+  const { conversation, isLoading: loadingConversation } = useConversationQuery(conversationId, true);
   const { user: currentUser } = useCurrentUser();
   const currentUserId = currentUser?.id || '';
 
@@ -59,7 +59,7 @@ export function Chat({
   const { sendMessage, sending } = useSendMessage();
   const { editMessage, deleteMessage, addReaction, removeReaction, switchReaction } = useMessageActions({ currentUserId });
   const handleLeaveConversationWithNav = useLeaveConversation(conversationId);
-  const getUserName = useUserDisplayName(conversation);
+  const getUserName = useUserDisplayName(conversation ?? null);
 
   useSocket(); // Initialize WebSocket connection
   useConversationEvents({ conversationId }); // Handle real-time conversation updates
