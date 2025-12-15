@@ -1,6 +1,21 @@
 /**
  * useConversation Hook
- * Manages a single conversation's data and state
+ *
+ * @deprecated Use useConversationQuery from useConversationsQuery.ts instead.
+ *
+ * This hook uses useState and doesn't subscribe to TanStack Query cache,
+ * preventing real-time updates from WebSocket events. When other parts of the
+ * app invalidate the conversation query (e.g., via WebSocket events), components
+ * using this hook won't automatically receive the updates.
+ *
+ * Migration Guide:
+ *   Before: const { conversation, loading } = useConversation(id, { autoLoad: true });
+ *   After:  const { data: conversation, isLoading: loading } = useConversationQuery(id, true);
+ *
+ * Benefits of useConversationQuery:
+ * - Automatic real-time updates via TanStack Query cache invalidation
+ * - Better performance with built-in caching and deduplication
+ * - Consistent with other query hooks in the app
  */
 
 import { log } from '@/lib/logger';

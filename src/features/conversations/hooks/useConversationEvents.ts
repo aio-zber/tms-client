@@ -10,6 +10,7 @@ import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { socketClient } from '@/lib/socket';
+import { useUserStore } from '@/store/userStore';
 import type { ConversationUpdatedEvent } from '@/types/conversation';
 
 interface UseConversationEventsOptions {
@@ -44,6 +45,7 @@ export function useConversationEvents({
   showNotifications = true,
 }: UseConversationEventsOptions) {
   const queryClient = useQueryClient();
+  const currentUser = useUserStore((state) => state.currentUser);
 
   useEffect(() => {
     const socket = socketClient.getSocket();
@@ -79,7 +81,10 @@ export function useConversationEvents({
 
       if (showNotifications) {
         if (eventData.name) {
-          toast.success(`Conversation renamed to "${eventData.name}"`);
+          // Show who renamed - Telegram pattern
+          const isCurrentUser = currentUser?.tmsUserId === eventData.updated_by;
+          const actorLabel = isCurrentUser ? 'You' : 'Someone';
+          toast.success(`${actorLabel} renamed conversation to "${eventData.name}"`);
         } else {
           toast.success('Conversation updated');
         }
@@ -99,5 +104,5 @@ export function useConversationEvents({
       log.message.debug('[useConversationEvents] Cleaning up listeners for conversation:', conversationId);
       socketClient.off('conversation_updated', handleConversationUpdated);
     };
-  }, [conversationId, queryClient, showNotifications]);
+  }, [conversationId, queryClient, showNotifications, currentUser?.tmsUserId]);
 }
