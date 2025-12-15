@@ -44,6 +44,7 @@ export default function NewConversationDialog({
   const [conversationType, setConversationType] = useState<'dm' | 'group'>('dm');
   const [allUsers, setAllUsers] = useState<UserSearchResult[]>([]);
   const [loadingInitial, setLoadingInitial] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const { query, results, isSearching, search, clearSearch } = useUserSearch();
   const { createConversation } = useConversationActions();
@@ -143,6 +144,7 @@ export default function NewConversationDialog({
       return;
     }
 
+    setLoading(true);
     try {
       const conversation = await createConversation({
         type: conversationType,
@@ -176,6 +178,8 @@ export default function NewConversationDialog({
       }
 
       toast.error(errorMessage);
+    } finally {
+      setLoading(false);
     }
   };
 
