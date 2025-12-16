@@ -7,7 +7,7 @@
 
 import { log } from '@/lib/logger';
 import { useState } from 'react';
-import { formatDistanceToNow } from 'date-fns';
+import { formatRelativeTime } from '@/lib/dateUtils';
 import type { Poll } from '@/types/message';
 import PollOption from './PollOption';
 import toast from 'react-hot-toast';
@@ -100,7 +100,7 @@ export default function PollDisplay({
 
     if (expiresDate <= now) return 'Expired';
 
-    return `Closes ${formatDistanceToNow(expiresDate, { addSuffix: true })}`;
+    return `Closes ${formatRelativeTime(expiresDate)}`;
   };
 
   const timeRemaining = getTimeRemaining();

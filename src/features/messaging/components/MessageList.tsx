@@ -7,7 +7,8 @@
 
 import { log } from '@/lib/logger';
 import { useEffect, useLayoutEffect, useRef, useState, memo, useMemo } from 'react';
-import { format, isToday, isYesterday } from 'date-fns';
+import { format } from 'date-fns';
+import { formatDateSeparator } from '@/lib/dateUtils';
 import { MessageBubble } from './MessageBubble';
 import { Loader2, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -237,20 +238,6 @@ export function MessageList({
     groups: groupedMessages
   });
 
-  // Format date label
-  const formatDateLabel = (dateString: string): string => {
-    try {
-      const date = new Date(dateString);
-      if (isNaN(date.getTime())) return 'Unknown date';
-
-      if (isToday(date)) return 'Today';
-      if (isYesterday(date)) return 'Yesterday';
-      return format(date, 'MMMM d, yyyy');
-    } catch {
-      return 'Unknown date';
-    }
-  };
-
   // Preserve scroll position when loading more messages (prepending to top)
   // Using useLayoutEffect to run synchronously after DOM updates but before browser paint
   // This prevents visual flickering and ensures accurate scroll position preservation
@@ -429,7 +416,7 @@ export function MessageList({
             {/* Date Separator */}
             <div className="flex items-center justify-center py-2">
               <div className="px-3 md:px-4 py-1 md:py-1.5 bg-white border border-gray-200 rounded-full text-xs md:text-sm text-gray-600 shadow-sm">
-                {formatDateLabel(group.date)}
+                {formatDateSeparator(group.date)}
               </div>
             </div>
 

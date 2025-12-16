@@ -11,7 +11,7 @@ import { MessageCircle, Search, Plus, FileText } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { formatDistanceToNow } from 'date-fns';
+import { formatSidebarTimestamp } from '@/lib/dateUtils';
 import { useConversations, useConversationSearch } from '@/features/conversations';
 import { useUnifiedSearch } from '@/features/messaging/hooks/useUnifiedSearch';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -72,14 +72,6 @@ function ConversationListContent() {
       .join('')
       .toUpperCase()
       .slice(0, 2);
-  };
-
-  const formatTimestamp = (timestamp: string) => {
-    try {
-      return formatDistanceToNow(new Date(timestamp), { addSuffix: true });
-    } catch {
-      return '';
-    }
   };
 
   // Hybrid search strategy (Telegram/Messenger pattern):
@@ -237,8 +229,8 @@ function ConversationListContent() {
                       {conversation.display_name || conversation.name || 'Direct Message'}
                     </h3>
                     {conversation.lastMessage && (
-                      <span className="text-xs text-gray-500 ml-2 flex-shrink-0">
-                        {formatTimestamp(conversation.lastMessage.timestamp)}
+                      <span className="text-xs text-gray-500 ml-2 shrink-0 min-w-fit">
+                        {formatSidebarTimestamp(conversation.lastMessage.timestamp)}
                       </span>
                     )}
                   </div>

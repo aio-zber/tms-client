@@ -7,7 +7,7 @@
 
 import { log } from '@/lib/logger';
 import { useState, useRef, useEffect, memo, useMemo } from 'react';
-import { format } from 'date-fns';
+import { formatMessageTimestamp } from '@/lib/dateUtils';
 import { Check, CheckCheck, Reply, Trash2, Smile, Edit } from 'lucide-react';
 import { motion } from 'framer-motion';
 import * as Dialog from '@radix-ui/react-dialog';
@@ -318,16 +318,6 @@ export const MessageBubble = memo(function MessageBubble({
     }
   };
 
-  const formatTime = (timestamp: string) => {
-    try {
-      const date = new Date(timestamp);
-      // Always show just time since date divider is already present
-      return format(date, 'h:mm a');
-    } catch {
-      return 'Unknown';
-    }
-  };
-
   // Debug: Log reply data
   if (message.replyToId) {
     log.message.debug(`[MessageBubble] Message ${message.id} has replyToId: ${message.replyToId}`);
@@ -443,7 +433,7 @@ export const MessageBubble = memo(function MessageBubble({
         {/* Timestamp (outside bubble, only shown on right-click) */}
         {showTimestamp && (
           <div className={`text-[10px] text-gray-400 mt-1 px-1 ${isSent ? 'text-right' : 'text-left'}`}>
-            {formatTime(message.createdAt)}
+            {formatMessageTimestamp(message.createdAt)}
           </div>
         )}
 
