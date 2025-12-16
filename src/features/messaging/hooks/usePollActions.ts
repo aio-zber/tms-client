@@ -8,6 +8,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { pollService, type CreatePollRequest } from '../services/pollService';
 import toast from 'react-hot-toast';
 import { getErrorMessage, ERROR_CONTEXTS } from '@/lib/errorMessages';
+import { queryKeys } from '@/lib/queryClient';
 
 export function usePollActions() {
   const queryClient = useQueryClient();
@@ -18,9 +19,9 @@ export function usePollActions() {
   const createPoll = useMutation({
     mutationFn: (data: CreatePollRequest) => pollService.createPoll(data),
     onSuccess: (data, variables) => {
-      // Invalidate messages query for the conversation
+      // Invalidate messages query using proper query key structure
       queryClient.invalidateQueries({
-        queryKey: ['messages', variables.conversation_id],
+        queryKey: queryKeys.messages.list(variables.conversation_id, { limit: 50 }),
       });
     },
     onError: (error) => {
