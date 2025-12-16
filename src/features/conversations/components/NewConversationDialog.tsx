@@ -60,10 +60,10 @@ export default function NewConversationDialog({
       const tmsUsers = await tmsApi.searchUsers('', 100); // Empty query to get all users
 
       // Transform TMSUser[] to UserSearchResult[] format
-      // Backend now returns camelCase fields (tmsUserId, firstName, etc.) via Pydantic serialization_alias
+      // Backend returns both id (local UUID) and tmsUserId (TMS ID)
       const transformedUsers: UserSearchResult[] = tmsUsers.map((user) => ({
-        id: user.id,
-        tmsUserId: user.tmsUserId || user.id, // Use tmsUserId from backend, fallback to id
+        id: user.id, // Local UUID
+        tmsUserId: user.tmsUserId || user.id, // TMS user ID
         name: user.name,
         firstName: user.firstName,
         lastName: user.lastName,
@@ -99,9 +99,9 @@ export default function NewConversationDialog({
   const displayUsers = useMemo(() => {
     const users = query ? results : allUsers;
 
-    // Exclude current user from selectable users by comparing TMS user IDs
+    // Exclude current user from selectable users by comparing local UUIDs
     const filtered = users.filter(user => {
-      const shouldExclude = user.tmsUserId === currentUser?.tmsUserId;
+      const shouldExclude = user.id === currentUser?.id;
       return !shouldExclude;
     });
 
