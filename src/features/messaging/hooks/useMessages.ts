@@ -11,6 +11,7 @@ import { socketClient } from '@/lib/socket';
 import { queryKeys } from '@/lib/queryClient';
 import { useMessagesQuery } from './useMessagesQuery';
 import { isPendingDelete } from './useMessageActions';
+import { nowUTC } from '@/lib/dateUtils';
 import type { Message } from '@/types/message';
 import { log } from '@/lib/logger';
 
@@ -177,7 +178,7 @@ export function useMessages(
                       content: newContent,
                       isEdited: !deletedAt, // Don't mark as edited if deleted
                       deletedAt: deletedAt, // Set deletedAt timestamp if present
-                      updatedAt: new Date().toISOString()
+                      updatedAt: nowUTC()
                     }
                   : msg
               )
@@ -213,7 +214,7 @@ export function useMessages(
               ...page,
               data: page.data.map(msg =>
                 msg.id === messageId
-                  ? { ...msg, deletedAt: new Date().toISOString() }
+                  ? { ...msg, deletedAt: nowUTC() }
                   : msg
               )
             }))

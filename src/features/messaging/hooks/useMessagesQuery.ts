@@ -8,6 +8,7 @@ import { useMemo } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { messageService } from '../services/messageService';
 import { queryKeys } from '@/lib/queryClient';
+import { parseTimestamp } from '@/lib/dateUtils';
 import type { Message } from '@/types/message';
 
 interface UseMessagesQueryOptions {
@@ -31,12 +32,21 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
         cursor: pageParam ? (pageParam as string) : undefined,
       });
 
-      // Backend returns DESC (newest first), but we need ASC (oldest first) for chat
-      // Reverse the messages for proper display order
-      const reversedMessages = response.data.reverse();
+      // Sort messages by timestamp explicitly (don't trust server order)
+      // This ensures correct chronological order even if backend has ordering issues
+      const sortedMessages = response.data.sort((a, b) => {
+        try {
+          const dateA = parseTimestamp(a.createdAt).getTime();
+          const dateB = parseTimestamp(b.createdAt).getTime();
+          return dateA - dateB; // Ascending order (oldest first)
+        } catch (error) {
+          console.error('[useMessagesQuery] Failed to sort messages:', error);
+          return 0; // Keep original order if parsing fails
+        }
+      });
 
       return {
-        data: reversedMessages,
+        data: sortedMessages,
         pagination: response.pagination,
       };
     },
