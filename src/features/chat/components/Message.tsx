@@ -6,7 +6,7 @@
 'use client';
 
 import { useState } from 'react';
-import { format } from 'date-fns';
+import { formatMessageTimestamp } from '@/lib/dateUtils';
 import { MoreVertical, Edit2, Trash2, Smile } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -59,14 +59,6 @@ export default function Message({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   const { editMessage, deleteMessage, addReaction, removeReaction, loading } = useMessageActions();
-
-  const formatTime = (timestamp: string) => {
-    try {
-      return format(new Date(timestamp), 'HH:mm');
-    } catch {
-      return '';
-    }
-  };
 
   const getInitials = (name: string) => {
     if (!name) return '?';
@@ -266,7 +258,7 @@ export default function Message({
         {/* Timestamp and Edit indicator */}
         <div className="flex items-center space-x-1 mt-1 px-3">
           <span className="text-xs text-gray-400">
-            {formatTime(message.created_at)}
+            {formatMessageTimestamp(message.created_at)}
           </span>
           {message.is_edited && (
             <span className="text-xs text-gray-400">(edited)</span>

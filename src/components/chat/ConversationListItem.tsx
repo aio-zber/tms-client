@@ -3,7 +3,7 @@
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import type { Conversation } from '@/types';
-import { formatDistanceToNow } from 'date-fns';
+import { formatSidebarTimestamp } from '@/lib/dateUtils';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
@@ -112,10 +112,8 @@ export function ConversationListItem({
             {displayName}
           </p>
           {conversation.lastMessage && (
-            <span className="text-xs text-gray-500 shrink-0">
-              {formatDistanceToNow(new Date(conversation.lastMessage.timestamp), {
-                addSuffix: false,
-              })}
+            <span className="text-xs text-gray-500 shrink-0 min-w-fit">
+              {formatSidebarTimestamp(conversation.lastMessage.timestamp)}
             </span>
           )}
         </div>

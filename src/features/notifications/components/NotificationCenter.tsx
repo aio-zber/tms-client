@@ -18,7 +18,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { X, Check, Trash2 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { formatRelativeTime } from '@/lib/dateUtils';
 import { cn } from '@/lib/utils';
 
 export function NotificationCenter() {
@@ -169,9 +169,7 @@ export function NotificationCenter() {
                         <span>{notification.conversationName || 'Unknown conversation'}</span>
                         <span>•</span>
                         <span>
-                          {formatDistanceToNow(new Date(notification.timestamp), {
-                            addSuffix: true,
-                          })}
+                          {formatRelativeTime(notification.timestamp)}
                         </span>
                       </div>
                     </div>

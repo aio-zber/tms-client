@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { getUserInitials, User } from '@/types';
+import { getUserInitials, getUserDisplayName, User } from '@/types';
 import { useState, useEffect } from 'react';
 import { authService } from '@/features/auth/services/authService';
 import { STORAGE_KEYS } from '@/lib/constants';
@@ -171,17 +171,20 @@ export function AppHeader() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-gray-900 text-base">
-                  {user.username}
+                  {getUserDisplayName(user)}
                 </p>
-                <p className="text-sm text-gray-600">{user.positionTitle}</p>
+                <p className="text-sm text-gray-600">@{user.username || user.tmsUserId?.slice(0, 8)}</p>
                 <p className="text-xs text-gray-500 mt-1">{user.email}</p>
               </div>
             </div>
 
-            {/* Bio/Custom Status */}
-            <div className="px-3 py-2 bg-viber-purple-bg rounded-lg">
-              <p className="text-sm text-gray-700">Working on TMA</p>
-            </div>
+            {/* Position Title */}
+            {user.positionTitle && (
+              <div className="px-3 py-2 bg-viber-purple-bg rounded-lg">
+                <p className="text-xs text-gray-500 uppercase mb-0.5">Position</p>
+                <p className="text-sm text-gray-700">{user.positionTitle}</p>
+              </div>
+            )}
           </div>
 
           <DropdownMenuSeparator />
