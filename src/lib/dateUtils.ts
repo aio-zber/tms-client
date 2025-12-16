@@ -18,18 +18,77 @@ import {
  * Handles both ISO strings (UTC) and Date objects
  * Automatically converts UTC to device local timezone
  *
+ * IMPORTANT: Ensures naive timestamps (without 'Z') are interpreted as UTC
+ * by appending 'Z' suffix. This fixes the root cause of message ordering issues.
+ *
  * @param timestamp - ISO string or Date object
  * @returns Date object in local timezone
+ * @throws Error if timestamp is invalid (allows caller to handle corruption)
  */
 export const parseTimestamp = (timestamp: string | Date): Date => {
   if (timestamp instanceof Date) return timestamp;
 
   try {
-    // new Date() automatically converts ISO UTC strings to local timezone
-    return new Date(timestamp);
-  } catch {
-    // Fallback to current time if parsing fails
-    return new Date();
+    let isoString = timestamp.trim();
+
+    // If naive timestamp (no 'Z' or timezone offset), append 'Z' to treat as UTC
+    // This prevents JavaScript from interpreting it as local time
+    if (
+      !isoString.endsWith('Z') &&
+      !isoString.includes('+') &&
+      !isoString.includes('-', 10) // Check for '-' after position 10 to avoid matching date separators
+    ) {
+      isoString += 'Z';
+    }
+
+    const date = new Date(isoString);
+
+    // Validate parsed date
+    if (isNaN(date.getTime())) {
+      console.error('[dateUtils] Invalid timestamp:', timestamp);
+      throw new Error('Invalid timestamp');
+    }
+
+    return date;
+  } catch (error) {
+    console.error('[dateUtils] Failed to parse timestamp:', timestamp, error);
+    // DO NOT fallback to current time - throw error to catch corruption
+    // This helps identify data integrity issues
+    throw error;
+  }
+};
+
+/**
+ * Get current UTC timestamp as ISO string with 'Z' suffix
+ * Use this for creating new timestamps (e.g., optimistic updates)
+ *
+ * @returns ISO 8601 string with 'Z' suffix (e.g., "2025-12-16T11:30:00.123Z")
+ */
+export const nowUTC = (): string => {
+  return new Date().toISOString(); // Always includes 'Z'
+};
+
+/**
+ * Validate and normalize timestamp from API
+ *
+ * @param timestamp - ISO string from API (may be null/undefined)
+ * @param context - Context string for debugging (e.g., "MessageList")
+ * @returns Validated Date object in local timezone
+ * @throws Error if timestamp is missing or invalid
+ */
+export const validateTimestamp = (
+  timestamp: string | undefined | null,
+  context: string
+): Date => {
+  if (!timestamp) {
+    throw new Error(`[${context}] Missing timestamp`);
+  }
+
+  try {
+    return parseTimestamp(timestamp);
+  } catch (error) {
+    console.error(`[${context}] Invalid timestamp:`, timestamp, error);
+    throw new Error(`[${context}] Invalid timestamp: ${timestamp}`);
   }
 };
 

@@ -8,7 +8,7 @@
 import { log } from '@/lib/logger';
 import { useEffect, useLayoutEffect, useRef, useState, memo, useMemo } from 'react';
 import { format } from 'date-fns';
-import { formatDateSeparator } from '@/lib/dateUtils';
+import { formatDateSeparator, validateTimestamp } from '@/lib/dateUtils';
 import { MessageBubble } from './MessageBubble';
 import { Loader2, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -204,31 +204,28 @@ export function MessageList({
   // Group messages by date - MEMOIZED to prevent infinite re-renders
   const groupedMessages: MessageGroup[] = useMemo(() => {
     return (messages || []).reduce((groups, message) => {
-      // Validate date before formatting
-      if (!message.createdAt) {
-        log.message.debug('[MessageList] ⚠️ SKIPPING message with no createdAt:', message);
+      try {
+        // Validate and parse timestamp (throws error if invalid)
+        const messageDate = validateTimestamp(message.createdAt, 'MessageList');
+        const dateKey = format(messageDate, 'yyyy-MM-dd');
+
+        // Find or create group for this date
+        const existingGroup = groups.find((g) => g.date === dateKey);
+        if (existingGroup) {
+          existingGroup.messages.push(message);
+        } else {
+          groups.push({
+            date: dateKey,
+            messages: [message],
+          });
+        }
+
+        return groups;
+      } catch (error) {
+        // Skip messages with invalid timestamps (logged by validateTimestamp)
+        log.message.debug('[MessageList] Skipping message with invalid timestamp:', message, error);
         return groups;
       }
-
-      const messageDate = new Date(message.createdAt);
-      if (isNaN(messageDate.getTime())) {
-        log.message.debug('[MessageList] ⚠️ SKIPPING message with invalid createdAt:', message.createdAt, message);
-        return groups; // Skip invalid dates
-      }
-
-      const dateKey = format(messageDate, 'yyyy-MM-dd');
-
-      const existingGroup = groups.find((g) => g.date === dateKey);
-      if (existingGroup) {
-        existingGroup.messages.push(message);
-      } else {
-        groups.push({
-          date: dateKey,
-          messages: [message],
-        });
-      }
-
-      return groups;
     }, [] as MessageGroup[]);
   }, [messages]); // Only recalculate when messages array changes
 
