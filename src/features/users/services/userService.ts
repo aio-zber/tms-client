@@ -136,10 +136,10 @@ class UserService {
       const tmsUsers = await tmsApi.searchUsers(query, limit);
 
       // Transform TMS users to UserSearchResult format
-      // Note: TMS users don't have local UUIDs yet - they'll be created when a conversation starts
+      // Backend returns both: id (local UUID) and tmsUserId (TMS ID)
       return tmsUsers.map((tmsUser) => ({
-        id: tmsUser.tmsUserId || tmsUser.id, // Use TMS user ID (from backend's serialization_alias)
-        tmsUserId: tmsUser.tmsUserId || tmsUser.id, // TMS user ID (will be synced to backend when conversation is created)
+        id: tmsUser.id, // Local UUID from tms-server database
+        tmsUserId: tmsUser.tmsUserId || tmsUser.id, // TMS user ID for reference
         email: tmsUser.email,
         username: tmsUser.username,
         name: tmsUser.displayName || tmsUser.name || `${tmsUser.firstName || ''} ${tmsUser.lastName || ''}`.trim() || tmsUser.email,
