@@ -50,6 +50,20 @@ export default function NewConversationDialog({
   const { createConversation } = useConversationActions();
   const currentUser = useUserStore((state) => state.currentUser);
 
+  // Validate current user has required IDs before allowing conversation creation
+  useEffect(() => {
+    if (open && currentUser) {
+      if (!currentUser.id || !currentUser.tmsUserId) {
+        log.error('❌ Current user missing required ID fields', {
+          hasId: !!currentUser.id,
+          hasTmsUserId: !!currentUser.tmsUserId
+        });
+        toast.error('Authentication error - please re-login');
+        onOpenChange(false);
+      }
+    }
+  }, [open, currentUser, onOpenChange]);
+
   // Load all users when dialog opens
   const loadAllUsers = useCallback(async () => {
     setLoadingInitial(true);

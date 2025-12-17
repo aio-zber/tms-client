@@ -16,6 +16,7 @@ export interface LoginResponse {
   success: boolean;
   user?: {
     id: string;
+    tmsUserId: string;  // TMS CUID from backend
     email: string;
     name: string;
     role: string;
@@ -71,6 +72,15 @@ class AuthService {
       const jwtToken = data.token;
       const userData = data.user;
 
+      // Validate response has required fields
+      if (!userData.id || !userData.tmsUserId) {
+        log.auth.error('❌ Backend response missing required ID fields', {
+          hasId: !!userData.id,
+          hasTmsUserId: !!userData.tmsUserId
+        });
+        throw new AuthError('Invalid user data from backend');
+      }
+
       // Store JWT token in localStorage for API requests
       if (typeof window !== 'undefined' && jwtToken) {
         localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, jwtToken);
@@ -83,9 +93,12 @@ class AuthService {
       return {
         success: true,
         user: {
-          id: userData.tms_user_id || userData.id,
+          id: userData.id,                    // Local UUID (camelCase from backend)
+          tmsUserId: userData.tmsUserId,      // TMS CUID (camelCase from backend)
           email: userData.email,
-          name: userData.display_name || userData.name || `${userData.first_name || ''} ${userData.last_name || ''}`.trim() || userData.username || 'User',
+          name: userData.displayName || userData.name ||
+                `${userData.firstName || ''} ${userData.lastName || ''}`.trim() ||
+                userData.username || 'User',
           role: userData.role || 'MEMBER'
         }
       };
@@ -143,6 +156,15 @@ class AuthService {
       const jwtToken = data.token;
       const userData = data.user;
 
+      // Validate response has required fields
+      if (!userData.id || !userData.tmsUserId) {
+        log.auth.error('❌ SSO: Backend response missing required ID fields', {
+          hasId: !!userData.id,
+          hasTmsUserId: !!userData.tmsUserId
+        });
+        throw new AuthError('Invalid user data from backend');
+      }
+
       // Store JWT token in localStorage for API requests
       if (typeof window !== 'undefined' && jwtToken) {
         localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, jwtToken);
@@ -155,9 +177,12 @@ class AuthService {
       return {
         success: true,
         user: {
-          id: userData.tms_user_id || userData.id,
+          id: userData.id,                    // Local UUID (camelCase from backend)
+          tmsUserId: userData.tmsUserId,      // TMS CUID (camelCase from backend)
           email: userData.email,
-          name: userData.display_name || userData.name || `${userData.first_name || ''} ${userData.last_name || ''}`.trim() || userData.username || 'User',
+          name: userData.displayName || userData.name ||
+                `${userData.firstName || ''} ${userData.lastName || ''}`.trim() ||
+                userData.username || 'User',
           role: userData.role || 'MEMBER'
         }
       };

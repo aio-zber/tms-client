@@ -50,11 +50,20 @@ class UserService {
 
       const userData = await response.json();
 
+      // Validate response has required fields
+      if (!userData.id || !userData.tmsUserId) {
+        log.error('❌ Backend /users/me response missing required ID fields', {
+          hasId: !!userData.id,
+          hasTmsUserId: !!userData.tmsUserId
+        });
+        throw new Error('Invalid user data from backend - missing required ID fields');
+      }
+
       // Transform backend response to User format
       // Backend now returns camelCase via Pydantic serialization_alias
       const user: User = {
         id: userData.id, // Local UUID from tms-server (matches message.senderId!)
-        tmsUserId: userData.tmsUserId || userData.id,
+        tmsUserId: userData.tmsUserId, // TMS CUID - no fallback, fail fast if missing
         email: userData.email,
         username: userData.username,
         firstName: userData.firstName,
