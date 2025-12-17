@@ -29,17 +29,18 @@ function AuthCallbackContent() {
 
         log.auth.info('✅ SSO Callback: GCGC token received from URL');
 
-        // Step 2: Login to TMS-Server with GCGC token
-        log.auth.info('🔐 SSO Callback: Logging into TMS-Server...');
+        // Step 2: Login to TMS-Server with GCGC session token via SSO endpoint
+        log.auth.info('🔐 SSO Callback: Logging into TMS-Server via SSO...');
         const tmsResponse = await fetch(
-          `${TMS_SERVER_URL}/api/v1/auth/login`,
+          `${TMS_SERVER_URL}/api/v1/auth/login/sso`,
           {
             method: 'POST',
             headers: {
+              'X-GCGC-Session-Token': gcgcToken,  // Send as header for SSO authentication
               'Content-Type': 'application/json',
               'Accept': 'application/json',
             },
-            body: JSON.stringify({ token: gcgcToken }),
+            credentials: 'include',
           }
         );
 
@@ -60,9 +61,10 @@ function AuthCallbackContent() {
         log.auth.info('✅ SSO Callback: TMS token received');
 
         // Step 3: Store user ID BEFORE token (atomic initialization to prevent race conditions)
-        if (tmsData.user?.tms_user_id) {
-          localStorage.setItem('current_user_id', tmsData.user.tms_user_id);
-          log.auth.info('✅ SSO Callback: User ID stored:', tmsData.user.tms_user_id);
+        // Note: Backend returns camelCase field names (tmsUserId, not tms_user_id)
+        if (tmsData.user?.tmsUserId) {
+          localStorage.setItem('current_user_id', tmsData.user.tmsUserId);
+          log.auth.info('✅ SSO Callback: User ID stored:', tmsData.user.tmsUserId);
         }
 
         // Then store token and session flag
