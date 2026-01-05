@@ -16,11 +16,11 @@ import { useEffect, useRef } from 'react';
 import { log } from '@/lib/logger';
 
 const TMS_SERVER_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') ||
-                       'https://tms-server-staging.up.railway.app';
+                       'https://tms-chat-staging.example.com';
 const GCGC_URL = process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL ||
-                 'https://gcgc-team-management-system-staging.up.railway.app';
+                 'https://tms-staging.example.com';
 const TMS_CLIENT_URL = process.env.NEXT_PUBLIC_TMS_CLIENT_URL ||
-                       'https://tms-client-staging.up.railway.app';
+                       'https://tms-chat-staging.example.com';
 
 const VALIDATION_INTERVAL = 60000; // 60 seconds
 const RATE_LIMIT_WINDOW = 5000; // 5 seconds

@@ -52,7 +52,7 @@ export function AppHeader() {
         }
 
         // Get user data from TMS Server using JWT Bearer token
-        const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://tms-server-staging.up.railway.app/api/v1';
+        const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://tms-chat-staging.example.com/api/v1';
         const response = await fetch(`${apiBaseUrl}/users/me`, {
           headers: {
             'Authorization': `Bearer ${jwtToken}`,

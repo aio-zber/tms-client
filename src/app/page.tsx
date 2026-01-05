@@ -8,11 +8,11 @@ import { useSessionSync } from '@/lib/auth-session-sync';
 import { authService } from '@/features/auth/services/authService';
 
 const TMS_SERVER_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') ||
-                       'https://tms-server-staging.up.railway.app';
+                       'https://tms-chat-staging.example.com';
 const GCGC_URL = process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL ||
-                 'https://gcgc-team-management-system-staging.up.railway.app';
+                 'https://tms-staging.example.com';
 const TMS_CLIENT_URL = process.env.NEXT_PUBLIC_TMS_CLIENT_URL ||
-                       'https://tms-client-staging.up.railway.app';
+                       'https://tms-chat-staging.example.com';
 
 function HomePageContent() {
   const router = useRouter();

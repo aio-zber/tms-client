@@ -51,7 +51,7 @@ export default function LoginPage() {
       // No GCGC session, redirect to GCGC login
       const redirectToGCGC = () => {
         const gcgcLoginUrl = process.env.NEXT_PUBLIC_GCGC_LOGIN_URL ||
-                            'https://gcgc-team-management-system-staging.up.railway.app/auth/signin';
+                            'https://tms-staging.example.com/auth/signin';
         window.location.href = `${gcgcLoginUrl}?callbackUrl=${encodeURIComponent(window.location.origin)}`;
       };
 

@@ -39,28 +39,42 @@ export const getApiUrl = (): string => {
       return apiUrlCache;
     }
 
-    // Railway deployment (staging)
+    // Alibaba Cloud Production (example.com)
+    if (hostname === 'tms-chat.example.com') {
+      apiUrlCache = 'https://tms-chat.example.com/api/v1';
+      log.debug('[Runtime Config] ✅ Detected Alibaba Cloud Production, setting cache to:', apiUrlCache);
+      return apiUrlCache;
+    }
+
+    // Alibaba Cloud Staging
+    if (hostname === 'tms-chat-staging.example.com') {
+      apiUrlCache = 'https://tms-chat-staging.example.com/api/v1';
+      log.debug('[Runtime Config] ✅ Detected Alibaba Cloud Staging, setting cache to:', apiUrlCache);
+      return apiUrlCache;
+    }
+
+    // Railway deployment (staging) - Legacy fallback
     if (hostname.includes('railway.app')) {
       apiUrlCache = 'https://tms-server-staging.up.railway.app/api/v1';
       log.debug('[Runtime Config] ✅ Detected Railway deployment, setting cache to:', apiUrlCache);
       return apiUrlCache;
     }
 
-    // Production or unknown domain - use staging as fallback
-    apiUrlCache = 'https://tms-server-staging.up.railway.app/api/v1';
-    log.debug('[Runtime Config] ⚠️ Unknown hostname, using default:', apiUrlCache);
+    // Unknown domain - use Alibaba Cloud staging as fallback
+    apiUrlCache = 'https://tms-chat-staging.example.com/api/v1';
+    log.debug('[Runtime Config] ⚠️ Unknown hostname, using Alibaba Cloud staging as default:', apiUrlCache);
     return apiUrlCache;
   }
 
-  // Server-side rendering fallback
-  log.debug('[Runtime Config] SSR fallback, returning default');
-  return 'https://tms-server-staging.up.railway.app/api/v1';
+  // Server-side rendering fallback - use Alibaba Cloud staging
+  log.debug('[Runtime Config] SSR fallback, returning Alibaba Cloud staging');
+  return 'https://tms-chat-staging.example.com/api/v1';
 };
 
 /**
  * Get WebSocket base URL based on runtime hostname detection
  *
- * @returns WebSocket base URL (e.g., "wss://tms-server-staging.up.railway.app")
+ * @returns WebSocket base URL (e.g., "wss://tms-chat-staging.example.com")
  */
 export const getWebSocketUrl = (): string => {
   if (typeof window !== 'undefined') {
@@ -71,13 +85,23 @@ export const getWebSocketUrl = (): string => {
       return 'ws://localhost:8000';
     }
 
-    // Railway deployment (staging)
+    // Alibaba Cloud Production
+    if (hostname === 'tms-chat.example.com') {
+      return 'wss://tms-chat.example.com';
+    }
+
+    // Alibaba Cloud Staging
+    if (hostname === 'tms-chat-staging.example.com') {
+      return 'wss://tms-chat-staging.example.com';
+    }
+
+    // Railway deployment (staging) - Legacy fallback
     if (hostname.includes('railway.app')) {
       return 'wss://tms-server-staging.up.railway.app';
     }
 
-    // Fallback
-    return 'wss://tms-server-staging.up.railway.app';
+    // Unknown domain - use Alibaba Cloud staging as fallback
+    return 'wss://tms-chat-staging.example.com';
   }
 
   // Server-side fallback

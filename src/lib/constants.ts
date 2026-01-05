@@ -20,7 +20,7 @@ export const getApiBaseUrl = getApiUrl;
  *
  * DO NOT use this for API calls! Use getApiBaseUrl() instead.
  */
-export const GCGC_FILE_URL = process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL || 'https://gcgc-team-management-system-staging.up.railway.app';
+export const GCGC_FILE_URL = process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL || 'https://tms-staging.example.com';
 
 /**
  * Get WebSocket URL using runtime detection

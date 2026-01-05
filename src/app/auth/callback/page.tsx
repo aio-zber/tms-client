@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 
 const TMS_SERVER_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') ||
-                       'https://tms-server-staging.up.railway.app';
+                       'https://tms-chat-staging.example.com';
 
 function AuthCallbackContent() {
   const router = useRouter();
