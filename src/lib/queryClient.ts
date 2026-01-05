@@ -4,6 +4,7 @@
  */
 
 import { QueryClient } from '@tanstack/react-query';
+import { checkAndClearCache } from './cacheVersion';
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -42,6 +43,10 @@ export const queryClient = new QueryClient({
     },
   },
 });
+
+// Check and clear cache if schema version has changed (e.g., adding sequenceNumber field)
+// This ensures users get fresh data after migrations without needing to manually clear cache
+checkAndClearCache(queryClient);
 
 // Query Keys Factory for type-safe and consistent query keys
 export const queryKeys = {

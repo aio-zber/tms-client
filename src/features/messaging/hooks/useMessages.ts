@@ -54,6 +54,27 @@ export function useMessages(
     enabled: autoLoad,
   });
 
+  // CRITICAL FIX: Clear cache if messages don't have sequence numbers
+  // This handles the migration from timestamp-only to sequence-based ordering
+  useEffect(() => {
+    if (!conversationId || !messages || messages.length === 0) return;
+
+    // Check if any message is missing sequenceNumber
+    const hasMissingSequence = messages.some(msg => msg.sequenceNumber === undefined || msg.sequenceNumber === null);
+
+    if (hasMissingSequence) {
+      log.message.warn('Detected messages without sequence numbers - clearing cache and refetching');
+
+      // Clear the query cache for this conversation
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.messages.list(conversationId, { limit }),
+      });
+
+      // Force refetch to get messages with sequence numbers
+      refetch();
+    }
+  }, [conversationId, messages, queryClient, limit, refetch]);
+
   // Add message optimistically (for sender's own messages)
   const addOptimisticMessage = useCallback((message: Message) => {
     log.message.debug('Adding optimistic message:', message.id);

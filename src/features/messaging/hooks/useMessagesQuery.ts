@@ -73,14 +73,37 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
     staleTime: 10000,
   });
 
-  // Flatten pages into a single array
-  // Backend returns DESC (newest first), but each page is already reversed to ASC
-  // So when we flatten, we get oldest to newest order for chat display
+  // Flatten pages into a single array and ensure proper ordering
+  // Each page is sorted individually, but we need to re-sort the flattened array
+  // to handle cases where cached pages might have different sorting criteria
   // CRITICAL: Memoize to prevent creating new array on every render (causes infinite loops!)
-  const messages: Message[] = useMemo(
-    () => query.data?.pages.flatMap((page) => page.data) ?? [],
-    [query.data?.pages]
-  );
+  const messages: Message[] = useMemo(() => {
+    if (!query.data?.pages) return [];
+
+    // Flatten all pages
+    const allMessages = query.data.pages.flatMap((page) => page.data);
+
+    // Re-sort the entire flattened array by sequence number (primary) and timestamp (fallback)
+    // This ensures correct ordering even if pages were cached separately
+    return allMessages.sort((a, b) => {
+      // Primary: sequence number (ascending - oldest first)
+      if (a.sequenceNumber !== undefined && b.sequenceNumber !== undefined) {
+        if (a.sequenceNumber !== b.sequenceNumber) {
+          return a.sequenceNumber - b.sequenceNumber;
+        }
+      }
+
+      // Fallback: timestamp (for backward compatibility)
+      try {
+        const dateA = parseTimestamp(a.createdAt).getTime();
+        const dateB = parseTimestamp(b.createdAt).getTime();
+        return dateA - dateB;
+      } catch (error) {
+        console.error('[useMessagesQuery] Failed to sort flattened messages:', error);
+        return 0;
+      }
+    });
+  }, [query.data?.pages]);
 
   return {
     messages,
