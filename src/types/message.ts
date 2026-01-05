@@ -19,6 +19,7 @@ export interface Message {
   reactions?: MessageReaction[];
   poll?: Poll; // Poll data for poll-type messages
   isEdited: boolean;
+  sequenceNumber: number; // Monotonically increasing sequence number per conversation
   createdAt: string;
   updatedAt?: string;
   deletedAt?: string;
