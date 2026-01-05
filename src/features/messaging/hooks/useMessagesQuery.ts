@@ -32,9 +32,17 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
         cursor: pageParam ? (pageParam as string) : undefined,
       });
 
-      // Sort messages by timestamp explicitly (don't trust server order)
-      // This ensures correct chronological order even if backend has ordering issues
+      // Sort messages by sequence number (primary) and timestamp (fallback)
+      // Sequence number ensures deterministic ordering even with timestamp collisions
       const sortedMessages = response.data.sort((a, b) => {
+        // Primary: sequence number (ascending - oldest first for display)
+        if (a.sequenceNumber !== undefined && b.sequenceNumber !== undefined) {
+          if (a.sequenceNumber !== b.sequenceNumber) {
+            return a.sequenceNumber - b.sequenceNumber;
+          }
+        }
+
+        // Fallback: timestamp (for backward compatibility during migration)
         try {
           const dateA = parseTimestamp(a.createdAt).getTime();
           const dateB = parseTimestamp(b.createdAt).getTime();
