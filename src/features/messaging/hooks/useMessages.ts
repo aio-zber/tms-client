@@ -5,7 +5,7 @@
  * Includes deduplication logic to prevent WebSocket race conditions
  */
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { socketClient } from '@/lib/socket';
 import { queryKeys } from '@/lib/queryClient';
@@ -39,6 +39,9 @@ export function useMessages(
   const { limit = 50, autoLoad = true } = options;
   const queryClient = useQueryClient();
 
+  // Track if we've already attempted to fix missing sequence numbers to prevent infinite loop
+  const hasAttemptedFixRef = useRef<Record<string, boolean>>({});
+
   // Use TanStack Query infinite query
   const {
     messages,
@@ -59,11 +62,17 @@ export function useMessages(
   useEffect(() => {
     if (!conversationId || !messages || messages.length === 0) return;
 
+    // Prevent infinite loop: only attempt fix once per conversation
+    if (hasAttemptedFixRef.current[conversationId]) return;
+
     // Check if any message is missing sequenceNumber
     const hasMissingSequence = messages.some(msg => msg.sequenceNumber === undefined || msg.sequenceNumber === null);
 
     if (hasMissingSequence) {
       log.message.warn('Detected messages without sequence numbers - clearing cache and refetching');
+
+      // Mark that we've attempted the fix for this conversation
+      hasAttemptedFixRef.current[conversationId] = true;
 
       // Clear the query cache for this conversation
       queryClient.invalidateQueries({
