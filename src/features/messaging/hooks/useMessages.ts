@@ -59,6 +59,7 @@ export function useMessages(
 
   // CRITICAL FIX: Clear cache if messages don't have sequence numbers
   // This handles the migration from timestamp-only to sequence-based ordering
+  // NOTE: Only runs once per conversation to prevent infinite loops
   useEffect(() => {
     if (!conversationId || !messages || messages.length === 0) return;
 
@@ -82,7 +83,8 @@ export function useMessages(
       // Force refetch to get messages with sequence numbers
       refetch();
     }
-  }, [conversationId, messages, queryClient, limit, refetch]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId]); // Only depend on conversationId to prevent running on every message update
 
   // Add message optimistically (for sender's own messages)
   const addOptimisticMessage = useCallback((message: Message) => {
