@@ -5,8 +5,22 @@
 
 import { io, Socket } from 'socket.io-client';
 import { log } from './logger';
+import { getWebSocketUrl } from './runtimeConfig';
 
-const SOCKET_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || 'http://localhost:8000';
+/**
+ * Get Socket.IO URL dynamically at runtime
+ * Uses hostname detection to support Alibaba Cloud deployment
+ */
+const getSocketUrl = (): string => {
+  // SSR safety check
+  if (typeof window === 'undefined') {
+    // Server-side fallback (won't be used since socket only connects client-side)
+    return 'https://tms-chat-staging.example.com';
+  }
+
+  // Use runtime detection (detects Alibaba Cloud hostname dynamically)
+  return getWebSocketUrl();
+};
 
 class SocketClient {
   private socket: Socket | null = null;
@@ -22,11 +36,15 @@ class SocketClient {
       return this.socket;
     }
 
+    // Get socket URL dynamically at connection time
+    const socketUrl = getSocketUrl();
+    log.ws.info(`Connecting to WebSocket: ${socketUrl}`);
+
     // CRITICAL PATH CONFIGURATION:
     // Server wraps FastAPI with Socket.IO ASGIApp (socketio.ASGIApp(sio, fastapi_app))
     // Socket.IO handles /socket.io/* endpoints directly
     // Client connects to: /socket.io/?EIO=4&transport=websocket
-    this.socket = io(SOCKET_URL, {
+    this.socket = io(socketUrl, {
       path: '/socket.io',  // CORRECT: Default Socket.IO path matches server
       auth: {
         token,
