@@ -26,6 +26,7 @@ class SocketClient {
   private socket: Socket | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
+  private activeRooms = new Set<string>(); // Track active conversation rooms for auto-rejoin on reconnect
 
   /**
    * Initialize Socket.IO connection
@@ -76,6 +77,15 @@ class SocketClient {
     this.socket.on('connect', () => {
       log.ws.info('Connected to server');
       this.reconnectAttempts = 0;
+
+      // CRITICAL: Re-join all active rooms after reconnection (Messenger/Telegram pattern)
+      if (this.activeRooms.size > 0) {
+        log.ws.info(`Reconnected - rejoining ${this.activeRooms.size} conversation rooms`);
+        this.activeRooms.forEach((conversationId) => {
+          log.ws.info(`Re-joining conversation room: ${conversationId}`);
+          this.socket?.emit('join_conversation', { conversation_id: conversationId });
+        });
+      }
     });
 
     // Essential log #2: Disconnected (with reason)
@@ -102,6 +112,7 @@ class SocketClient {
 
   /**
    * Join a conversation room
+   * CRITICAL: Only emits when connected - Socket.IO does NOT queue events when disconnected
    */
   joinConversation(conversationId: string) {
     if (!this.socket) {
@@ -109,7 +120,16 @@ class SocketClient {
       return;
     }
 
-    // Emit join event - Socket.IO will queue if not connected yet
+    // Track this room for auto-rejoin on reconnect
+    this.activeRooms.add(conversationId);
+
+    // CRITICAL FIX: Only emit when connected (Socket.IO doesn't queue events when disconnected)
+    if (!this.socket.connected) {
+      log.ws.warn(`Cannot join conversation ${conversationId} - socket not connected yet. Will auto-join on connect.`);
+      return;
+    }
+
+    log.ws.info(`Joining conversation room: ${conversationId}`);
     this.socket.emit('join_conversation', { conversation_id: conversationId });
   }
 
@@ -117,10 +137,15 @@ class SocketClient {
    * Leave a conversation room
    */
   leaveConversation(conversationId: string) {
+    // Remove from active rooms tracking
+    this.activeRooms.delete(conversationId);
+
     if (!this.socket?.connected) {
+      log.ws.debug(`Cannot leave conversation ${conversationId} - socket not connected`);
       return;
     }
 
+    log.ws.info(`Leaving conversation room: ${conversationId}`);
     this.socket.emit('leave_conversation', { conversation_id: conversationId });
   }
 
@@ -128,7 +153,10 @@ class SocketClient {
    * Emit typing started event
    */
   startTyping(conversationId: string) {
-    if (!this.socket?.connected) return;
+    if (!this.socket?.connected) {
+      log.ws.debug('Cannot send typing_start - socket not connected');
+      return;
+    }
     this.socket.emit('typing_start', { conversation_id: conversationId });
   }
 
@@ -136,7 +164,10 @@ class SocketClient {
    * Emit typing stopped event
    */
   stopTyping(conversationId: string) {
-    if (!this.socket?.connected) return;
+    if (!this.socket?.connected) {
+      log.ws.debug('Cannot send typing_stop - socket not connected');
+      return;
+    }
     this.socket.emit('typing_stop', { conversation_id: conversationId });
   }
 

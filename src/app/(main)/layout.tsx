@@ -7,6 +7,7 @@ import { AppHeader } from '@/components/layout/AppHeader';
 import { CenterPanel } from '@/components/layout/CenterPanel';
 import { NotificationCenter } from '@/features/notifications';
 import { useNotificationEvents } from '@/features/notifications';
+import { ConnectionStatus } from '@/components/ConnectionStatus';
 
 export default function MainLayout({
   children,
@@ -52,6 +53,9 @@ export default function MainLayout({
 
       {/* Notification Center Dialog */}
       <NotificationCenter />
+
+      {/* WebSocket Connection Status Indicator */}
+      <ConnectionStatus />
 
       {/* Main Content Area */}
       <div className="flex-1 overflow-hidden">
