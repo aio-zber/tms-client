@@ -3,8 +3,19 @@
 import React, { useState, useEffect } from 'react';
 import { X, File, FileText, FileSpreadsheet, Image, Video, Music } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
+
+// Simple progress bar component
+function ProgressBar({ value, className }: { value: number; className?: string }) {
+  return (
+    <div className={cn('w-full bg-gray-200 rounded-full overflow-hidden', className)}>
+      <div
+        className="bg-viber-purple h-full transition-all duration-300"
+        style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
+      />
+    </div>
+  );
+}
 
 interface FilePreviewProps {
   file: File;
@@ -125,7 +136,7 @@ export function FilePreview({
         {/* Upload progress */}
         {isUploading && (
           <div className="mt-2">
-            <Progress value={uploadProgress} className="h-1.5" />
+            <ProgressBar value={uploadProgress} className="h-1.5" />
             <p className="text-xs text-muted-foreground mt-1">
               Uploading... {Math.round(uploadProgress)}%
             </p>
