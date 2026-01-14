@@ -1,6 +1,6 @@
 /**
  * MessageInput Component
- * Text input for sending messages with auto-resize and send functionality
+ * Text input for sending messages with auto-resize, file upload, and send functionality
  */
 
 'use client';
@@ -8,11 +8,15 @@
 import { log } from '@/lib/logger';
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { Send, X, BarChart3 } from 'lucide-react';
+import { toast } from 'sonner';
 import type { Message } from '@/types/message';
 import { Button } from '@/components/ui/button';
 import PollCreator from './PollCreator';
 import { usePollActions } from '../hooks/usePollActions';
 import { EmojiPickerButton } from './EmojiPickerButton';
+import { FileUploadButton } from './FileUploadButton';
+import { FilePreview } from './FilePreview';
+import { messageService } from '../services/messageService';
 
 interface MessageInputProps {
   conversationId: string;
@@ -41,6 +45,9 @@ export function MessageInput({
 }: MessageInputProps) {
   const [content, setContent] = useState('');
   const [showPollCreator, setShowPollCreator] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { createPoll } = usePollActions();
 
@@ -139,6 +146,46 @@ export function MessageInput({
     }
   };
 
+  // Handle file selection
+  const handleFileSelect = (file: File) => {
+    setSelectedFile(file);
+    setUploadProgress(0);
+  };
+
+  // Handle file upload
+  const handleFileUpload = async () => {
+    if (!selectedFile) return;
+
+    setIsUploading(true);
+    setUploadProgress(0);
+
+    try {
+      await messageService.sendFileMessage({
+        conversationId,
+        file: selectedFile,
+        replyToId: replyTo?.id,
+        onProgress: (progress) => setUploadProgress(progress),
+      });
+
+      // Success - clear file and reply
+      setSelectedFile(null);
+      setUploadProgress(0);
+      if (onCancelReply) onCancelReply();
+      toast.success('File uploaded successfully');
+    } catch (error) {
+      log.error('Failed to upload file:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to upload file');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // Remove selected file
+  const handleRemoveFile = () => {
+    setSelectedFile(null);
+    setUploadProgress(0);
+  };
+
   return (
     <div className="p-3 md:p-4 border-t border-gray-200 bg-white">
       <div className="max-w-4xl mx-auto">
@@ -189,13 +236,33 @@ export function MessageInput({
           </div>
         )}
 
+        {/* File Preview (when file selected) */}
+        {selectedFile && (
+          <div className="mb-2">
+            <FilePreview
+              file={selectedFile}
+              uploadProgress={uploadProgress}
+              isUploading={isUploading}
+              onRemove={handleRemoveFile}
+            />
+          </div>
+        )}
+
         {/* Input Area */}
         <div className="flex items-end gap-2">
+          {/* File Upload Button */}
+          <div className="mb-1">
+            <FileUploadButton
+              onFileSelect={handleFileSelect}
+              disabled={disabled || isUploading || editingMessage !== undefined}
+            />
+          </div>
+
           {/* Poll Button */}
           <button
             type="button"
             className="p-2 md:p-2.5 hover:bg-gray-100 rounded-full transition mb-1"
-            disabled={disabled || editingMessage !== undefined}
+            disabled={disabled || editingMessage !== undefined || isUploading}
             title="Create poll"
             onClick={() => setShowPollCreator(true)}
           >
@@ -231,12 +298,15 @@ export function MessageInput({
 
           {/* Send/Save Button */}
           <Button
-            onClick={handleSend}
-            disabled={!content.trim() || sending || disabled || (editingMessage && content === editingMessage.content)}
+            onClick={selectedFile ? handleFileUpload : handleSend}
+            disabled={
+              ((!content.trim() && !selectedFile) || sending || disabled || isUploading) ||
+              (editingMessage && content === editingMessage.content)
+            }
             className="bg-viber-purple hover:bg-viber-purple-dark text-white rounded-full px-4 md:px-6 h-11 md:h-12 transition disabled:opacity-50"
             type="button"
           >
-            {sending ? (
+            {sending || isUploading ? (
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
             ) : editingMessage ? (
               <span className="text-sm md:text-base">Save</span>
