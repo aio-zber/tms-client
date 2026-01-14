@@ -8,7 +8,7 @@
 import { log } from '@/lib/logger';
 import { useState, useRef, useEffect, memo, useMemo } from 'react';
 import { formatMessageTimestamp } from '@/lib/dateUtils';
-import { Check, CheckCheck, Reply, Trash2, Smile, Edit } from 'lucide-react';
+import { Check, CheckCheck, Reply, Trash2, Smile, Edit, Download, File, FileText, FileSpreadsheet, Play } from 'lucide-react';
 import { motion } from 'framer-motion';
 import * as Dialog from '@radix-ui/react-dialog';
 import type { Message } from '@/types/message';
@@ -16,6 +16,7 @@ import PollDisplay from './PollDisplay';
 import { usePollActions } from '../hooks/usePollActions';
 import { EmojiPickerButton } from './EmojiPickerButton';
 import { CustomEmojiPicker } from '@/components/ui/emoji-picker';
+import { ImageLightbox } from './ImageLightbox';
 
 interface MessageBubbleProps {
   message: Message;
@@ -57,9 +58,28 @@ export const MessageBubble = memo(function MessageBubble({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showTimestamp, setShowTimestamp] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const { voteOnPoll, closePoll } = usePollActions();
+
+  // Helper function to format file size
+  const formatFileSize = (bytes?: number): string => {
+    if (!bytes) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  // Helper function to get file icon based on MIME type
+  const getFileIcon = (mimeType?: string) => {
+    if (!mimeType) return <File className="h-8 w-8 text-gray-500" />;
+    if (mimeType.includes('pdf')) return <FileText className="h-8 w-8 text-red-500" />;
+    if (mimeType.includes('word') || mimeType.includes('document')) return <FileText className="h-8 w-8 text-blue-600" />;
+    if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return <FileSpreadsheet className="h-8 w-8 text-green-600" />;
+    if (mimeType.startsWith('video/')) return <Play className="h-8 w-8 text-purple-500" />;
+    return <File className="h-8 w-8 text-gray-500" />;
+  };
 
   // Common emojis for quick reactions (legacy, used by old emoji picker)
   const quickEmojis = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥'];
@@ -398,6 +418,124 @@ export const MessageBubble = memo(function MessageBubble({
                 getUserName={getUserName}
               />
             </div>
+          ) : message.type === 'IMAGE' && message.metadata?.fileUrl ? (
+            /* Image Message */
+            <div
+              className={`${message.replyTo ? 'rounded-b-2xl rounded-t-md' : 'rounded-2xl'} ${
+                isSent
+                  ? 'bg-viber-purple rounded-br-sm order-1'
+                  : 'bg-gray-100 rounded-bl-sm order-2'
+              } overflow-hidden cursor-pointer transition-all hover:opacity-90`}
+              onClick={() => setLightboxOpen(true)}
+            >
+              <img
+                src={message.metadata.thumbnailUrl || message.metadata.fileUrl}
+                alt={message.metadata.fileName || 'Image'}
+                className="max-w-xs md:max-w-sm max-h-64 md:max-h-80 object-cover"
+                loading="lazy"
+              />
+              {/* Caption if present */}
+              {message.content && message.content !== message.metadata.fileName && (
+                <div className={`px-3 py-2 text-sm ${isSent ? 'text-white' : 'text-gray-900'}`}>
+                  {message.content}
+                </div>
+              )}
+              {/* Status for sent images */}
+              {isSent && message.status && (
+                <div className="absolute bottom-2 right-2 bg-black/40 rounded-full p-1">
+                  {renderStatusIcon()}
+                </div>
+              )}
+            </div>
+          ) : message.type === 'FILE' && message.metadata?.fileUrl ? (
+            /* File Message */
+            <div
+              className={`px-3 md:px-4 py-3 ${message.replyTo ? 'rounded-b-2xl rounded-t-md' : 'rounded-2xl'} ${
+                isSent
+                  ? 'bg-viber-purple text-white rounded-br-sm order-1'
+                  : 'bg-gray-100 text-gray-900 rounded-bl-sm order-2'
+              } transition-all min-w-[200px] max-w-xs`}
+            >
+              <div className="flex items-center gap-3">
+                {/* File icon */}
+                <div className={`flex-shrink-0 p-2 rounded-lg ${isSent ? 'bg-white/20' : 'bg-white'}`}>
+                  {getFileIcon(message.metadata.mimeType)}
+                </div>
+
+                {/* File info */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate" title={message.metadata.fileName}>
+                    {message.metadata.fileName}
+                  </p>
+                  <p className={`text-xs ${isSent ? 'text-white/70' : 'text-gray-500'}`}>
+                    {formatFileSize(message.metadata.fileSize)}
+                  </p>
+                </div>
+
+                {/* Download button */}
+                <a
+                  href={message.metadata.fileUrl}
+                  download={message.metadata.fileName}
+                  className={`flex-shrink-0 p-2 rounded-full transition ${
+                    isSent ? 'hover:bg-white/20' : 'hover:bg-gray-200'
+                  }`}
+                  onClick={(e) => e.stopPropagation()}
+                  title="Download file"
+                >
+                  <Download className="w-5 h-5" />
+                </a>
+              </div>
+
+              {/* Status */}
+              {(message.isEdited || message.status) && (
+                <div
+                  className={`flex items-center gap-1 mt-2 text-[11px] ${
+                    isSent ? 'text-white/70 justify-end' : 'text-gray-500 justify-start'
+                  }`}
+                >
+                  {message.isEdited && <span>(edited)</span>}
+                  {renderStatusIcon()}
+                </div>
+              )}
+            </div>
+          ) : message.type === 'VOICE' && message.metadata?.fileUrl ? (
+            /* Voice Message */
+            <div
+              className={`px-3 md:px-4 py-3 ${message.replyTo ? 'rounded-b-2xl rounded-t-md' : 'rounded-2xl'} ${
+                isSent
+                  ? 'bg-viber-purple text-white rounded-br-sm order-1'
+                  : 'bg-gray-100 text-gray-900 rounded-bl-sm order-2'
+              } transition-all min-w-[200px] max-w-xs`}
+            >
+              <div className="flex items-center gap-3">
+                {/* Audio player */}
+                <audio
+                  controls
+                  className="w-full h-8"
+                  style={{ filter: isSent ? 'invert(1)' : 'none' }}
+                >
+                  <source src={message.metadata.fileUrl} type={message.metadata.mimeType} />
+                  Your browser does not support audio.
+                </audio>
+              </div>
+
+              {/* Duration and status */}
+              <div
+                className={`flex items-center justify-between mt-2 text-[11px] ${
+                  isSent ? 'text-white/70' : 'text-gray-500'
+                }`}
+              >
+                {message.metadata.duration && (
+                  <span>
+                    {Math.floor(message.metadata.duration / 60)}:{String(message.metadata.duration % 60).padStart(2, '0')}
+                  </span>
+                )}
+                <div className="flex items-center gap-1">
+                  {message.isEdited && <span>(edited)</span>}
+                  {renderStatusIcon()}
+                </div>
+              </div>
+            </div>
           ) : (
             /* Regular Text Message */
             <div
@@ -429,6 +567,20 @@ export const MessageBubble = memo(function MessageBubble({
             </div>
           )}
         </div>
+
+        {/* Image Lightbox */}
+        {lightboxOpen && message.type === 'IMAGE' && message.metadata?.fileUrl && (
+          <ImageLightbox
+            images={[{
+              url: message.metadata.fileUrl,
+              thumbnailUrl: message.metadata.thumbnailUrl,
+              fileName: message.metadata.fileName,
+              caption: message.content !== message.metadata.fileName ? message.content : undefined,
+            }]}
+            initialIndex={0}
+            onClose={() => setLightboxOpen(false)}
+          />
+        )}
 
         {/* Timestamp (outside bubble, only shown on right-click) */}
         {showTimestamp && (

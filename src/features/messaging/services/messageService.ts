@@ -152,6 +152,151 @@ export async function clearConversation(conversationId: string): Promise<{ succe
   );
 }
 
+/**
+ * Send a file message (image, video, document, audio)
+ * Uses XMLHttpRequest for upload progress tracking
+ */
+export async function sendFileMessage(params: {
+  conversationId: string;
+  file: File;
+  replyToId?: string;
+  onProgress?: (progress: number) => void;
+}): Promise<Message> {
+  const { conversationId, file, replyToId, onProgress } = params;
+
+  return new Promise((resolve, reject) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('conversation_id', conversationId);
+    if (replyToId) {
+      formData.append('reply_to_id', replyToId);
+    }
+
+    const xhr = new XMLHttpRequest();
+
+    // Upload progress tracking
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable && onProgress) {
+        const progress = (e.loaded / e.total) * 100;
+        onProgress(progress);
+      }
+    });
+
+    // Upload complete
+    xhr.addEventListener('load', () => {
+      if (xhr.status === 201 || xhr.status === 200) {
+        try {
+          const response = JSON.parse(xhr.responseText);
+          resolve(response);
+        } catch (parseError) {
+          reject(new Error('Failed to parse response'));
+        }
+      } else {
+        try {
+          const error = JSON.parse(xhr.responseText);
+          reject(new Error(error.detail || `Upload failed: ${xhr.statusText}`));
+        } catch {
+          reject(new Error(`Upload failed: ${xhr.statusText}`));
+        }
+      }
+    });
+
+    // Upload error
+    xhr.addEventListener('error', () => {
+      reject(new Error('Network error during upload'));
+    });
+
+    // Upload aborted
+    xhr.addEventListener('abort', () => {
+      reject(new Error('Upload cancelled'));
+    });
+
+    // Get the API base URL from apiClient
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+    xhr.open('POST', `${baseUrl}${BASE_PATH}/upload`);
+
+    // Add auth header
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
+
+    // Send the request
+    xhr.send(formData);
+  });
+}
+
+/**
+ * Send a voice message
+ * Wrapper around sendFileMessage with duration metadata
+ */
+export async function sendVoiceMessage(params: {
+  conversationId: string;
+  audioFile: File;
+  duration: number;
+  replyToId?: string;
+  onProgress?: (progress: number) => void;
+}): Promise<Message> {
+  const { conversationId, audioFile, duration, replyToId, onProgress } = params;
+
+  return new Promise((resolve, reject) => {
+    const formData = new FormData();
+    formData.append('file', audioFile);
+    formData.append('conversation_id', conversationId);
+    formData.append('duration', duration.toString());
+    if (replyToId) {
+      formData.append('reply_to_id', replyToId);
+    }
+
+    const xhr = new XMLHttpRequest();
+
+    // Upload progress tracking
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable && onProgress) {
+        const progress = (e.loaded / e.total) * 100;
+        onProgress(progress);
+      }
+    });
+
+    // Upload complete
+    xhr.addEventListener('load', () => {
+      if (xhr.status === 201 || xhr.status === 200) {
+        try {
+          const response = JSON.parse(xhr.responseText);
+          resolve(response);
+        } catch (parseError) {
+          reject(new Error('Failed to parse response'));
+        }
+      } else {
+        try {
+          const error = JSON.parse(xhr.responseText);
+          reject(new Error(error.detail || `Upload failed: ${xhr.statusText}`));
+        } catch {
+          reject(new Error(`Upload failed: ${xhr.statusText}`));
+        }
+      }
+    });
+
+    // Upload error
+    xhr.addEventListener('error', () => {
+      reject(new Error('Network error during upload'));
+    });
+
+    // Get the API base URL
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+    xhr.open('POST', `${baseUrl}${BASE_PATH}/upload`);
+
+    // Add auth header
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
+
+    // Send the request
+    xhr.send(formData);
+  });
+}
+
 // Export all functions as a service object
 export const messageService = {
   sendMessage,
@@ -167,6 +312,8 @@ export const messageService = {
   getTotalUnreadCount,
   searchMessages,
   clearConversation,
+  sendFileMessage,
+  sendVoiceMessage,
 };
 
 export default messageService;
