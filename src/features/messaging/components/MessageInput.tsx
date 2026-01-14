@@ -8,7 +8,7 @@
 import { log } from '@/lib/logger';
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { Send, X, BarChart3 } from 'lucide-react';
-import { toast } from 'sonner';
+import toast from 'react-hot-toast';
 import type { Message } from '@/types/message';
 import { Button } from '@/components/ui/button';
 import PollCreator from './PollCreator';

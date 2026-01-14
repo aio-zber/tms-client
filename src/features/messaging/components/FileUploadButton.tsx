@@ -3,7 +3,7 @@
 import React, { useRef, useCallback } from 'react';
 import { Paperclip } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { toast } from 'sonner';
+import toast from 'react-hot-toast';
 import { cn } from '@/lib/utils';
 
 // File type and size constants
