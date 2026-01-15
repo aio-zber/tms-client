@@ -405,7 +405,7 @@ export const MessageBubble = memo(function MessageBubble({
             <div
               className={`px-3 md:px-4 py-2 md:py-3 ${message.replyTo ? 'rounded-b-2xl rounded-t-md' : 'rounded-2xl'} ${
                 isSent
-                  ? 'bg-gray-200 text-gray-500 rounded-br-sm order-1'
+                  ? 'bg-viber-purple/60 text-white/70 rounded-br-sm order-1'
                   : 'bg-gray-100 text-gray-500 rounded-bl-sm order-2'
               } italic text-sm`}
             >
