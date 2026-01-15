@@ -400,7 +400,18 @@ export const MessageBubble = memo(function MessageBubble({
           isSearchHighlighted ? 'ring-2 ring-yellow-400 rounded-lg p-1 -m-1' : ''
         }`}>
           {/* Message Bubble */}
-          {message.type === 'POLL' && message.poll ? (
+          {/* Deleted Message - Show placeholder for ALL message types when deleted */}
+          {message.deletedAt ? (
+            <div
+              className={`px-3 md:px-4 py-2 md:py-3 ${message.replyTo ? 'rounded-b-2xl rounded-t-md' : 'rounded-2xl'} ${
+                isSent
+                  ? 'bg-gray-200 text-gray-500 rounded-br-sm order-1'
+                  : 'bg-gray-100 text-gray-500 rounded-bl-sm order-2'
+              } italic text-sm`}
+            >
+              {isSent ? 'You deleted this message' : `${senderName || 'User'} deleted this message`}
+            </div>
+          ) : message.type === 'POLL' && message.poll ? (
             /* Poll Message - Full width without bubble styling */
             <div className="w-full order-1">
               <PollDisplay
@@ -464,21 +475,19 @@ export const MessageBubble = memo(function MessageBubble({
               } transition-all min-w-[200px] max-w-xs`}
             >
               <div className="flex items-center gap-3">
-                {/* Clickable file info area - opens file for viewing */}
+                {/* Clickable file info area - opens file in new tab */}
                 <div
                   className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer hover:opacity-80 transition-opacity"
                   onClick={(e) => {
                     e.stopPropagation();
-                    // Use viewUrl if available (inline viewing), otherwise fileUrl
-                    const viewUrl = message.metadata?.viewUrl || message.metadata?.fileUrl;
-                    window.open(viewUrl, '_blank', 'noopener,noreferrer');
+                    // Open file in new tab - browser handles viewing (PDFs show inline, others download)
+                    window.open(message.metadata?.fileUrl, '_blank', 'noopener,noreferrer');
                   }}
                   onContextMenu={(e) => {
-                    // Allow right-click to propagate to parent for context menu
                     e.stopPropagation();
                     handleContextMenu(e);
                   }}
-                  title="Click to view file, right-click for options"
+                  title="Click to open file"
                 >
                   {/* File icon */}
                   <div className={`flex-shrink-0 p-2 rounded-lg ${isSent ? 'bg-white/20' : 'bg-white'}`}>
