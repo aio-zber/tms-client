@@ -455,13 +455,15 @@ export const MessageBubble = memo(function MessageBubble({
               )}
             </div>
           ) : message.type === 'FILE' && message.metadata?.fileUrl ? (
-            /* File Message */
+            /* File Message - Click to view, download button for explicit download */
             <div
               className={`px-3 md:px-4 py-3 ${message.replyTo ? 'rounded-b-2xl rounded-t-md' : 'rounded-2xl'} ${
                 isSent
                   ? 'bg-viber-purple text-white rounded-br-sm order-1'
                   : 'bg-gray-100 text-gray-900 rounded-bl-sm order-2'
-              } transition-all min-w-[200px] max-w-xs`}
+              } transition-all min-w-[200px] max-w-xs cursor-pointer hover:opacity-90`}
+              onClick={() => window.open(message.metadata?.fileUrl, '_blank', 'noopener,noreferrer')}
+              title="Click to view file"
             >
               <div className="flex items-center gap-3">
                 {/* File icon */}
