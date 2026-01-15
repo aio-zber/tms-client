@@ -455,7 +455,7 @@ export const MessageBubble = memo(function MessageBubble({
               )}
             </div>
           ) : message.type === 'FILE' && message.metadata?.fileUrl ? (
-            /* File Message - Click file info to view, click download icon to download */
+            /* File Message - Click file info to view, click download icon to download, right-click for menu */
             <div
               className={`px-3 md:px-4 py-3 ${message.replyTo ? 'rounded-b-2xl rounded-t-md' : 'rounded-2xl'} ${
                 isSent
@@ -467,12 +467,18 @@ export const MessageBubble = memo(function MessageBubble({
                 {/* Clickable file info area - opens file for viewing */}
                 <div
                   className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer hover:opacity-80 transition-opacity"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     // Use viewUrl if available (inline viewing), otherwise fileUrl
                     const viewUrl = message.metadata?.viewUrl || message.metadata?.fileUrl;
                     window.open(viewUrl, '_blank', 'noopener,noreferrer');
                   }}
-                  title="Click to view file"
+                  onContextMenu={(e) => {
+                    // Allow right-click to propagate to parent for context menu
+                    e.stopPropagation();
+                    handleContextMenu(e);
+                  }}
+                  title="Click to view file, right-click for options"
                 >
                   {/* File icon */}
                   <div className={`flex-shrink-0 p-2 rounded-lg ${isSent ? 'bg-white/20' : 'bg-white'}`}>
@@ -511,6 +517,10 @@ export const MessageBubble = memo(function MessageBubble({
                     } catch (err) {
                       window.open(message.metadata?.fileUrl, '_blank');
                     }
+                  }}
+                  onContextMenu={(e) => {
+                    e.stopPropagation();
+                    handleContextMenu(e);
                   }}
                   title="Download file"
                 >
