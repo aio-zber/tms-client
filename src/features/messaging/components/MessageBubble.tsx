@@ -59,6 +59,7 @@ export const MessageBubble = memo(function MessageBubble({
   const [showTimestamp, setShowTimestamp] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [thumbnailFailed, setThumbnailFailed] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const { voteOnPoll, closePoll } = usePollActions();
@@ -429,10 +430,16 @@ export const MessageBubble = memo(function MessageBubble({
               onClick={() => setLightboxOpen(true)}
             >
               <img
-                src={message.metadata.thumbnailUrl || message.metadata.fileUrl}
+                src={thumbnailFailed ? message.metadata.fileUrl : (message.metadata.thumbnailUrl || message.metadata.fileUrl)}
                 alt={message.metadata.fileName || 'Image'}
                 className="max-w-xs md:max-w-sm max-h-64 md:max-h-80 object-cover"
                 loading="lazy"
+                onError={(e) => {
+                  // If thumbnail fails, fall back to main file URL
+                  if (!thumbnailFailed && message.metadata?.thumbnailUrl && e.currentTarget.src !== message.metadata.fileUrl) {
+                    setThumbnailFailed(true);
+                  }
+                }}
               />
               {/* Caption if present */}
               {message.content && message.content !== message.metadata.fileName && (
