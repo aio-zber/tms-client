@@ -63,6 +63,7 @@ export interface MessageMetadata {
   fileName?: string;
   fileSize?: number;
   fileUrl?: string;
+  viewUrl?: string;  // URL for inline viewing (Content-Disposition: inline)
   mimeType?: string;
   thumbnailUrl?: string;
 

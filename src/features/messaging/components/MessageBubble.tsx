@@ -17,7 +17,6 @@ import { usePollActions } from '../hooks/usePollActions';
 import { EmojiPickerButton } from './EmojiPickerButton';
 import { CustomEmojiPicker } from '@/components/ui/emoji-picker';
 import { ImageLightbox } from './ImageLightbox';
-import { FileViewerModal } from './FileViewerModal';
 
 interface MessageBubbleProps {
   message: Message;
@@ -60,7 +59,6 @@ export const MessageBubble = memo(function MessageBubble({
   const [showTimestamp, setShowTimestamp] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
-  const [fileViewerOpen, setFileViewerOpen] = useState(false);
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
@@ -457,44 +455,67 @@ export const MessageBubble = memo(function MessageBubble({
               )}
             </div>
           ) : message.type === 'FILE' && message.metadata?.fileUrl ? (
-            /* File Message - Click to view, download button for explicit download */
+            /* File Message - Click file info to view, click download icon to download */
             <div
               className={`px-3 md:px-4 py-3 ${message.replyTo ? 'rounded-b-2xl rounded-t-md' : 'rounded-2xl'} ${
                 isSent
                   ? 'bg-viber-purple text-white rounded-br-sm order-1'
                   : 'bg-gray-100 text-gray-900 rounded-bl-sm order-2'
-              } transition-all min-w-[200px] max-w-xs cursor-pointer hover:opacity-90`}
-              onClick={() => setFileViewerOpen(true)}
-              title="Click to view file"
+              } transition-all min-w-[200px] max-w-xs`}
             >
               <div className="flex items-center gap-3">
-                {/* File icon */}
-                <div className={`flex-shrink-0 p-2 rounded-lg ${isSent ? 'bg-white/20' : 'bg-white'}`}>
-                  {getFileIcon(message.metadata.mimeType)}
+                {/* Clickable file info area - opens file for viewing */}
+                <div
+                  className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer hover:opacity-80 transition-opacity"
+                  onClick={() => {
+                    // Use viewUrl if available (inline viewing), otherwise fileUrl
+                    const viewUrl = message.metadata?.viewUrl || message.metadata?.fileUrl;
+                    window.open(viewUrl, '_blank', 'noopener,noreferrer');
+                  }}
+                  title="Click to view file"
+                >
+                  {/* File icon */}
+                  <div className={`flex-shrink-0 p-2 rounded-lg ${isSent ? 'bg-white/20' : 'bg-white'}`}>
+                    {getFileIcon(message.metadata.mimeType)}
+                  </div>
+
+                  {/* File info */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate" title={message.metadata.fileName}>
+                      {message.metadata.fileName}
+                    </p>
+                    <p className={`text-xs ${isSent ? 'text-white/70' : 'text-gray-500'}`}>
+                      {formatFileSize(message.metadata.fileSize)}
+                    </p>
+                  </div>
                 </div>
 
-                {/* File info */}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate" title={message.metadata.fileName}>
-                    {message.metadata.fileName}
-                  </p>
-                  <p className={`text-xs ${isSent ? 'text-white/70' : 'text-gray-500'}`}>
-                    {formatFileSize(message.metadata.fileSize)}
-                  </p>
-                </div>
-
-                {/* Download button */}
-                <a
-                  href={message.metadata.fileUrl}
-                  download={message.metadata.fileName}
+                {/* Download button - separate action */}
+                <button
                   className={`flex-shrink-0 p-2 rounded-full transition ${
                     isSent ? 'hover:bg-white/20' : 'hover:bg-gray-200'
                   }`}
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    try {
+                      const response = await fetch(message.metadata?.fileUrl || '');
+                      const blob = await response.blob();
+                      const url = window.URL.createObjectURL(blob);
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.download = message.metadata?.fileName || 'file';
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      window.URL.revokeObjectURL(url);
+                    } catch (err) {
+                      window.open(message.metadata?.fileUrl, '_blank');
+                    }
+                  }}
                   title="Download file"
                 >
                   <Download className="w-5 h-5" />
-                </a>
+                </button>
               </div>
 
               {/* Status */}
@@ -590,16 +611,6 @@ export const MessageBubble = memo(function MessageBubble({
             }]}
             initialIndex={0}
             onClose={() => setLightboxOpen(false)}
-          />
-        )}
-
-        {/* File Viewer Modal */}
-        {fileViewerOpen && message.type === 'FILE' && message.metadata?.fileUrl && (
-          <FileViewerModal
-            fileUrl={message.metadata.fileUrl}
-            fileName={message.metadata.fileName || 'file'}
-            mimeType={message.metadata.mimeType}
-            onClose={() => setFileViewerOpen(false)}
           />
         )}
 
