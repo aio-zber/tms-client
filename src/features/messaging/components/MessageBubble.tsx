@@ -17,6 +17,7 @@ import { usePollActions } from '../hooks/usePollActions';
 import { EmojiPickerButton } from './EmojiPickerButton';
 import { CustomEmojiPicker } from '@/components/ui/emoji-picker';
 import { ImageLightbox } from './ImageLightbox';
+import { FileViewerModal } from './FileViewerModal';
 
 interface MessageBubbleProps {
   message: Message;
@@ -59,6 +60,7 @@ export const MessageBubble = memo(function MessageBubble({
   const [showTimestamp, setShowTimestamp] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [fileViewerOpen, setFileViewerOpen] = useState(false);
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
@@ -462,7 +464,7 @@ export const MessageBubble = memo(function MessageBubble({
                   ? 'bg-viber-purple text-white rounded-br-sm order-1'
                   : 'bg-gray-100 text-gray-900 rounded-bl-sm order-2'
               } transition-all min-w-[200px] max-w-xs cursor-pointer hover:opacity-90`}
-              onClick={() => window.open(message.metadata?.fileUrl, '_blank', 'noopener,noreferrer')}
+              onClick={() => setFileViewerOpen(true)}
               title="Click to view file"
             >
               <div className="flex items-center gap-3">
@@ -588,6 +590,16 @@ export const MessageBubble = memo(function MessageBubble({
             }]}
             initialIndex={0}
             onClose={() => setLightboxOpen(false)}
+          />
+        )}
+
+        {/* File Viewer Modal */}
+        {fileViewerOpen && message.type === 'FILE' && message.metadata?.fileUrl && (
+          <FileViewerModal
+            fileUrl={message.metadata.fileUrl}
+            fileName={message.metadata.fileName || 'file'}
+            mimeType={message.metadata.mimeType}
+            onClose={() => setFileViewerOpen(false)}
           />
         )}
 
