@@ -4,6 +4,7 @@ import { log } from '@/lib/logger';
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
+import { socketClient } from '@/lib/socket';
 
 const TMS_SERVER_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') ||
                        'https://tms-chat-staging.example.com';
@@ -60,11 +61,33 @@ function AuthCallbackContent() {
 
         log.auth.info('✅ SSO Callback: TMS token received');
 
-        // Step 3: Store user ID BEFORE token (atomic initialization to prevent race conditions)
+        // Step 3: Check if this is an account switch
+        const previousUserId = localStorage.getItem('current_user_id');
+        const newUserId = tmsData.user?.tmsUserId;
+
+        if (previousUserId && newUserId && previousUserId !== newUserId) {
+          log.auth.info('🔄 SSO Callback: Account switch detected!', {
+            previousUserId,
+            newUserId,
+          });
+
+          // Disconnect socket to prevent old user's data from being received
+          socketClient.disconnect();
+
+          // Clear ALL old session data
+          localStorage.removeItem('auth_token');
+          localStorage.removeItem('user_data');
+          localStorage.removeItem('tms_session_active');
+          localStorage.removeItem('session_active');
+
+          log.auth.info('✅ SSO Callback: Old session cleared');
+        }
+
+        // Step 4: Store new user ID BEFORE token (atomic initialization to prevent race conditions)
         // Note: Backend returns camelCase field names (tmsUserId, not tms_user_id)
-        if (tmsData.user?.tmsUserId) {
-          localStorage.setItem('current_user_id', tmsData.user.tmsUserId);
-          log.auth.info('✅ SSO Callback: User ID stored:', tmsData.user.tmsUserId);
+        if (newUserId) {
+          localStorage.setItem('current_user_id', newUserId);
+          log.auth.info('✅ SSO Callback: User ID stored:', newUserId);
         }
 
         // Then store token and session flag
