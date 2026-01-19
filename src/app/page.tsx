@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { useSessionSync } from '@/lib/auth-session-sync';
 import { authService } from '@/features/auth/services/authService';
+import { socketClient } from '@/lib/socket';
 
 const TMS_SERVER_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') ||
                        'https://tms-chat-staging.example.com';
@@ -64,7 +65,7 @@ function HomePageContent() {
 
           // Detect account switch by comparing old vs new user ID
           const previousUserId = localStorage.getItem('current_user_id');
-          const newUserId = data.user?.tms_user_id;
+          const newUserId = data.user?.tmsUserId || data.user?.tms_user_id;
 
           if (previousUserId && newUserId && previousUserId !== newUserId) {
             log.auth.info('🔐 SSO: Account switch detected, clearing old session', {
@@ -72,12 +73,15 @@ function HomePageContent() {
               newUserId: newUserId,
             });
 
+            // Disconnect socket to prevent old user's data from being received
+            socketClient.disconnect();
+
             // Clear all cached data from previous user to prevent showing stale data
             localStorage.removeItem('user_data'); // Cached user profile from userService
             localStorage.removeItem('tms_session_active'); // Old session flag
             localStorage.removeItem('auth_token'); // Old user's token (will be replaced below)
 
-            log.auth.info('✅ SSO: Old session cleared');
+            log.auth.info('✅ SSO: Old session cleared, socket disconnected');
           }
 
           // Store user ID BEFORE token (atomic initialization to prevent race conditions)
