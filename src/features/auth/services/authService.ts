@@ -6,6 +6,7 @@
 
 import { STORAGE_KEYS, getApiBaseUrl } from '@/lib/constants';
 import { log } from '@/lib/logger';
+import { socketClient } from '@/lib/socket';
 
 export interface LoginCredentials {
   email: string;
@@ -211,12 +212,18 @@ class AuthService {
     } catch (error) {
       log.auth.warn('TMS Server logout failed:', error);
     } finally {
+      // CRITICAL: Disconnect socket BEFORE clearing tokens
+      // This ensures the old user's socket connection is terminated
+      // and prevents the new user from receiving old user's messages
+      socketClient.disconnect();
+
       this.setSessionActive(false);
       if (typeof window !== 'undefined') {
         // Clear all stored auth data
         localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN); // Clear JWT token
         localStorage.removeItem(STORAGE_KEYS.USER_DATA);
         localStorage.removeItem('tms_session_active');
+        localStorage.removeItem('current_user_id'); // Clear user ID to prevent stale session
       }
     }
   }
