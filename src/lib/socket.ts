@@ -321,12 +321,16 @@ class SocketClient {
 
   /**
    * Disconnect from server
+   * Clears socket instance and active rooms to ensure clean state for next user
    */
   disconnect() {
     if (this.socket) {
       this.socket.disconnect();
       this.socket = null;
     }
+    // Clear active rooms to prevent stale room data for next user
+    this.activeRooms.clear();
+    this.reconnectAttempts = 0;
   }
 
   /**
