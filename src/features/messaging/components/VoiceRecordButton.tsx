@@ -1,13 +1,24 @@
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Mic, Square, Send, Trash2 } from 'lucide-react';
+import { Mic, Square, Send, Trash2, Play, Pause } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 import { messageService } from '../services/messageService';
 import { log } from '@/lib/logger';
+
+// Generate random waveform bars for preview visualization
+const generatePreviewBars = (): number[] => {
+  const bars: number[] = [];
+  for (let i = 0; i < 20; i++) {
+    const base = Math.sin(i * 0.3) * 0.3 + 0.5;
+    const random = Math.random() * 0.4;
+    bars.push(Math.min(1, Math.max(0.2, base + random)));
+  }
+  return bars;
+};
 
 interface VoiceRecordButtonProps {
   conversationId: string;
@@ -46,6 +57,8 @@ export function VoiceRecordButton({
 
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
+  const [previewBars] = useState(() => generatePreviewBars());
   const audioRef = useRef<HTMLAudioElement>(null);
 
   // Format duration as MM:SS
@@ -138,20 +151,57 @@ export function VoiceRecordButton({
     };
   }, [audioUrl]);
 
-  // Preview state: show audio player with send/discard buttons
+  // Toggle preview playback
+  const togglePreviewPlayback = useCallback(() => {
+    if (!audioRef.current) return;
+
+    if (isPreviewPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play();
+    }
+    setIsPreviewPlaying(!isPreviewPlaying);
+  }, [isPreviewPlaying]);
+
+  // Preview state: show waveform player with send/discard buttons
   if (audioBlob && audioUrl) {
     return (
-      <div className="flex items-center gap-2 bg-gray-100 rounded-full px-3 py-1.5">
-        {/* Audio preview */}
+      <div className="flex items-center gap-2 bg-gray-100 rounded-2xl px-3 py-2 relative">
+        {/* Hidden audio element */}
         <audio
           ref={audioRef}
           src={audioUrl}
-          controls
-          className="h-8 w-32"
+          onEnded={() => setIsPreviewPlaying(false)}
+          preload="metadata"
         />
 
+        {/* Play/Pause button */}
+        <button
+          onClick={togglePreviewPlayback}
+          disabled={isUploading}
+          className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-viber-purple/10 hover:bg-viber-purple/20 text-viber-purple transition-colors"
+          aria-label={isPreviewPlaying ? 'Pause' : 'Play'}
+        >
+          {isPreviewPlaying ? (
+            <Pause className="w-3.5 h-3.5" fill="currentColor" />
+          ) : (
+            <Play className="w-3.5 h-3.5 ml-0.5" fill="currentColor" />
+          )}
+        </button>
+
+        {/* Waveform visualization */}
+        <div className="flex items-center gap-[2px] h-6 flex-1">
+          {previewBars.map((height, index) => (
+            <div
+              key={index}
+              className="w-[2px] rounded-full bg-viber-purple/60"
+              style={{ height: `${height * 100}%`, minHeight: '3px' }}
+            />
+          ))}
+        </div>
+
         {/* Duration */}
-        <span className="text-xs text-gray-500 min-w-[40px]">
+        <span className="text-xs text-gray-500 min-w-[36px] text-right">
           {formatDuration(duration)}
         </span>
 
@@ -162,11 +212,11 @@ export function VoiceRecordButton({
           size="icon"
           onClick={handleDiscardPreview}
           disabled={isUploading}
-          className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
+          className="h-7 w-7 text-red-500 hover:text-red-600 hover:bg-red-50"
           aria-label="Discard voice message"
           title="Discard"
         >
-          <Trash2 className="h-4 w-4" />
+          <Trash2 className="h-3.5 w-3.5" />
         </Button>
 
         {/* Send button */}
@@ -176,14 +226,14 @@ export function VoiceRecordButton({
           size="icon"
           onClick={handleSend}
           disabled={isUploading}
-          className="h-8 w-8 text-viber-purple hover:text-viber-purple-dark hover:bg-viber-purple/10"
+          className="h-7 w-7 text-viber-purple hover:text-viber-purple-dark hover:bg-viber-purple/10"
           aria-label="Send voice message"
           title="Send"
         >
           {isUploading ? (
-            <div className="h-4 w-4 border-2 border-viber-purple border-t-transparent rounded-full animate-spin" />
+            <div className="h-3.5 w-3.5 border-2 border-viber-purple border-t-transparent rounded-full animate-spin" />
           ) : (
-            <Send className="h-4 w-4" />
+            <Send className="h-3.5 w-3.5" />
           )}
         </Button>
 

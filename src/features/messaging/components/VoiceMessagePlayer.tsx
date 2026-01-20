@@ -1,0 +1,174 @@
+'use client';
+
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Play, Pause } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+interface VoiceMessagePlayerProps {
+  src: string;
+  duration?: number;
+  isSent: boolean;
+}
+
+// Generate random waveform bars for visualization
+const generateWaveformBars = (count: number): number[] => {
+  const bars: number[] = [];
+  for (let i = 0; i < count; i++) {
+    // Create a more natural waveform pattern
+    const base = Math.sin(i * 0.3) * 0.3 + 0.5;
+    const random = Math.random() * 0.4;
+    bars.push(Math.min(1, Math.max(0.15, base + random)));
+  }
+  return bars;
+};
+
+/**
+ * Messenger-style voice message player with waveform visualization.
+ * Features play/pause button, animated waveform, and duration display.
+ */
+export function VoiceMessagePlayer({
+  src,
+  duration: initialDuration,
+  isSent,
+}: VoiceMessagePlayerProps) {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(initialDuration || 0);
+  const [waveformBars] = useState(() => generateWaveformBars(28));
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const animationRef = useRef<number | null>(null);
+
+  // Format time as M:SS
+  const formatTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Update current time during playback
+  const updateTime = useCallback(() => {
+    if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime);
+      if (!audioRef.current.paused) {
+        animationRef.current = requestAnimationFrame(updateTime);
+      }
+    }
+  }, []);
+
+  // Handle play/pause toggle
+  const togglePlayPause = useCallback(() => {
+    if (!audioRef.current) return;
+
+    if (isPlaying) {
+      audioRef.current.pause();
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    } else {
+      audioRef.current.play();
+      animationRef.current = requestAnimationFrame(updateTime);
+    }
+    setIsPlaying(!isPlaying);
+  }, [isPlaying, updateTime]);
+
+  // Handle audio ended
+  const handleEnded = useCallback(() => {
+    setIsPlaying(false);
+    setCurrentTime(0);
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+    }
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+    }
+  }, []);
+
+  // Handle metadata loaded
+  const handleLoadedMetadata = useCallback(() => {
+    if (audioRef.current && !initialDuration) {
+      setDuration(audioRef.current.duration);
+    }
+  }, [initialDuration]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, []);
+
+  // Calculate progress percentage
+  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const progressBarCount = Math.floor((progress / 100) * waveformBars.length);
+
+  // Display time (show current time when playing, total duration when stopped)
+  const displayTime = isPlaying || currentTime > 0 ? formatTime(currentTime) : formatTime(duration);
+
+  return (
+    <div className="flex items-center gap-3 min-w-[180px] max-w-[240px]">
+      {/* Hidden audio element */}
+      <audio
+        ref={audioRef}
+        src={src}
+        onEnded={handleEnded}
+        onLoadedMetadata={handleLoadedMetadata}
+        preload="metadata"
+      />
+
+      {/* Play/Pause button */}
+      <button
+        onClick={togglePlayPause}
+        className={cn(
+          'flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-colors',
+          isSent
+            ? 'bg-white/20 hover:bg-white/30 text-white'
+            : 'bg-viber-purple/10 hover:bg-viber-purple/20 text-viber-purple'
+        )}
+        aria-label={isPlaying ? 'Pause' : 'Play'}
+      >
+        {isPlaying ? (
+          <Pause className="w-4 h-4" fill="currentColor" />
+        ) : (
+          <Play className="w-4 h-4 ml-0.5" fill="currentColor" />
+        )}
+      </button>
+
+      {/* Waveform visualization */}
+      <div className="flex-1 flex items-center gap-[2px] h-8">
+        {waveformBars.map((height, index) => (
+          <div
+            key={index}
+            className={cn(
+              'w-[3px] rounded-full transition-all duration-100',
+              index < progressBarCount
+                ? isSent
+                  ? 'bg-white'
+                  : 'bg-viber-purple'
+                : isSent
+                  ? 'bg-white/40'
+                  : 'bg-viber-purple/40'
+            )}
+            style={{
+              height: `${height * 100}%`,
+              minHeight: '4px',
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Duration */}
+      <span
+        className={cn(
+          'flex-shrink-0 text-xs font-medium min-w-[32px] text-right',
+          isSent ? 'text-white/80' : 'text-gray-500'
+        )}
+      >
+        {displayTime}
+      </span>
+    </div>
+  );
+}
+
+export default VoiceMessagePlayer;
