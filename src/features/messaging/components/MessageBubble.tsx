@@ -17,6 +17,8 @@ import { usePollActions } from '../hooks/usePollActions';
 import { EmojiPickerButton } from './EmojiPickerButton';
 import { CustomEmojiPicker } from '@/components/ui/emoji-picker';
 import { ImageLightbox } from './ImageLightbox';
+import { VideoPlayer } from './VideoPlayer';
+import { VideoLightbox } from './VideoLightbox';
 
 interface MessageBubbleProps {
   message: Message;
@@ -59,6 +61,7 @@ export const MessageBubble = memo(function MessageBubble({
   const [showTimestamp, setShowTimestamp] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [videoLightboxOpen, setVideoLightboxOpen] = useState(false);
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
@@ -465,6 +468,41 @@ export const MessageBubble = memo(function MessageBubble({
                 </div>
               )}
             </div>
+          ) : message.type === 'FILE' && message.metadata?.fileUrl && message.metadata?.mimeType?.startsWith('video/') ? (
+            /* Video Message - Inline video player with expand option */
+            <div
+              className={`${message.replyTo ? 'rounded-b-2xl rounded-t-md' : 'rounded-2xl'} ${
+                isSent
+                  ? 'bg-viber-purple rounded-br-sm order-1'
+                  : 'bg-gray-100 rounded-bl-sm order-2'
+              } overflow-hidden`}
+            >
+              <VideoPlayer
+                src={message.metadata.fileUrl}
+                thumbnailUrl={message.metadata.thumbnailUrl}
+                mimeType={message.metadata.mimeType}
+                fileName={message.metadata.fileName}
+                isSent={isSent}
+                onExpandClick={() => setVideoLightboxOpen(true)}
+              />
+              {/* Caption if present */}
+              {message.content && message.content !== message.metadata.fileName && (
+                <div className={`px-3 py-2 text-sm ${isSent ? 'text-white' : 'text-gray-900'}`}>
+                  {message.content}
+                </div>
+              )}
+              {/* Status for sent videos */}
+              {isSent && message.status && (
+                <div
+                  className={`flex items-center gap-1 px-3 pb-2 text-[11px] ${
+                    isSent ? 'text-white/70 justify-end' : 'text-gray-500 justify-start'
+                  }`}
+                >
+                  {message.isEdited && <span>(edited)</span>}
+                  {renderStatusIcon()}
+                </div>
+              )}
+            </div>
           ) : message.type === 'FILE' && message.metadata?.fileUrl ? (
             /* File Message - Click file info to view, click download icon to download, right-click for menu */
             <div
@@ -630,6 +668,17 @@ export const MessageBubble = memo(function MessageBubble({
             }]}
             initialIndex={0}
             onClose={() => setLightboxOpen(false)}
+          />
+        )}
+
+        {/* Video Lightbox */}
+        {videoLightboxOpen && message.type === 'FILE' && message.metadata?.fileUrl && message.metadata?.mimeType?.startsWith('video/') && (
+          <VideoLightbox
+            src={message.metadata.fileUrl}
+            mimeType={message.metadata.mimeType}
+            fileName={message.metadata.fileName}
+            thumbnailUrl={message.metadata.thumbnailUrl}
+            onClose={() => setVideoLightboxOpen(false)}
           />
         )}
 
