@@ -19,6 +19,7 @@ import { CustomEmojiPicker } from '@/components/ui/emoji-picker';
 import { ImageLightbox } from './ImageLightbox';
 import { VideoPlayer } from './VideoPlayer';
 import { VideoLightbox } from './VideoLightbox';
+import { VoiceMessagePlayer } from './VoiceMessagePlayer';
 
 interface MessageBubbleProps {
   message: Message;
@@ -588,42 +589,31 @@ export const MessageBubble = memo(function MessageBubble({
               )}
             </div>
           ) : message.type === 'VOICE' && message.metadata?.fileUrl ? (
-            /* Voice Message */
+            /* Voice Message - Messenger style with waveform */
             <div
-              className={`px-3 md:px-4 py-3 ${message.replyTo ? 'rounded-b-2xl rounded-t-md' : 'rounded-2xl'} ${
+              className={`px-3 py-2.5 ${message.replyTo ? 'rounded-b-2xl rounded-t-md' : 'rounded-2xl'} ${
                 isSent
                   ? 'bg-viber-purple text-white rounded-br-sm order-1'
                   : 'bg-gray-100 text-gray-900 rounded-bl-sm order-2'
-              } transition-all min-w-[200px] max-w-xs`}
+              } transition-all`}
             >
-              <div className="flex items-center gap-3">
-                {/* Audio player */}
-                <audio
-                  controls
-                  className="w-full h-8"
-                  style={{ filter: isSent ? 'invert(1)' : 'none' }}
-                >
-                  <source src={message.metadata.fileUrl} type={message.metadata.mimeType} />
-                  Your browser does not support audio.
-                </audio>
-              </div>
+              <VoiceMessagePlayer
+                src={message.metadata.fileUrl}
+                duration={message.metadata.duration}
+                isSent={isSent}
+              />
 
-              {/* Duration and status */}
-              <div
-                className={`flex items-center justify-between mt-2 text-[11px] ${
-                  isSent ? 'text-white/70' : 'text-gray-500'
-                }`}
-              >
-                {message.metadata.duration && (
-                  <span>
-                    {Math.floor(message.metadata.duration / 60)}:{String(message.metadata.duration % 60).padStart(2, '0')}
-                  </span>
-                )}
-                <div className="flex items-center gap-1">
-                  {message.isEdited && <span>(edited)</span>}
+              {/* Status indicator */}
+              {isSent && (
+                <div
+                  className={`flex items-center justify-end mt-1 text-[11px] ${
+                    isSent ? 'text-white/70' : 'text-gray-500'
+                  }`}
+                >
+                  {message.isEdited && <span className="mr-1">(edited)</span>}
                   {renderStatusIcon()}
                 </div>
-              </div>
+              )}
             </div>
           ) : (
             /* Regular Text Message */
