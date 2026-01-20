@@ -22,7 +22,7 @@ const GCGC_URL = process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL ||
 const TMS_CLIENT_URL = process.env.NEXT_PUBLIC_TMS_CLIENT_URL ||
                        'https://tms-chat-staging.example.com';
 
-const VALIDATION_INTERVAL = 60000; // 60 seconds
+const VALIDATION_INTERVAL = 30000; // 30 seconds - more responsive logout detection
 const RATE_LIMIT_WINDOW = 5000; // 5 seconds
 const DEBUG = process.env.NODE_ENV === 'development';
 
