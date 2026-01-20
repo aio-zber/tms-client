@@ -16,6 +16,7 @@ import { usePollActions } from '../hooks/usePollActions';
 import { EmojiPickerButton } from './EmojiPickerButton';
 import { FileUploadButton } from './FileUploadButton';
 import { FilePreview } from './FilePreview';
+import { VoiceRecordButton } from './VoiceRecordButton';
 import { messageService } from '../services/messageService';
 
 interface MessageInputProps {
@@ -48,6 +49,7 @@ export function MessageInput({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
+  const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { createPoll } = usePollActions();
 
@@ -254,7 +256,21 @@ export function MessageInput({
           <div className="mb-1">
             <FileUploadButton
               onFileSelect={handleFileSelect}
-              disabled={disabled || isUploading || editingMessage !== undefined}
+              disabled={disabled || isUploading || isVoiceRecording || editingMessage !== undefined}
+            />
+          </div>
+
+          {/* Voice Record Button */}
+          <div className="mb-1">
+            <VoiceRecordButton
+              conversationId={conversationId}
+              replyToId={replyTo?.id}
+              disabled={disabled || isUploading || !!selectedFile || editingMessage !== undefined}
+              onRecordingStart={() => setIsVoiceRecording(true)}
+              onRecordingEnd={() => setIsVoiceRecording(false)}
+              onSendSuccess={() => {
+                if (onCancelReply) onCancelReply();
+              }}
             />
           </div>
 
@@ -262,7 +278,7 @@ export function MessageInput({
           <button
             type="button"
             className="p-2 md:p-2.5 hover:bg-gray-100 rounded-full transition mb-1"
-            disabled={disabled || editingMessage !== undefined || isUploading}
+            disabled={disabled || editingMessage !== undefined || isUploading || isVoiceRecording}
             title="Create poll"
             onClick={() => setShowPollCreator(true)}
           >
@@ -288,8 +304,8 @@ export function MessageInput({
               value={content}
               onChange={(e) => setContent(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={placeholder}
-              disabled={sending || disabled}
+              placeholder={isVoiceRecording ? 'Recording voice message...' : placeholder}
+              disabled={sending || disabled || isVoiceRecording}
               className="w-full px-3 md:px-4 py-2 md:py-2.5 text-sm md:text-base border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-viber-purple focus:border-transparent resize-none disabled:opacity-50 disabled:cursor-not-allowed transition"
               rows={1}
               style={{ minHeight: '44px', maxHeight: '120px' }}
@@ -300,7 +316,7 @@ export function MessageInput({
           <Button
             onClick={selectedFile ? handleFileUpload : handleSend}
             disabled={
-              ((!content.trim() && !selectedFile) || sending || disabled || isUploading) ||
+              ((!content.trim() && !selectedFile) || sending || disabled || isUploading || isVoiceRecording) ||
               (editingMessage && content === editingMessage.content)
             }
             className="bg-viber-purple hover:bg-viber-purple-dark text-white rounded-full px-4 md:px-6 h-11 md:h-12 transition disabled:opacity-50"
