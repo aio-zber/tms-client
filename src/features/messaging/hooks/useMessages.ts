@@ -418,17 +418,39 @@ export function useMessages(
 
     // Listen for bulk messages delivered event
     const handleMessagesDelivered = (data: Record<string, unknown>) => {
-      const { conversation_id, count } = data as {
+      const { conversation_id } = data as {
         conversation_id: string;
-        count: number;
       };
 
       // Only handle for this conversation
       if (conversation_id === conversationId) {
-        log.message.debug(`${count} messages marked as DELIVERED`);
+        log.message.debug('Messages marked as DELIVERED');
         // Refresh messages to update status
         queryClient.invalidateQueries({
           queryKey: queryKeys.messages.list(conversationId, { limit }),
+        });
+      }
+    };
+
+    // Listen for bulk messages read event (Messenger-style: when user opens conversation)
+    const handleMessagesRead = (data: Record<string, unknown>) => {
+      const { conversation_id } = data as {
+        conversation_id: string;
+      };
+
+      // Only handle for this conversation
+      if (conversation_id === conversationId) {
+        log.message.debug('Messages marked as READ');
+        // Refresh messages to update status
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.messages.list(conversationId, { limit }),
+        });
+        // Also invalidate unread counts
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.unreadCount.conversation(conversationId),
+        });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.unreadCount.total(),
         });
       }
     };
@@ -509,8 +531,9 @@ export function useMessages(
     socketClient.onReactionRemoved(handleReactionRemoved);
     socketClient.onMessageStatus(handleMessageStatus); // Real-time status updates
 
-    // Listen for bulk delivered events
+    // Listen for bulk delivered/read events
     socket.on('messages_delivered', handleMessagesDelivered);
+    socket.on('messages_read', handleMessagesRead);
 
     // Listen for poll events
     socketClient.onNewPoll(handleNewPoll);
@@ -527,6 +550,7 @@ export function useMessages(
       socketClient.off('reaction_removed', handleReactionRemoved);
       socketClient.off('message_status', handleMessageStatus); // Remove status listener
       socket.off('messages_delivered', handleMessagesDelivered); // Remove bulk delivered listener
+      socket.off('messages_read', handleMessagesRead); // Remove bulk read listener
       socketClient.off('new_poll', handleNewPoll); // Remove poll event listeners
       socketClient.off('poll_vote_added', handlePollVote);
       socketClient.off('poll_closed', handlePollClosed);

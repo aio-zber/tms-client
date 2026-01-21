@@ -8,6 +8,7 @@ import { CenterPanel } from '@/components/layout/CenterPanel';
 import { NotificationCenter } from '@/features/notifications';
 import { useNotificationEvents } from '@/features/notifications';
 import { ConnectionStatus } from '@/components/ConnectionStatus';
+import { usePresenceInit } from '@/hooks/usePresence';
 
 export default function MainLayout({
   children,
@@ -21,6 +22,9 @@ export default function MainLayout({
 
   // Initialize notification event listeners
   useNotificationEvents();
+
+  // Initialize presence tracking (online/offline status via WebSocket)
+  usePresenceInit();
 
   // Redirect to root if not authenticated
   useEffect(() => {

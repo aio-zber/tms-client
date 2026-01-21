@@ -2,6 +2,7 @@
 
 import { Menu, MoreVertical, Search, Users, LogOut, User } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { OnlineIndicator } from '@/components/ui/OnlineIndicator';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,6 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useIsUserOnline } from '@/hooks/usePresence';
 import type { Conversation } from '@/types/conversation';
 
 interface ChatHeaderProps {
@@ -49,6 +51,9 @@ export function ChatHeader({
 
   const otherUserId = getOtherUserId();
 
+  // Check if other user is online (for DM conversations)
+  const isOtherUserOnline = useIsUserOnline(otherUserId);
+
   return (
     <div className="p-3 md:p-4 border-b border-gray-200 bg-white flex items-center gap-2 md:gap-3">
       {/* Hamburger Menu (Mobile Only) */}
@@ -62,18 +67,30 @@ export function ChatHeader({
         </button>
       )}
 
-      <Avatar className="w-10 h-10 md:w-12 md:h-12">
-        <AvatarImage src={conversation.avatarUrl} />
-        <AvatarFallback className="bg-viber-purple text-white font-semibold">
-          {conversationTitle.charAt(0).toUpperCase()}
-        </AvatarFallback>
-      </Avatar>
+      {/* Avatar with Online Indicator */}
+      <div className="relative">
+        <Avatar className="w-10 h-10 md:w-12 md:h-12">
+          <AvatarImage src={conversation.avatarUrl} />
+          <AvatarFallback className="bg-viber-purple text-white font-semibold">
+            {conversationTitle.charAt(0).toUpperCase()}
+          </AvatarFallback>
+        </Avatar>
+        {/* Online indicator for DM conversations */}
+        {conversation.type === 'dm' && (
+          <OnlineIndicator isOnline={isOtherUserOnline} size="md" />
+        )}
+      </div>
 
       <div className="flex-1 min-w-0">
         <h1 className="text-base md:text-lg font-semibold truncate">{conversationTitle}</h1>
-        {conversation.type === 'group' && (
+        {conversation.type === 'group' ? (
           <p className="text-xs md:text-sm text-gray-500">
             {conversation.members.length} member{conversation.members.length > 1 ? 's' : ''}
+          </p>
+        ) : (
+          /* Online status text for DM conversations (Messenger-style) */
+          <p className="text-xs md:text-sm text-gray-500">
+            {isOtherUserOnline ? 'Active now' : 'Offline'}
           </p>
         )}
       </div>

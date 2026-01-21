@@ -245,6 +245,39 @@ class UserService {
     if (typeof window === 'undefined') return;
     localStorage.removeItem(STORAGE_KEYS.USER_DATA);
   }
+
+  /**
+   * Get list of currently online user IDs.
+   * Used for displaying online status indicators (green dots).
+   *
+   * @returns Promise<string[]> Array of online user IDs (local UUIDs)
+   *
+   * @example
+   * const onlineUserIds = await userService.getOnlineUsers();
+   * const isUserOnline = onlineUserIds.includes(userId);
+   */
+  async getOnlineUsers(): Promise<string[]> {
+    try {
+      const apiBaseUrl = getApiBaseUrl();
+      const token = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN) : null;
+
+      const response = await fetch(`${apiBaseUrl}/users/presence/online`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch online users: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      log.error('Failed to fetch online users:', error);
+      return []; // Return empty array on error to prevent UI crashes
+    }
+  }
 }
 
 // Export singleton instance

@@ -5,17 +5,47 @@
 
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, Suspense, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { MessageCircle, Search, Plus, FileText } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { OnlineIndicator } from '@/components/ui/OnlineIndicator';
 import { formatSidebarTimestamp } from '@/lib/dateUtils';
 import { useConversations, useConversationSearch } from '@/features/conversations';
 import { useUnifiedSearch } from '@/features/messaging/hooks/useUnifiedSearch';
 import { useDebounce } from '@/hooks/useDebounce';
+import { useCurrentUser } from '@/features/users/hooks/useCurrentUser';
+import { useIsUserOnline } from '@/hooks/usePresence';
 import NewConversationDialog from '@/features/conversations/components/NewConversationDialog';
+import type { Conversation } from '@/types/conversation';
+
+/**
+ * Helper component to display online indicator for a conversation.
+ * Only shows for DM conversations when the other user is online.
+ */
+function ConversationOnlineIndicator({
+  conversation,
+  currentUserId,
+}: {
+  conversation: Conversation;
+  currentUserId: string | undefined;
+}) {
+  // Get the other user's ID for DM conversations
+  const otherUserId = useMemo(() => {
+    if (conversation.type !== 'dm' || !currentUserId) return undefined;
+    const otherMember = conversation.members.find(m => m.userId !== currentUserId);
+    return otherMember?.userId;
+  }, [conversation, currentUserId]);
+
+  const isOnline = useIsUserOnline(otherUserId);
+
+  // Only show indicator for DM conversations
+  if (conversation.type !== 'dm') return null;
+
+  return <OnlineIndicator isOnline={isOnline} size="md" />;
+}
 
 function ConversationListContent() {
   const router = useRouter();
@@ -24,6 +54,9 @@ function ConversationListContent() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewConversationDialog, setShowNewConversationDialog] = useState(false);
+
+  // Get current user for determining "other" user in DM conversations
+  const { user: currentUser } = useCurrentUser();
 
   // Use custom hook for conversations
   const {
@@ -207,7 +240,7 @@ function ConversationListContent() {
                   selectedId === conversation.id ? 'bg-viber-purple-bg' : ''
                 }`}
               >
-                {/* Avatar */}
+                {/* Avatar with Online Indicator */}
                 <div className="relative">
                   <Avatar className="w-12 h-12">
                     <AvatarImage src={conversation.avatarUrl} />
@@ -215,6 +248,12 @@ function ConversationListContent() {
                       {getInitials(conversation.display_name || conversation.name || 'Chat')}
                     </AvatarFallback>
                   </Avatar>
+                  {/* Online indicator (Messenger-style green dot) */}
+                  <ConversationOnlineIndicator
+                    conversation={conversation}
+                    currentUserId={currentUser?.id}
+                  />
+                  {/* Unread badge - positioned at top-right, above online indicator */}
                   {conversation.unreadCount && conversation.unreadCount > 0 && (
                     <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
                       {conversation.unreadCount > 9 ? '9+' : conversation.unreadCount}
