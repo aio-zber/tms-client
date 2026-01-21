@@ -53,7 +53,7 @@ export async function deleteMessage(
   deleteForEveryone: boolean = false
 ): Promise<void> {
   return apiClient.delete<void>(`${BASE_PATH}/${messageId}`, {
-    data: { delete_for_everyone: deleteForEveryone }
+    delete_for_everyone: deleteForEveryone
   });
 }
 
