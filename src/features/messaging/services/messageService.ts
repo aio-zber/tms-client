@@ -44,10 +44,17 @@ export async function editMessage(
 }
 
 /**
- * Delete a message
+ * Delete a message (Messenger-style)
+ * @param messageId - ID of the message to delete
+ * @param deleteForEveryone - If true, delete for all users (sender only). If false, delete only for yourself.
  */
-export async function deleteMessage(messageId: string): Promise<void> {
-  return apiClient.delete<void>(`${BASE_PATH}/${messageId}`);
+export async function deleteMessage(
+  messageId: string,
+  deleteForEveryone: boolean = false
+): Promise<void> {
+  return apiClient.delete<void>(`${BASE_PATH}/${messageId}`, {
+    data: { delete_for_everyone: deleteForEveryone }
+  });
 }
 
 /**
