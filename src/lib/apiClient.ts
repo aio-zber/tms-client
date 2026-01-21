@@ -170,12 +170,14 @@ class ApiClient {
 
   /**
    * Perform DELETE request.
+   * Optionally accepts a body for DELETE requests that require data.
    */
-  async delete<T>(endpoint: string): Promise<T> {
+  async delete<T, D = unknown>(endpoint: string, data?: D): Promise<T> {
     const response = await fetch(`${this.getBaseURL()}${endpoint}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
       credentials: 'include', // Include session cookies
+      body: data ? JSON.stringify(data) : undefined,
     });
 
     return this.handleResponse<T>(response);
