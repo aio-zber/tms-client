@@ -186,9 +186,10 @@ export function Chat({
         : 'Delete this message for you? Others will still see it.';
 
       if (confirm(confirmMsg)) {
-        await deleteMessage(messageId);
-        // Backend will create and broadcast system message automatically
-        // No need to refresh - WebSocket will push both the deletion and system message
+        await deleteMessage(messageId, scope);
+        // Backend will handle the deletion appropriately based on scope
+        // - 'everyone': Sets deletedAt, broadcasts to all users (shows placeholder)
+        // - 'me': Adds to user_deleted_messages table (only affects current user)
       }
     },
     [deleteMessage]

@@ -28,7 +28,7 @@ export const isPendingReaction = (messageId: string, emoji: string, action: 'add
 
 interface UseMessageActionsReturn {
   editMessage: (messageId: string, data: EditMessageRequest) => Promise<Message | null>;
-  deleteMessage: (messageId: string) => Promise<boolean>;
+  deleteMessage: (messageId: string, scope?: 'me' | 'everyone') => Promise<boolean>;
   addReaction: (messageId: string, emoji: string) => Promise<boolean>;
   removeReaction: (messageId: string, emoji: string) => Promise<boolean>;
   switchReaction: (messageId: string, oldEmoji: string, newEmoji: string) => Promise<boolean>;
@@ -133,9 +133,11 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
     [queryClient]
   );
 
-  const deleteMessage = useCallback(async (messageId: string) => {
+  const deleteMessage = useCallback(async (messageId: string, scope: 'me' | 'everyone' = 'me') => {
     setLoading(true);
     setError(null);
+
+    const deleteForEveryone = scope === 'everyone';
 
     // Mark as pending to prevent WebSocket handler from overwriting optimistic update
     pendingDeletes.add(messageId);
@@ -149,7 +151,7 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
     const previousData: Array<[unknown[], unknown]> = [];
 
     try {
-      // OPTIMISTIC UPDATE: Remove message from cache immediately
+      // OPTIMISTIC UPDATE: Handle differently based on scope
       allQueries.forEach(([queryKey]) => {
         const oldData = queryClient.getQueryData(queryKey);
 
@@ -157,29 +159,40 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
           // Store for rollback
           previousData.push([queryKey as unknown[], oldData]);
 
-          // Optimistically remove the message from cache
           queryClient.setQueryData(queryKey, (old: unknown) => {
             if (!old || typeof old !== 'object') return old;
 
             const cachedData = old as { pages: Array<{ data: Message[] }>; pageParams: unknown[] };
 
-            return {
-              ...cachedData,
-              pages: cachedData.pages.map((page) => ({
-                ...page,
-                data: page.data.filter((msg) => msg.id !== messageId),
-              })),
-            };
+            if (deleteForEveryone) {
+              // Delete for Everyone: Set deletedAt to show placeholder (Messenger-style)
+              return {
+                ...cachedData,
+                pages: cachedData.pages.map((page) => ({
+                  ...page,
+                  data: page.data.map((msg) =>
+                    msg.id === messageId
+                      ? { ...msg, deletedAt: new Date().toISOString() }
+                      : msg
+                  ),
+                })),
+              };
+            } else {
+              // Delete for Me: Remove message from cache (only affects current user)
+              return {
+                ...cachedData,
+                pages: cachedData.pages.map((page) => ({
+                  ...page,
+                  data: page.data.filter((msg) => msg.id !== messageId),
+                })),
+              };
+            }
           });
         }
       });
 
-      
-
       // Now make the actual API call in background
-      await messageService.deleteMessage(messageId);
-
-      
+      await messageService.deleteMessage(messageId, deleteForEveryone);
 
       // Clear pending flag immediately
       pendingDeletes.delete(messageId);
