@@ -13,8 +13,6 @@ import { MessageBubble } from './MessageBubble';
 import { Loader2, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Message } from '@/types/message';
-import { useMessageVisibilityBatch } from '../hooks/useMessageVisibility';
-import { useInView } from 'react-intersection-observer';
 
 interface MessageListProps {
   messages: Message[];
@@ -22,7 +20,7 @@ interface MessageListProps {
   isFetchingNextPage?: boolean;
   hasMore: boolean;
   currentUserId: string;
-  conversationId?: string; // Added for auto-mark-read
+  conversationId?: string;
   onLoadMore?: () => void;
   onEdit?: (messageId: string) => void;
   onDelete?: (messageId: string, scope: 'me' | 'everyone') => void;
@@ -32,7 +30,6 @@ interface MessageListProps {
   isGroupChat?: boolean;
   highlightedMessageId?: string | null;
   registerMessageRef?: (messageId: string, element: HTMLElement | null) => void;
-  enableAutoRead?: boolean; // Toggle for auto-mark-read feature
   searchQuery?: string; // Search query for highlighting text
   searchHighlightId?: string | null; // ID of the currently highlighted search result
 }
@@ -43,10 +40,11 @@ interface MessageGroup {
 }
 
 /**
- * MessageWithVisibility - Extracted component to prevent infinite re-renders
- * Wraps MessageBubble with intersection observer for auto-read tracking
+ * MessageItem - Wrapper component for consistent message rendering
+ * Note: Read tracking is now handled at conversation level (Messenger-style)
+ * when user opens the conversation, not per-message visibility.
  */
-interface MessageWithVisibilityProps {
+interface MessageItemProps {
   message: Message;
   isSent: boolean;
   showSender: boolean;
@@ -60,12 +58,9 @@ interface MessageWithVisibilityProps {
   searchQuery?: string;
   isHighlighted: boolean;
   isSearchHighlighted: boolean;
-  enableAutoRead: boolean;
-  conversationId?: string;
-  trackMessage: (messageId: string) => void;
 }
 
-const MessageWithVisibility = memo(function MessageWithVisibility({
+const MessageItem = memo(function MessageItem({
   message,
   isSent,
   showSender,
@@ -79,58 +74,11 @@ const MessageWithVisibility = memo(function MessageWithVisibility({
   searchQuery,
   isHighlighted,
   isSearchHighlighted,
-  enableAutoRead,
-  conversationId,
-  trackMessage,
-}: MessageWithVisibilityProps) {
-  const { ref, inView } = useInView({
-    threshold: 0.5, // 50% visible
-    triggerOnce: false,
-  });
-
-  // Track visibility after 1 second delay
-  useEffect(() => {
-    log.message.debug('[MessageVisibility] Effect triggered:', {
-      messageId: message.id,
-      inView,
-      isSent,
-      messageStatus: message.status,
-      enableAutoRead,
-      hasConversationId: !!conversationId
-    });
-
-    // FIX: Removed isSent check - user can mark their own messages as read
-    // This allows unread count to clear when user views the conversation
-    if (!enableAutoRead || !conversationId || message.status === 'read') {
-      log.message.debug('[MessageVisibility] Skipping mark-as-read:', {
-        reason: !enableAutoRead ? 'autoRead disabled' :
-                !conversationId ? 'no conversationId' :
-                'already read'
-      });
-      return;
-    }
-
-    if (inView) {
-      log.message.debug('[MessageVisibility] Message visible, scheduling mark-as-read in 1s:', message.id);
-      const timer = setTimeout(() => {
-        // Double-check still visible after delay
-        if (inView) {
-          log.message.debug('[MessageVisibility] ✅ Calling trackMessage for:', message.id);
-          trackMessage(message.id);
-        }
-      }, 1000); // 1 second delay (Telegram/Messenger pattern)
-
-      return () => clearTimeout(timer);
-    }
-  }, [inView, message.status, message.id, enableAutoRead, conversationId, trackMessage, isSent]);
-
+}: MessageItemProps) {
   return (
     <div
-      ref={ref}
       className={`transition-all duration-300 ${
-        isHighlighted
-          ? 'bg-yellow-100 rounded-lg p-2 -m-2 animate-pulse'
-          : ''
+        isHighlighted ? 'bg-yellow-100 rounded-lg p-2 -m-2 animate-pulse' : ''
       }`}
     >
       <MessageBubble
@@ -168,7 +116,6 @@ export function MessageList({
   isGroupChat = false,
   highlightedMessageId = null,
   registerMessageRef,
-  enableAutoRead = true,
   searchQuery,
   searchHighlightId,
 }: MessageListProps) {
@@ -182,11 +129,8 @@ export function MessageList({
   const isLoadingMoreRef = useRef(false); // Prevent infinite scroll loop
   const initialLoadRef = useRef(true); // Track initial conversation load
 
-  // Auto-mark-read with batched Intersection Observer (Telegram/Messenger pattern)
-  const { trackMessage } = useMessageVisibilityBatch(
-    conversationId || '',
-    currentUserId
-  );
+  // Note: Read tracking is now handled at conversation level in Chat.tsx
+  // when user opens conversation (Messenger-style), not per-message visibility.
 
   // Debug logging
   log.message.debug('[MessageList] Props received:', { 
@@ -441,7 +385,7 @@ export function MessageList({
 
                 return (
                   <div key={message.id} ref={(el) => registerMessageRef?.(message.id, el)}>
-                    <MessageWithVisibility
+                    <MessageItem
                       message={message}
                       isSent={isSent}
                       showSender={showSender}
@@ -455,9 +399,6 @@ export function MessageList({
                       searchQuery={searchQuery}
                       isHighlighted={isHighlighted}
                       isSearchHighlighted={isSearchHighlighted}
-                      enableAutoRead={enableAutoRead}
-                      conversationId={conversationId}
-                      trackMessage={trackMessage}
                     />
                   </div>
                 );

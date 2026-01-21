@@ -64,6 +64,9 @@ export function Chat({
   useSocket(); // Initialize WebSocket connection
   useConversationEvents({ conversationId }); // Handle real-time conversation updates
 
+  // Note: READ status is now handled automatically by backend when user joins conversation room
+  // via the join_conversation WebSocket event (Messenger-style pattern)
+
   // Jump to message hook for search navigation
   const {
     jumpToMessage,
