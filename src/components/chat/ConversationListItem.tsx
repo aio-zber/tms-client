@@ -2,10 +2,12 @@
 
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { OnlineIndicator } from '@/components/ui/OnlineIndicator';
 import type { Conversation } from '@/types';
 import { formatSidebarTimestamp } from '@/lib/dateUtils';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { useIsUserOnline } from '@/hooks/usePresence';
 
 interface ConversationListItemProps {
   conversation: Conversation;
@@ -21,6 +23,20 @@ const getNameInitials = (name: string): string => {
     .join('')
     .toUpperCase()
     .slice(0, 2) || 'U';
+};
+
+// Helper function to get the other user's ID in a DM conversation
+const getOtherUserId = (
+  conversation: Conversation,
+  currentUserId?: string
+): string | undefined => {
+  if (conversation.type !== 'dm' || !conversation.members) {
+    return undefined;
+  }
+  const otherMember = conversation.members.find(
+    (m) => m.userId !== currentUserId
+  );
+  return otherMember?.userId;
 };
 
 // Helper function to get conversation display name
@@ -82,6 +98,10 @@ export function ConversationListItem({
 
   const displayName = getConversationDisplayName(conversation, currentUserId);
 
+  // Get other user's online status for DM conversations (Messenger-style)
+  const otherUserId = getOtherUserId(conversation, currentUserId);
+  const isOtherUserOnline = useIsUserOnline(otherUserId);
+
   const handleClick = () => {
     router.push(`/chats/${conversation.id}`);
   };
@@ -101,8 +121,8 @@ export function ConversationListItem({
             {getNameInitials(displayName)}
           </AvatarFallback>
         </Avatar>
-        {/* Online indicator - mock as online for now */}
-        <div className="absolute bottom-0 right-0 w-3 h-3 bg-viber-online border-2 border-white rounded-full" />
+        {/* Online indicator - only shown for DM conversations when other user is online */}
+        <OnlineIndicator isOnline={isOtherUserOnline} size="md" />
       </div>
 
       {/* Content */}
