@@ -112,9 +112,10 @@ export function MessageInput({
       }
       setContent('');
 
-      // Reset textarea height
+      // Reset textarea height and refocus (Messenger/Telegram pattern)
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
+        textareaRef.current.focus();
       }
     } catch (error) {
       log.error('Failed to send/edit message:', error);
@@ -124,7 +125,12 @@ export function MessageInput({
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      // If file is selected, send file; otherwise send text (Messenger/Telegram pattern)
+      if (selectedFile) {
+        handleFileUpload();
+      } else {
+        handleSend();
+      }
     } else if (e.key === 'Escape' && editingMessage && onCancelEdit) {
       e.preventDefault();
       onCancelEdit();
@@ -169,11 +175,12 @@ export function MessageInput({
         onProgress: (progress) => setUploadProgress(progress),
       });
 
-      // Success - clear file and reply
+      // Success - clear file and reply, refocus input (Messenger/Telegram pattern)
       setSelectedFile(null);
       setUploadProgress(0);
       if (onCancelReply) onCancelReply();
       toast.success('File uploaded successfully');
+      textareaRef.current?.focus();
     } catch (error) {
       log.error('Failed to upload file:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to upload file');

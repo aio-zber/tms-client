@@ -38,7 +38,7 @@ export const CLOUDINARY_UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOA
 
 // Message Configuration
 export const MAX_MESSAGE_LENGTH = 10000;
-export const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+export const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 export const ALLOWED_FILE_TYPES = [
   'image/jpeg',
   'image/png',
