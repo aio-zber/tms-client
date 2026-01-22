@@ -15,7 +15,8 @@ const config: Config = {
   				purple: '#7360F2',
   				'purple-dark': '#665DC1',
   				'purple-light': '#9B8FFF',
-  				'purple-bg': '#F5F3FF'
+  				'purple-bg': '#F5F3FF',
+  				online: '#10B981'
   			},
   			status: {
   				online: '#10B981',

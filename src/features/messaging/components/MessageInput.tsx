@@ -112,13 +112,17 @@ export function MessageInput({
       }
       setContent('');
 
-      // Reset textarea height and refocus (Messenger/Telegram pattern)
+      // Reset textarea height
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
-        textareaRef.current.focus();
       }
     } catch (error) {
       log.error('Failed to send/edit message:', error);
+    } finally {
+      // Refocus after React render cycle completes (Messenger/Telegram pattern)
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 0);
     }
   };
 
@@ -175,17 +179,20 @@ export function MessageInput({
         onProgress: (progress) => setUploadProgress(progress),
       });
 
-      // Success - clear file and reply, refocus input (Messenger/Telegram pattern)
+      // Success - clear file and reply
       setSelectedFile(null);
       setUploadProgress(0);
       if (onCancelReply) onCancelReply();
       toast.success('File uploaded successfully');
-      textareaRef.current?.focus();
     } catch (error) {
       log.error('Failed to upload file:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to upload file');
     } finally {
       setIsUploading(false);
+      // Refocus after React render cycle completes (Messenger/Telegram pattern)
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 0);
     }
   };
 
