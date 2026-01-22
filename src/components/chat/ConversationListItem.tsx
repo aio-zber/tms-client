@@ -115,7 +115,7 @@ export function ConversationListItem({
       )}
     >
       {/* Avatar */}
-      <div className="relative shrink-0">
+      <div className="relative shrink-0 overflow-visible">
         <Avatar className="h-12 w-12">
           <AvatarFallback className="bg-viber-purple text-white font-semibold">
             {getNameInitials(displayName)}
