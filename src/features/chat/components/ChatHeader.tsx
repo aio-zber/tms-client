@@ -68,7 +68,7 @@ export function ChatHeader({
       )}
 
       {/* Avatar with Online Indicator */}
-      <div className="relative">
+      <div className="relative overflow-visible">
         <Avatar className="w-10 h-10 md:w-12 md:h-12">
           <AvatarImage src={conversation.avatarUrl} />
           <AvatarFallback className="bg-viber-purple text-white font-semibold">
