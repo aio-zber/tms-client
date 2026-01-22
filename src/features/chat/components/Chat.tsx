@@ -25,6 +25,7 @@ import { useLeaveConversation } from '@/features/conversations/hooks/useLeaveCon
 import { useUserDisplayName } from '@/features/users/hooks/useUserDisplayName';
 import ConversationSettingsDialog from '@/features/conversations/components/ConversationSettingsDialog';
 import { useConversationEvents } from '@/features/conversations/hooks/useConversationEvents';
+import { conversationService } from '@/features/conversations/services/conversationService';
 import { ChatHeader } from './ChatHeader';
 import { UserProfileDialog } from '@/features/users/components/UserProfileDialog';
 
@@ -64,8 +65,15 @@ export function Chat({
   useSocket(); // Initialize WebSocket connection
   useConversationEvents({ conversationId }); // Handle real-time conversation updates
 
-  // Note: READ status is now handled automatically by backend when user joins conversation room
-  // via the join_conversation WebSocket event (Messenger-style pattern)
+  // Mark conversation as read when opening (Messenger-style pattern)
+  // This triggers the backend to update all unread messages to READ status
+  useEffect(() => {
+    if (conversationId && currentUserId) {
+      conversationService.markConversationAsRead(conversationId).catch((error) => {
+        log.error('[Chat] Failed to mark conversation as read:', error);
+      });
+    }
+  }, [conversationId, currentUserId]);
 
   // Jump to message hook for search navigation
   const {
