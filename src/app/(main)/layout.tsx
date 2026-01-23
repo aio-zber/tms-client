@@ -9,6 +9,7 @@ import { NotificationCenter } from '@/features/notifications';
 import { useNotificationEvents } from '@/features/notifications';
 import { ConnectionStatus } from '@/components/ConnectionStatus';
 import { usePresenceInit } from '@/hooks/usePresence';
+import { SocketProvider } from '@/components/providers/SocketProvider';
 
 export default function MainLayout({
   children,
@@ -51,49 +52,51 @@ export default function MainLayout({
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
-      {/* App Header with Settings */}
-      <AppHeader />
+    <SocketProvider>
+      <div className="h-screen flex flex-col bg-gray-50">
+        {/* App Header with Settings */}
+        <AppHeader />
 
-      {/* Notification Center Dialog */}
-      <NotificationCenter />
+        {/* Notification Center Dialog */}
+        <NotificationCenter />
 
-      {/* WebSocket Connection Status Indicator */}
-      <ConnectionStatus />
+        {/* WebSocket Connection Status Indicator */}
+        <ConnectionStatus />
 
-      {/* Main Content Area */}
-      <div className="flex-1 overflow-hidden">
-        {/* Desktop: 2-column layout */}
-        <div className="hidden lg:grid lg:grid-cols-[400px_1fr] h-full">
-          {/* Center Panel - Messages/Conversations List */}
-          <aside className="bg-white border-r border-gray-200">
-            <CenterPanel />
-          </aside>
+        {/* Main Content Area */}
+        <div className="flex-1 overflow-hidden">
+          {/* Desktop: 2-column layout */}
+          <div className="hidden lg:grid lg:grid-cols-[400px_1fr] h-full">
+            {/* Center Panel - Messages/Conversations List */}
+            <aside className="bg-white border-r border-gray-200">
+              <CenterPanel />
+            </aside>
 
-          {/* Right Panel - Chat View (children) */}
-          <main className="bg-gray-50 overflow-hidden">
-            {isChatsRoute ? (
-              children
-            ) : (
-              <div className="h-full flex items-center justify-center">
-                <div className="text-center">
-                  <p className="text-gray-500 text-lg mb-2">
-                    Select a conversation to start messaging
-                  </p>
-                  <p className="text-gray-400 text-sm">
-                    Choose from your conversations on the left
-                  </p>
+            {/* Right Panel - Chat View (children) */}
+            <main className="bg-gray-50 overflow-hidden">
+              {isChatsRoute ? (
+                children
+              ) : (
+                <div className="h-full flex items-center justify-center">
+                  <div className="text-center">
+                    <p className="text-gray-500 text-lg mb-2">
+                      Select a conversation to start messaging
+                    </p>
+                    <p className="text-gray-400 text-sm">
+                      Choose from your conversations on the left
+                    </p>
+                  </div>
                 </div>
-              </div>
-            )}
-          </main>
-        </div>
+              )}
+            </main>
+          </div>
 
-        {/* Mobile/Tablet: Stack layout (will be enhanced later) */}
-        <div className="lg:hidden h-full">
-          {children}
+          {/* Mobile/Tablet: Stack layout (will be enhanced later) */}
+          <div className="lg:hidden h-full">
+            {children}
+          </div>
         </div>
       </div>
-    </div>
+    </SocketProvider>
   );
 }

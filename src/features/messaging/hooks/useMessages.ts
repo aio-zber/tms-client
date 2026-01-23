@@ -3,9 +3,14 @@
  * Manages message fetching and state for a conversation
  * Now uses TanStack Query for proper cache management and server state sync
  * Includes deduplication logic to prevent WebSocket race conditions
+ *
+ * Messenger/Telegram pattern:
+ * - Waits for socket connection before attaching listeners
+ * - Re-attaches listeners on reconnection
+ * - Auto-joins conversation room when socket connects
  */
 
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { socketClient } from '@/lib/socket';
 import { queryKeys } from '@/lib/queryClient';
@@ -14,6 +19,58 @@ import { isPendingDelete } from './useMessageActions';
 import { nowUTC } from '@/lib/dateUtils';
 import type { Message } from '@/types/message';
 import { log } from '@/lib/logger';
+
+/**
+ * Hook to get socket ready state
+ * Tries to use SocketProvider context, falls back to direct socket check
+ */
+function useSocketReadyState(): boolean {
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    // Check immediately
+    if (socketClient.isConnected()) {
+      setIsReady(true);
+      return;
+    }
+
+    // Listen for connection
+    const socket = socketClient.getSocket();
+    if (!socket) {
+      // Socket not initialized yet, wait for it
+      const checkInterval = setInterval(() => {
+        if (socketClient.isConnected()) {
+          setIsReady(true);
+          clearInterval(checkInterval);
+        }
+      }, 100);
+
+      return () => clearInterval(checkInterval);
+    }
+
+    const handleConnect = () => {
+      // Add small delay to ensure socket is fully ready
+      setTimeout(() => setIsReady(true), 50);
+    };
+
+    const handleDisconnect = () => setIsReady(false);
+
+    socket.on('connect', handleConnect);
+    socket.on('disconnect', handleDisconnect);
+
+    // Check if already connected
+    if (socket.connected) {
+      handleConnect();
+    }
+
+    return () => {
+      socket.off('connect', handleConnect);
+      socket.off('disconnect', handleDisconnect);
+    };
+  }, []);
+
+  return isReady;
+}
 
 interface UseMessagesOptions {
   limit?: number;
@@ -39,8 +96,14 @@ export function useMessages(
   const { limit = 50, autoLoad = true } = options;
   const queryClient = useQueryClient();
 
+  // Get socket ready state - this ensures socket is connected before we use it
+  const isSocketReady = useSocketReadyState();
+
   // Track if we've already attempted to fix missing sequence numbers to prevent infinite loop
   const hasAttemptedFixRef = useRef<Record<string, boolean>>({});
+
+  // Track if listeners have been attached for this conversation
+  const listenersAttachedRef = useRef<string | null>(null);
 
   // Use TanStack Query infinite query
   const {
@@ -115,34 +178,45 @@ export function useMessages(
   }, [queryClient, conversationId, limit]);
 
   // WebSocket: Real-time message updates with query invalidation
+  // CRITICAL: Wait for socket to be ready before attaching listeners
+  // This ensures the socket is connected and stable before we try to use it
   useEffect(() => {
     if (!conversationId) return;
 
-    const socket = socketClient.getSocket();
-    if (!socket) {
-      log.ws.warn('Socket not initialized');
+    // Wait for socket to be ready before proceeding
+    // This prevents race conditions where listeners are attached before connection
+    if (!isSocketReady) {
+      log.ws.debug('[useMessages] Waiting for socket to be ready...');
       return;
     }
 
-    let hasJoined = false;
-
-    // Join the conversation room
-    const joinRoom = () => {
-      if (hasJoined) return;
-      socketClient.joinConversation(conversationId);
-      hasJoined = true;
-    };
-
-    // Try to join immediately if already connected
-    if (socketClient.isConnected()) {
-      joinRoom();
+    const socket = socketClient.getSocket();
+    if (!socket) {
+      log.ws.warn('[useMessages] Socket not available despite ready state');
+      return;
     }
 
-    // Listen for connection events in case we're not connected yet
+    // Prevent duplicate listener attachment for the same conversation
+    if (listenersAttachedRef.current === conversationId) {
+      log.ws.debug('[useMessages] Listeners already attached for conversation:', conversationId);
+      return;
+    }
+
+    log.ws.info('[useMessages] Attaching socket listeners for conversation:', conversationId);
+    listenersAttachedRef.current = conversationId;
+
+    // Join the conversation room immediately since socket is ready
+    socketClient.joinConversation(conversationId);
+
+    // Handle reconnection - re-join room and refresh data
     const handleConnect = () => {
-      if (!hasJoined) {
-        joinRoom();
-      }
+      log.ws.info('[useMessages] Socket reconnected - rejoining conversation and refreshing:', conversationId);
+      socketClient.joinConversation(conversationId);
+
+      // Refresh messages to catch any missed during disconnection
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.messages.list(conversationId, { limit }),
+      });
     };
 
     socket.on('connect', handleConnect);
@@ -542,21 +616,23 @@ export function useMessages(
 
     // Cleanup
     return () => {
+      log.ws.info('[useMessages] Cleaning up socket listeners for conversation:', conversationId);
+      listenersAttachedRef.current = null;
       socketClient.leaveConversation(conversationId);
       socketClient.off('new_message', handleNewMessage);
       socketClient.off('message_edited', handleMessageEdited);
       socketClient.off('message_deleted', handleMessageDeleted);
       socketClient.off('reaction_added', handleReactionAdded);
       socketClient.off('reaction_removed', handleReactionRemoved);
-      socketClient.off('message_status', handleMessageStatus); // Remove status listener
-      socket.off('messages_delivered', handleMessagesDelivered); // Remove bulk delivered listener
-      socket.off('messages_read', handleMessagesRead); // Remove bulk read listener
-      socketClient.off('new_poll', handleNewPoll); // Remove poll event listeners
+      socketClient.off('message_status', handleMessageStatus);
+      socket.off('messages_delivered', handleMessagesDelivered);
+      socket.off('messages_read', handleMessagesRead);
+      socketClient.off('new_poll', handleNewPoll);
       socketClient.off('poll_vote_added', handlePollVote);
       socketClient.off('poll_closed', handlePollClosed);
       socket.off('connect', handleConnect);
     };
-  }, [conversationId, queryClient, limit]);
+  }, [conversationId, queryClient, limit, isSocketReady]);
 
   return {
     messages,
