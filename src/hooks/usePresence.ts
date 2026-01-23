@@ -7,9 +7,10 @@
  * - User goes offline when all their connections are closed
  * - Initial load fetches current online users from API
  * - Real-time updates via user_online/user_offline socket events
+ * - Properly waits for socket connection before attaching listeners
  */
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { create } from 'zustand';
 import { socketClient } from '@/lib/socket';
 import { userService } from '@/features/users/services/userService';
@@ -69,9 +70,46 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
 /**
  * Hook to initialize and manage presence tracking.
  * Call this once at the app level (e.g., in layout or main chat component).
+ * Properly waits for socket connection before attaching listeners.
  */
 export function usePresenceInit() {
   const { setOnlineUsers, addOnlineUser, removeOnlineUser } = usePresenceStore();
+  const [isSocketReady, setIsSocketReady] = useState(false);
+
+  // Monitor socket connection state
+  useEffect(() => {
+    // Check immediately
+    if (socketClient.isConnected()) {
+      setIsSocketReady(true);
+      return;
+    }
+
+    // Wait for socket to be ready
+    const checkInterval = setInterval(() => {
+      const socket = socketClient.getSocket();
+      if (socket?.connected) {
+        setIsSocketReady(true);
+        clearInterval(checkInterval);
+      }
+    }, 100);
+
+    // Also listen for connect event once socket is available
+    const socket = socketClient.getSocket();
+    if (socket) {
+      const handleConnect = () => setIsSocketReady(true);
+      const handleDisconnect = () => setIsSocketReady(false);
+      socket.on('connect', handleConnect);
+      socket.on('disconnect', handleDisconnect);
+
+      return () => {
+        clearInterval(checkInterval);
+        socket.off('connect', handleConnect);
+        socket.off('disconnect', handleDisconnect);
+      };
+    }
+
+    return () => clearInterval(checkInterval);
+  }, []);
 
   // Fetch initial online users
   const fetchOnlineUsers = useCallback(async () => {
@@ -85,9 +123,24 @@ export function usePresenceInit() {
     }
   }, [setOnlineUsers]);
 
+  // Set up socket listeners once socket is ready
   useEffect(() => {
-    // Fetch initial online users on mount
+    // Fetch initial online users immediately (doesn't require socket)
     fetchOnlineUsers();
+
+    // Wait for socket to be ready before attaching listeners
+    if (!isSocketReady) {
+      log.debug('[Presence] Waiting for socket to be ready...');
+      return;
+    }
+
+    const socket = socketClient.getSocket();
+    if (!socket) {
+      log.warn('[Presence] Socket not available despite ready state');
+      return;
+    }
+
+    log.info('[Presence] Socket ready, attaching presence listeners');
 
     // Set up WebSocket event listeners for real-time updates
     const handleUserOnline = (data: Record<string, unknown>) => {
@@ -104,26 +157,24 @@ export function usePresenceInit() {
       }
     };
 
-    // Register listeners
-    socketClient.onUserOnline(handleUserOnline);
-    socketClient.onUserOffline(handleUserOffline);
-
-    // Also re-fetch on reconnect to ensure sync
-    const socket = socketClient.getSocket();
+    // Handle reconnection - refresh online users to sync state
     const handleReconnect = () => {
-      log.debug('[Presence] Reconnected, refreshing online users');
+      log.info('[Presence] Socket reconnected, refreshing online users');
       fetchOnlineUsers();
     };
 
-    socket?.on('connect', handleReconnect);
+    // Register listeners
+    socketClient.onUserOnline(handleUserOnline);
+    socketClient.onUserOffline(handleUserOffline);
+    socket.on('connect', handleReconnect);
 
     return () => {
       // Clean up listeners
       socketClient.off('user_online', handleUserOnline);
       socketClient.off('user_offline', handleUserOffline);
-      socket?.off('connect', handleReconnect);
+      socket.off('connect', handleReconnect);
     };
-  }, [fetchOnlineUsers, addOnlineUser, removeOnlineUser]);
+  }, [fetchOnlineUsers, addOnlineUser, removeOnlineUser, isSocketReady]);
 }
 
 /**

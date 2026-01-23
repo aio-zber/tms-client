@@ -1,6 +1,15 @@
 /**
  * useSocket Hook
- * Manages Socket.IO connection with authentication
+ * Provides access to Socket.IO connection state and methods.
+ *
+ * This hook works with the SocketProvider to ensure the socket
+ * is properly initialized before use. It tracks connection state
+ * and provides methods for joining/leaving conversations and typing indicators.
+ *
+ * Messenger/Telegram pattern:
+ * - Socket connects early via SocketProvider
+ * - This hook provides access to connection state
+ * - Components can use this to know when socket is ready
  */
 
 import { log } from '@/lib/logger';
@@ -15,61 +24,87 @@ export function useSocket() {
     const token = localStorage.getItem('auth_token');
 
     if (!token) {
-      log.warn('[Socket] No auth token found - cannot connect');
+      log.warn('[useSocket] No auth token found - cannot connect');
       setIsConnecting(false);
       return;
     }
 
-    log.debug('[Socket] Initializing WebSocket connection...');
-    log.debug('[Socket] Token preview (first 30 chars):', token.substring(0, 30) + '...');
-    log.debug('[Socket] Token length:', token.length);
+    // Check if already connected (via SocketProvider)
+    if (socketClient.isConnected()) {
+      log.debug('[useSocket] Socket already connected via SocketProvider');
+      setIsConnected(true);
+      setIsConnecting(false);
+    } else {
+      // Initialize connection if not already done by SocketProvider
+      log.debug('[useSocket] Initializing WebSocket connection...');
+      socketClient.connect(token);
+    }
 
-    const socket = socketClient.connect(token);
+    const socket = socketClient.getSocket();
+    if (!socket) {
+      log.warn('[useSocket] Socket not initialized');
+      setIsConnecting(false);
+      return;
+    }
 
     // Update connection status
-    socket.on('connect', () => {
-      log.debug('[Socket] WebSocket connected successfully');
+    const handleConnect = () => {
+      log.debug('[useSocket] WebSocket connected successfully');
       setIsConnected(true);
       setIsConnecting(false);
-    });
+    };
 
-    socket.on('disconnect', () => {
-      log.debug('[Socket] WebSocket disconnected');
+    const handleDisconnect = () => {
+      log.debug('[useSocket] WebSocket disconnected');
       setIsConnected(false);
       setIsConnecting(false);
-    });
+    };
 
-    socket.on('connect_error', (error) => {
-      log.error('[Socket] Connection error:', error.message);
+    const handleConnectError = (error: Error) => {
+      log.error('[useSocket] Connection error:', error.message);
       setIsConnected(false);
       setIsConnecting(false);
-    });
+    };
 
-    // Handle reconnection attempts
-    socket.io.on('reconnect_attempt', () => {
-      log.debug('[Socket] Attempting to reconnect...');
+    const handleReconnectAttempt = () => {
+      log.debug('[useSocket] Attempting to reconnect...');
       setIsConnecting(true);
-    });
+    };
 
-    socket.io.on('reconnect', () => {
-      log.debug('[Socket] Reconnected successfully');
+    const handleReconnect = () => {
+      log.debug('[useSocket] Reconnected successfully');
       setIsConnected(true);
       setIsConnecting(false);
-    });
+    };
 
-    socket.io.on('reconnect_failed', () => {
-      log.error('[Socket] Reconnection failed');
+    const handleReconnectFailed = () => {
+      log.error('[useSocket] Reconnection failed');
       setIsConnecting(false);
-    });
+    };
+
+    socket.on('connect', handleConnect);
+    socket.on('disconnect', handleDisconnect);
+    socket.on('connect_error', handleConnectError);
+    socket.io.on('reconnect_attempt', handleReconnectAttempt);
+    socket.io.on('reconnect', handleReconnect);
+    socket.io.on('reconnect_failed', handleReconnectFailed);
+
+    // Check current state immediately
+    if (socket.connected) {
+      handleConnect();
+    }
 
     // Keep connection alive - don't disconnect on unmount
     // Socket should stay connected for the entire session
     return () => {
-      log.debug('[Socket] Component unmounting but keeping connection alive');
-      // Clean up reconnection listeners
-      socket.io.off('reconnect_attempt');
-      socket.io.off('reconnect');
-      socket.io.off('reconnect_failed');
+      log.debug('[useSocket] Component unmounting but keeping connection alive');
+      // Clean up listeners
+      socket.off('connect', handleConnect);
+      socket.off('disconnect', handleDisconnect);
+      socket.off('connect_error', handleConnectError);
+      socket.io.off('reconnect_attempt', handleReconnectAttempt);
+      socket.io.off('reconnect', handleReconnect);
+      socket.io.off('reconnect_failed', handleReconnectFailed);
       // Don't call socketClient.disconnect() here
       // Connection will be cleaned up when user logs out or closes tab
     };

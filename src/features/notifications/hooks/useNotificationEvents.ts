@@ -4,7 +4,7 @@
  * Pattern: Follows useMessages.ts - Socket event handlers with query invalidation
  */
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { socketClient } from '@/lib/socket';
 import { useNotificationStore } from '@/store/notificationStore';
 import { useUserStore } from '@/store/userStore';
@@ -97,12 +97,16 @@ function shouldShowNotification(
 
 /**
  * Hook to listen to Socket.io events and create notifications
+ * Properly waits for socket connection before attaching listeners
  */
 export function useNotificationEvents() {
   const addNotification = useNotificationStore((state) => state.addNotification);
   const preferences = useNotificationStore((state) => state.preferences);
   const mutedConversations = useNotificationStore((state) => state.mutedConversations);
   const currentUser = useUserStore((state) => state.currentUser);
+
+  // Track socket ready state
+  const [isSocketReady, setIsSocketReady] = useState(false);
 
   // Notification grouping state
   const groupingMapRef = useRef<Map<string, NotificationGroup>>(new Map());
@@ -174,12 +178,56 @@ export function useNotificationEvents() {
     return group.count >= GROUPING_THRESHOLD;
   }, []);
 
+  // Monitor socket connection state
   useEffect(() => {
-    const socket = socketClient.getSocket();
-    if (!socket) {
-      log.notification.warn('Socket not initialized');
+    // Check immediately
+    if (socketClient.isConnected()) {
+      setIsSocketReady(true);
       return;
     }
+
+    // Wait for socket to be ready
+    const checkInterval = setInterval(() => {
+      const socket = socketClient.getSocket();
+      if (socket?.connected) {
+        setIsSocketReady(true);
+        clearInterval(checkInterval);
+      }
+    }, 100);
+
+    // Also listen for connect event once socket is available
+    const socket = socketClient.getSocket();
+    if (socket) {
+      const handleConnect = () => setIsSocketReady(true);
+      const handleDisconnect = () => setIsSocketReady(false);
+      socket.on('connect', handleConnect);
+      socket.on('disconnect', handleDisconnect);
+
+      return () => {
+        clearInterval(checkInterval);
+        socket.off('connect', handleConnect);
+        socket.off('disconnect', handleDisconnect);
+      };
+    }
+
+    return () => clearInterval(checkInterval);
+  }, []);
+
+  // Main effect to set up notification listeners
+  useEffect(() => {
+    // Wait for socket to be ready before attaching listeners
+    if (!isSocketReady) {
+      log.notification.debug('Waiting for socket to be ready...');
+      return;
+    }
+
+    const socket = socketClient.getSocket();
+    if (!socket) {
+      log.notification.warn('Socket not available despite ready state');
+      return;
+    }
+
+    log.notification.info('Socket ready, attaching notification listeners');
 
     // Handle new messages
     const handleNewMessage = (data: Record<string, unknown>) => {
@@ -412,5 +460,5 @@ export function useNotificationEvents() {
 
       log.notification.info('Notification event listeners removed');
     };
-  }, [createNotification, currentUser, shouldGroupMessage]);
+  }, [createNotification, currentUser, shouldGroupMessage, isSocketReady]);
 }
