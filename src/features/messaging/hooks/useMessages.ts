@@ -10,67 +10,16 @@
  * - Auto-joins conversation room when socket connects
  */
 
-import { useEffect, useCallback, useRef, useState } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { socketClient } from '@/lib/socket';
 import { queryKeys } from '@/lib/queryClient';
 import { useMessagesQuery } from './useMessagesQuery';
 import { isPendingDelete } from './useMessageActions';
+import { isRecentlySentMessage } from './useSendMessage';
 import { nowUTC } from '@/lib/dateUtils';
 import type { Message } from '@/types/message';
 import { log } from '@/lib/logger';
-
-/**
- * Hook to get socket ready state
- * Tries to use SocketProvider context, falls back to direct socket check
- */
-function useSocketReadyState(): boolean {
-  const [isReady, setIsReady] = useState(false);
-
-  useEffect(() => {
-    // Check immediately
-    if (socketClient.isConnected()) {
-      setIsReady(true);
-      return;
-    }
-
-    // Listen for connection
-    const socket = socketClient.getSocket();
-    if (!socket) {
-      // Socket not initialized yet, wait for it
-      const checkInterval = setInterval(() => {
-        if (socketClient.isConnected()) {
-          setIsReady(true);
-          clearInterval(checkInterval);
-        }
-      }, 100);
-
-      return () => clearInterval(checkInterval);
-    }
-
-    const handleConnect = () => {
-      // Add small delay to ensure socket is fully ready
-      setTimeout(() => setIsReady(true), 50);
-    };
-
-    const handleDisconnect = () => setIsReady(false);
-
-    socket.on('connect', handleConnect);
-    socket.on('disconnect', handleDisconnect);
-
-    // Check if already connected
-    if (socket.connected) {
-      handleConnect();
-    }
-
-    return () => {
-      socket.off('connect', handleConnect);
-      socket.off('disconnect', handleDisconnect);
-    };
-  }, []);
-
-  return isReady;
-}
 
 interface UseMessagesOptions {
   limit?: number;
@@ -96,14 +45,8 @@ export function useMessages(
   const { limit = 50, autoLoad = true } = options;
   const queryClient = useQueryClient();
 
-  // Get socket ready state - this ensures socket is connected before we use it
-  const isSocketReady = useSocketReadyState();
-
   // Track if we've already attempted to fix missing sequence numbers to prevent infinite loop
   const hasAttemptedFixRef = useRef<Record<string, boolean>>({});
-
-  // Track if listeners have been attached for this conversation
-  const listenersAttachedRef = useRef<string | null>(null);
 
   // Use TanStack Query infinite query
   const {
@@ -178,39 +121,19 @@ export function useMessages(
   }, [queryClient, conversationId, limit]);
 
   // WebSocket: Real-time message updates with query invalidation
-  // CRITICAL: Wait for socket to be ready before attaching listeners
-  // This ensures the socket is connected and stable before we try to use it
+  // Attaches listeners immediately like useConversations does
+  // The socketClient methods handle connection state internally
   useEffect(() => {
     if (!conversationId) return;
 
-    // Wait for socket to be ready before proceeding
-    // This prevents race conditions where listeners are attached before connection
-    if (!isSocketReady) {
-      log.ws.debug('[useMessages] Waiting for socket to be ready...');
-      return;
-    }
+    log.ws.info('[useMessages] Setting up WebSocket listeners for conversation:', conversationId);
 
-    const socket = socketClient.getSocket();
-    if (!socket) {
-      log.ws.warn('[useMessages] Socket not available despite ready state');
-      return;
-    }
-
-    // Prevent duplicate listener attachment for the same conversation
-    if (listenersAttachedRef.current === conversationId) {
-      log.ws.debug('[useMessages] Listeners already attached for conversation:', conversationId);
-      return;
-    }
-
-    log.ws.info('[useMessages] Attaching socket listeners for conversation:', conversationId);
-    listenersAttachedRef.current = conversationId;
-
-    // Join the conversation room immediately since socket is ready
+    // Join the conversation room (socketClient handles connection state)
     socketClient.joinConversation(conversationId);
 
     // Handle reconnection - re-join room and refresh data
     const handleConnect = () => {
-      log.ws.info('[useMessages] Socket reconnected - rejoining conversation and refreshing:', conversationId);
+      log.ws.info('[useMessages] Socket connected/reconnected - rejoining conversation:', conversationId);
       socketClient.joinConversation(conversationId);
 
       // Refresh messages to catch any missed during disconnection
@@ -219,18 +142,77 @@ export function useMessages(
       });
     };
 
-    socket.on('connect', handleConnect);
+    // Get socket for direct event listening
+    const socket = socketClient.getSocket();
+    socket?.on('connect', handleConnect);
 
-    // Listen for new messages - invalidate query to refetch
+    // Listen for new messages - add to cache or invalidate
     const handleNewMessage = (message: Record<string, unknown>) => {
-      log.message.debug('New message received:', message);
+      log.message.debug('New message received via WebSocket:', message);
 
       const msg = message as Partial<Message>;
+      const messageId = msg.id as string;
 
-      // Invalidate messages query to refetch from server
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.messages.list(conversationId, { limit }),
-      });
+      // DEDUPLICATION: Skip cache invalidation if this is our own recently sent message
+      // The optimistic update already added it to the cache, so we don't want to
+      // invalidate and cause a refetch that could temporarily remove the message
+      if (messageId && isRecentlySentMessage(messageId)) {
+        log.message.debug('[useMessages] Skipping cache invalidation for recently sent message:', messageId);
+        return;
+      }
+
+      // For messages from other users, add directly to cache instead of invalidating
+      // This provides instant updates without the flash of content disappearing
+      if (msg.id && msg.content !== undefined) {
+        queryClient.setQueryData(
+          queryKeys.messages.list(conversationId, { limit }),
+          (oldData: unknown) => {
+            if (!oldData || typeof oldData !== 'object') {
+              // No existing data, need to fetch
+              queryClient.invalidateQueries({
+                queryKey: queryKeys.messages.list(conversationId, { limit }),
+              });
+              return oldData;
+            }
+
+            const data = oldData as { pages: Array<{ data: Message[] }>; pageParams: unknown[] };
+
+            // Check if message already exists in cache (prevent duplicates)
+            const messageExists = data.pages.some(page =>
+              page.data.some(m => m.id === msg.id)
+            );
+
+            if (messageExists) {
+              log.message.debug('[useMessages] Message already in cache, skipping:', msg.id);
+              return oldData;
+            }
+
+            // Add message to the last page (most recent messages)
+            const newPages = data.pages.map((page, index) => {
+              if (index === data.pages.length - 1) {
+                return {
+                  ...page,
+                  data: [...page.data, msg as Message],
+                };
+              }
+              return page;
+            });
+
+            log.message.debug('[useMessages] Added new message to cache:', msg.id);
+
+            return {
+              ...data,
+              pages: newPages,
+            };
+          }
+        );
+      } else {
+        // Fallback: If message data is incomplete, invalidate to refetch
+        log.message.debug('[useMessages] Incomplete message data, invalidating cache');
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.messages.list(conversationId, { limit }),
+        });
+      }
 
       // If this is a system message about member/conversation changes,
       // also invalidate conversation queries for real-time updates across all clients
@@ -603,11 +585,11 @@ export function useMessages(
     socketClient.onMessageDeleted(handleMessageDeleted);
     socketClient.onReactionAdded(handleReactionAdded);
     socketClient.onReactionRemoved(handleReactionRemoved);
-    socketClient.onMessageStatus(handleMessageStatus); // Real-time status updates
+    socketClient.onMessageStatus(handleMessageStatus);
 
-    // Listen for bulk delivered/read events
-    socket.on('messages_delivered', handleMessagesDelivered);
-    socket.on('messages_read', handleMessagesRead);
+    // Listen for bulk delivered/read events (use optional chaining for safety)
+    socket?.on('messages_delivered', handleMessagesDelivered);
+    socket?.on('messages_read', handleMessagesRead);
 
     // Listen for poll events
     socketClient.onNewPoll(handleNewPoll);
@@ -617,7 +599,6 @@ export function useMessages(
     // Cleanup
     return () => {
       log.ws.info('[useMessages] Cleaning up socket listeners for conversation:', conversationId);
-      listenersAttachedRef.current = null;
       socketClient.leaveConversation(conversationId);
       socketClient.off('new_message', handleNewMessage);
       socketClient.off('message_edited', handleMessageEdited);
@@ -625,14 +606,14 @@ export function useMessages(
       socketClient.off('reaction_added', handleReactionAdded);
       socketClient.off('reaction_removed', handleReactionRemoved);
       socketClient.off('message_status', handleMessageStatus);
-      socket.off('messages_delivered', handleMessagesDelivered);
-      socket.off('messages_read', handleMessagesRead);
+      socket?.off('messages_delivered', handleMessagesDelivered);
+      socket?.off('messages_read', handleMessagesRead);
       socketClient.off('new_poll', handleNewPoll);
       socketClient.off('poll_vote_added', handlePollVote);
       socketClient.off('poll_closed', handlePollClosed);
-      socket.off('connect', handleConnect);
+      socket?.off('connect', handleConnect);
     };
-  }, [conversationId, queryClient, limit, isSocketReady]);
+  }, [conversationId, queryClient, limit]);
 
   return {
     messages,
