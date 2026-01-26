@@ -131,23 +131,49 @@ export function useMessages(
 
   // Add message optimistically (for sender's own messages)
   const addOptimisticMessage = useCallback((message: Message) => {
-    log.message.debug('Adding optimistic message:', message.id);
+    log.message.info('[addOptimisticMessage] Adding message:', message.id, 'type:', message.type);
 
     // Optimistically add to query cache
     queryClient.setQueryData(
       queryKeys.messages.list(conversationId, { limit }),
       (oldData: unknown) => {
-        if (!oldData || typeof oldData !== 'object') return oldData;
+        if (!oldData || typeof oldData !== 'object') {
+          log.message.warn('[addOptimisticMessage] No existing cache data');
+          return oldData;
+        }
 
         const data = oldData as { pages: Array<{ data: Message[] }>; pageParams: unknown[] };
 
-        // Add message to the last page (most recent messages)
-        const newPages = [...data.pages];
-        const lastPage = newPages[newPages.length - 1];
-
-        if (lastPage) {
-          lastPage.data = [...lastPage.data, message];
+        if (!data.pages || data.pages.length === 0) {
+          log.message.warn('[addOptimisticMessage] No pages in cache');
+          return oldData;
         }
+
+        // Check if message already exists (prevent duplicates)
+        const messageExists = data.pages.some(page =>
+          page.data.some(m => m.id === message.id)
+        );
+
+        if (messageExists) {
+          log.message.debug('[addOptimisticMessage] Message already exists, skipping:', message.id);
+          return oldData;
+        }
+
+        // CRITICAL: Create NEW objects for immutability - React needs new references to detect changes
+        // Map ALL pages to new objects, with the last page containing the new message
+        const newPages = data.pages.map((page, index) => {
+          if (index === data.pages.length - 1) {
+            // Last page - add the new message
+            return {
+              ...page,
+              data: [...page.data, message],
+            };
+          }
+          // Other pages - return as-is (no need to copy since we're not modifying them)
+          return page;
+        });
+
+        log.message.info('[addOptimisticMessage] ✅ Added message to cache:', message.id);
 
         return {
           ...data,
