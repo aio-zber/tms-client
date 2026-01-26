@@ -26,6 +26,8 @@ import { uploadConversationAvatar } from '@/features/conversations/services/conv
 import { getUserImageUrl } from '@/lib/imageUtils';
 import { UserSearchResult } from '@/types/user';
 import { useUserStore } from '@/store/userStore';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/lib/queryClient';
 import toast from 'react-hot-toast';
 
 interface NewConversationDialogProps {
@@ -53,6 +55,7 @@ export default function NewConversationDialog({
   const { query, results, isSearching, search, clearSearch } = useUserSearch();
   const { createConversation } = useConversationActions();
   const currentUser = useUserStore((state) => state.currentUser);
+  const queryClient = useQueryClient();
 
   // Validate current user has required IDs before allowing conversation creation
   useEffect(() => {
@@ -213,8 +216,19 @@ export default function NewConversationDialog({
         // If there's an avatar file selected for a group, upload it after creation
         if (conversationType === 'group' && groupAvatarFile) {
           try {
-            await uploadConversationAvatar(conversation.id, groupAvatarFile);
+            const updatedConversation = await uploadConversationAvatar(conversation.id, groupAvatarFile);
             log.info('Group avatar uploaded successfully');
+
+            // Immediately update the cache with the new avatar URL (Messenger/Telegram pattern)
+            queryClient.setQueryData(
+              queryKeys.conversations.detail(conversation.id),
+              updatedConversation
+            );
+
+            // Invalidate the conversations list to trigger a refetch
+            queryClient.invalidateQueries({
+              queryKey: queryKeys.conversations.all,
+            });
           } catch (avatarError) {
             log.error('Failed to upload group avatar:', avatarError);
             // Don't fail the entire operation, just show a warning
