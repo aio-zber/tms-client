@@ -385,6 +385,11 @@ export function Chat({
           editingMessage={editingMessageId ? messages.find(m => m.id === editingMessageId) : undefined}
           onSaveEdit={handleSaveEdit}
           onCancelEdit={handleCancelEdit}
+          onFileUploaded={(message) => {
+            // Add file/voice message to UI immediately (Messenger/Telegram pattern)
+            log.debug('[Chat] File/voice uploaded, adding to UI:', message.id);
+            addOptimisticMessage(message);
+          }}
         />
 
         {/* Conversation Settings Dialog */}

@@ -18,6 +18,7 @@ import { FileUploadButton } from './FileUploadButton';
 import { FilePreview } from './FilePreview';
 import { VoiceRecordButton } from './VoiceRecordButton';
 import { messageService } from '../services/messageService';
+import { transformServerMessage } from '../hooks/useMessages';
 
 interface MessageInputProps {
   conversationId: string;
@@ -30,6 +31,8 @@ interface MessageInputProps {
   onCancelEdit?: () => void;
   placeholder?: string;
   disabled?: boolean;
+  /** Callback when a file/voice message is uploaded - used for optimistic UI updates */
+  onFileUploaded?: (message: Message) => void;
 }
 
 export function MessageInput({
@@ -43,6 +46,7 @@ export function MessageInput({
   onCancelEdit,
   placeholder = 'Type a message...',
   disabled = false,
+  onFileUploaded,
 }: MessageInputProps) {
   const [content, setContent] = useState('');
   const [showPollCreator, setShowPollCreator] = useState(false);
@@ -172,12 +176,19 @@ export function MessageInput({
     setUploadProgress(0);
 
     try {
-      await messageService.sendFileMessage({
+      const rawMessage = await messageService.sendFileMessage({
         conversationId,
         file: selectedFile,
         replyToId: replyTo?.id,
         onProgress: (progress) => setUploadProgress(progress),
       });
+
+      // Transform and add to UI immediately (Messenger/Telegram pattern)
+      if (rawMessage && onFileUploaded) {
+        const message = transformServerMessage(rawMessage as unknown as Record<string, unknown>);
+        log.info('[MessageInput] File uploaded, adding to UI:', message.id, message.type);
+        onFileUploaded(message);
+      }
 
       // Success - clear file and reply
       setSelectedFile(null);
@@ -285,6 +296,7 @@ export function MessageInput({
               onSendSuccess={() => {
                 if (onCancelReply) onCancelReply();
               }}
+              onVoiceUploaded={onFileUploaded}
             />
           </div>
 
