@@ -5,8 +5,8 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
-import { UserMinus, LogOut, X, UserPlus } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { UserMinus, LogOut, X, UserPlus, Camera } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -25,6 +25,7 @@ import { useConversationEvents } from '../hooks/useConversationEvents';
 import { useConversationQuery } from '../hooks/useConversationsQuery';
 import { useUserSearch } from '@/features/users/hooks/useUserSearch';
 import { UserProfileDialog } from '@/features/users/components/UserProfileDialog';
+import { uploadConversationAvatar } from '../services/conversationService';
 import type { Conversation, ConversationMember } from '@/types/conversation';
 import toast from 'react-hot-toast';
 
@@ -51,6 +52,8 @@ export default function ConversationSettingsDialog({
   const [selectedMemberProfile, setSelectedMemberProfile] = useState<string | undefined>(undefined);
   const [selectedMemberData, setSelectedMemberData] = useState<ConversationMember['user'] | undefined>(undefined);
   const [showProfileDialog, setShowProfileDialog] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const {
     updateConversation,
@@ -153,6 +156,45 @@ export default function ConversationSettingsDialog({
     });
   };
 
+  const handleAvatarClick = () => {
+    avatarInputRef.current?.click();
+  };
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Please select a valid image file (JPEG, PNG, GIF, or WebP)');
+      return;
+    }
+
+    // Validate file size (5MB max)
+    const maxSize = 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+      toast.error('Image must be less than 5MB');
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+    try {
+      await uploadConversationAvatar(conversation.id, file);
+      toast.success('Group avatar updated successfully');
+      onUpdate();
+    } catch (error) {
+      console.error('Failed to upload avatar:', error);
+      toast.error('Failed to upload avatar. Please try again.');
+    } finally {
+      setIsUploadingAvatar(false);
+      // Reset the input so the same file can be selected again
+      if (avatarInputRef.current) {
+        avatarInputRef.current.value = '';
+      }
+    }
+  };
+
   const isGroup = currentConversation.type === 'group';
   const members = currentConversation.members || [];
   const currentUserIsMember = members.some((m: ConversationMember) => m.userId === currentUserId);
@@ -177,6 +219,45 @@ export default function ConversationSettingsDialog({
 
           {/* Details Tab */}
           <TabsContent value="details" className="space-y-4">
+            {/* Group Avatar */}
+            {isGroup && (
+              <div className="space-y-2">
+                <Label>Group Avatar</Label>
+                <div className="flex items-center gap-4">
+                  <div className="relative">
+                    <Avatar className="w-20 h-20 cursor-pointer" onClick={handleAvatarClick}>
+                      <AvatarImage src={currentConversation.avatarUrl} />
+                      <AvatarFallback className="bg-viber-purple text-white text-xl">
+                        {getInitials(currentConversation.name || 'Group')}
+                      </AvatarFallback>
+                    </Avatar>
+                    <button
+                      onClick={handleAvatarClick}
+                      disabled={isUploadingAvatar}
+                      className="absolute bottom-0 right-0 bg-viber-purple hover:bg-viber-purple-dark text-white rounded-full p-1.5 shadow-md transition-colors disabled:opacity-50"
+                    >
+                      {isUploadingAvatar ? (
+                        <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                      ) : (
+                        <Camera className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    <p>Click to change the group avatar</p>
+                    <p className="text-xs">JPEG, PNG, GIF, or WebP (max 5MB)</p>
+                  </div>
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    onChange={handleAvatarChange}
+                    className="hidden"
+                  />
+                </div>
+              </div>
+            )}
+
             {/* Conversation Name */}
             {isGroup && (
               <div className="space-y-2">
