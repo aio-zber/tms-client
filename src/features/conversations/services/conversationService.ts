@@ -119,6 +119,19 @@ export async function searchConversations(params: {
   return apiClient.get<ConversationListResponse>(`${BASE_PATH}/search`, params);
 }
 
+/**
+ * Upload avatar for a group conversation
+ */
+export async function uploadConversationAvatar(
+  conversationId: string,
+  file: File
+): Promise<Conversation> {
+  return apiClient.uploadFile<Conversation>(
+    `${BASE_PATH}/${conversationId}/avatar`,
+    file
+  );
+}
+
 // Export all functions as a service object
 export const conversationService = {
   createConversation,
@@ -131,6 +144,7 @@ export const conversationService = {
   updateConversationSettings,
   markConversationAsRead,
   searchConversations,
+  uploadConversationAvatar,
 };
 
 export default conversationService;

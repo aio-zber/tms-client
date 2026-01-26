@@ -6,8 +6,8 @@
 'use client';
 
 import { log } from '@/lib/logger';
-import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Search, X, Users, MessageCircle } from 'lucide-react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { Search, X, Users, MessageCircle, Camera } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -22,6 +22,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useUserSearch } from '@/features/users/hooks/useUserSearch';
 import { useConversationActions } from '@/features/conversations';
+import { uploadConversationAvatar } from '@/features/conversations/services/conversationService';
 import { getUserImageUrl } from '@/lib/imageUtils';
 import { UserSearchResult } from '@/types/user';
 import { useUserStore } from '@/store/userStore';
@@ -45,6 +46,9 @@ export default function NewConversationDialog({
   const [allUsers, setAllUsers] = useState<UserSearchResult[]>([]);
   const [loadingInitial, setLoadingInitial] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [groupAvatarFile, setGroupAvatarFile] = useState<File | null>(null);
+  const [groupAvatarPreview, setGroupAvatarPreview] = useState<string | null>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const { query, results, isSearching, search, clearSearch } = useUserSearch();
   const { createConversation } = useConversationActions();
@@ -147,6 +151,45 @@ export default function NewConversationDialog({
     });
   };
 
+  const handleAvatarClick = () => {
+    avatarInputRef.current?.click();
+  };
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Please select a valid image file (JPEG, PNG, GIF, or WebP)');
+      return;
+    }
+
+    // Validate file size (5MB max)
+    const maxSize = 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+      toast.error('Image must be less than 5MB');
+      return;
+    }
+
+    setGroupAvatarFile(file);
+    // Create preview URL
+    const previewUrl = URL.createObjectURL(file);
+    setGroupAvatarPreview(previewUrl);
+  };
+
+  const clearAvatarPreview = () => {
+    if (groupAvatarPreview) {
+      URL.revokeObjectURL(groupAvatarPreview);
+    }
+    setGroupAvatarFile(null);
+    setGroupAvatarPreview(null);
+    if (avatarInputRef.current) {
+      avatarInputRef.current.value = '';
+    }
+  };
+
   const handleCreate = async () => {
     if (selectedUsers.length === 0) {
       toast.error('Please select at least one user');
@@ -167,6 +210,18 @@ export default function NewConversationDialog({
       });
 
       if (conversation) {
+        // If there's an avatar file selected for a group, upload it after creation
+        if (conversationType === 'group' && groupAvatarFile) {
+          try {
+            await uploadConversationAvatar(conversation.id, groupAvatarFile);
+            log.info('Group avatar uploaded successfully');
+          } catch (avatarError) {
+            log.error('Failed to upload group avatar:', avatarError);
+            // Don't fail the entire operation, just show a warning
+            toast.error('Group created but avatar upload failed. You can update it in settings.');
+          }
+        }
+
         toast.success(
           conversationType === 'group'
             ? 'Group created successfully'
@@ -203,6 +258,7 @@ export default function NewConversationDialog({
     setGroupName('');
     setConversationType('dm');
     setAllUsers([]); // Clear cached users
+    clearAvatarPreview(); // Clear avatar selection
     clearSearch();
     onOpenChange(false);
   };
@@ -265,15 +321,44 @@ export default function NewConversationDialog({
               </Button>
             </div>
 
-            {/* Group Name Input (if group) */}
+            {/* Group Name and Avatar Input (if group) */}
             {effectiveType === 'group' && (
-              <div className="space-y-2">
-                <Input
-                  placeholder="Enter group name..."
-                  value={groupName}
-                  onChange={(e) => setGroupName(e.target.value)}
-                  className="text-sm md:text-base"
-                />
+              <div className="space-y-3">
+                <div className="flex items-center gap-4">
+                  {/* Avatar Upload */}
+                  <div className="relative flex-shrink-0">
+                    <Avatar className="w-16 h-16 cursor-pointer" onClick={handleAvatarClick}>
+                      <AvatarImage src={groupAvatarPreview || undefined} />
+                      <AvatarFallback className="bg-viber-purple text-white text-lg">
+                        {groupName ? getInitials(groupName) : 'G'}
+                      </AvatarFallback>
+                    </Avatar>
+                    <button
+                      type="button"
+                      onClick={handleAvatarClick}
+                      className="absolute bottom-0 right-0 bg-viber-purple hover:bg-viber-purple-dark text-white rounded-full p-1 shadow-md transition-colors"
+                    >
+                      <Camera className="h-3 w-3" />
+                    </button>
+                    <input
+                      ref={avatarInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/gif,image/webp"
+                      onChange={handleAvatarChange}
+                      className="hidden"
+                    />
+                  </div>
+                  {/* Group Name Input */}
+                  <div className="flex-1">
+                    <Input
+                      placeholder="Enter group name..."
+                      value={groupName}
+                      onChange={(e) => setGroupName(e.target.value)}
+                      className="text-sm md:text-base"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Click the avatar to add a group photo</p>
+                  </div>
+                </div>
                 <div className="text-xs text-gray-600 bg-blue-50 p-2 rounded flex items-start gap-2">
                   <span className="text-blue-600 font-semibold">ℹ️</span>
                   <span>You&apos;ll be added as the group admin automatically</span>
@@ -290,7 +375,9 @@ export default function NewConversationDialog({
                     variant="secondary"
                     className="pl-2 pr-1 py-1 text-xs md:text-sm"
                   >
-                    <span className="max-w-[120px] truncate">{user.name}</span>
+                    <span className="max-w-[120px] truncate">
+                      {user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email}
+                    </span>
                     <button
                       onClick={() => handleUserToggle(user.tmsUserId, user)}
                       className="ml-1 hover:bg-gray-300 rounded-full p-0.5"
