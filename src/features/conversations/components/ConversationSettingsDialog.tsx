@@ -26,6 +26,8 @@ import { useConversationQuery } from '../hooks/useConversationsQuery';
 import { useUserSearch } from '@/features/users/hooks/useUserSearch';
 import { UserProfileDialog } from '@/features/users/components/UserProfileDialog';
 import { uploadConversationAvatar } from '../services/conversationService';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/lib/queryClient';
 import type { Conversation, ConversationMember } from '@/types/conversation';
 import toast from 'react-hot-toast';
 
@@ -54,6 +56,7 @@ export default function ConversationSettingsDialog({
   const [showProfileDialog, setShowProfileDialog] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
 
   const {
     updateConversation,
@@ -180,7 +183,20 @@ export default function ConversationSettingsDialog({
 
     setIsUploadingAvatar(true);
     try {
-      await uploadConversationAvatar(conversation.id, file);
+      const updatedConversation = await uploadConversationAvatar(conversation.id, file);
+
+      // Immediately update the cache with the new avatar URL (Messenger/Telegram pattern)
+      // This ensures the sidebar updates instantly without waiting for refetch
+      queryClient.setQueryData(
+        queryKeys.conversations.detail(conversation.id),
+        updatedConversation
+      );
+
+      // Also invalidate the conversations list to trigger a refetch
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.all,
+      });
+
       toast.success('Group avatar updated successfully');
       onUpdate();
     } catch (error) {
