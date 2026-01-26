@@ -18,8 +18,42 @@ import { useMessagesQuery } from './useMessagesQuery';
 import { isPendingDelete } from './useMessageActions';
 import { isRecentlySentMessage } from './useSendMessage';
 import { nowUTC } from '@/lib/dateUtils';
-import type { Message } from '@/types/message';
+import type { Message, MessageReaction } from '@/types/message';
 import { log } from '@/lib/logger';
+
+/**
+ * Transform WebSocket message (snake_case) to client format (camelCase)
+ * Server sends: { id, conversation_id, sender_id, created_at, ... }
+ * Client expects: { id, conversationId, senderId, createdAt, ... }
+ */
+function transformWebSocketMessage(wsMessage: Record<string, unknown>): Message {
+  // Transform reactions if present
+  const rawReactions = wsMessage.reactions as Array<Record<string, unknown>> | undefined;
+  const reactions: MessageReaction[] | undefined = rawReactions?.map(r => ({
+    id: r.id as string,
+    messageId: (r.message_id || r.messageId) as string,
+    userId: (r.user_id || r.userId) as string,
+    emoji: r.emoji as string,
+    createdAt: (r.created_at || r.createdAt) as string,
+  }));
+
+  return {
+    id: wsMessage.id as string,
+    conversationId: (wsMessage.conversation_id || wsMessage.conversationId) as string,
+    senderId: (wsMessage.sender_id || wsMessage.senderId) as string,
+    content: wsMessage.content as string,
+    type: wsMessage.type as Message['type'],
+    status: (wsMessage.status || 'sent') as Message['status'],
+    metadata: (wsMessage.metadata_json || wsMessage.metadata) as Message['metadata'],
+    replyToId: (wsMessage.reply_to_id || wsMessage.replyToId) as string | undefined,
+    reactions,
+    isEdited: (wsMessage.is_edited || wsMessage.isEdited || false) as boolean,
+    sequenceNumber: (wsMessage.sequence_number || wsMessage.sequenceNumber || 0) as number,
+    createdAt: (wsMessage.created_at || wsMessage.createdAt) as string,
+    updatedAt: (wsMessage.updated_at || wsMessage.updatedAt) as string | undefined,
+    deletedAt: (wsMessage.deleted_at || wsMessage.deletedAt) as string | undefined,
+  };
+}
 
 interface UseMessagesOptions {
   limit?: number;
@@ -147,77 +181,81 @@ export function useMessages(
     socket?.on('connect', handleConnect);
 
     // Listen for new messages - add to cache or invalidate
-    const handleNewMessage = (message: Record<string, unknown>) => {
-      log.message.debug('New message received via WebSocket:', message);
+    const handleNewMessage = (wsMessage: Record<string, unknown>) => {
+      log.message.debug('New message received via WebSocket:', wsMessage);
 
-      const msg = message as Partial<Message>;
-      const messageId = msg.id as string;
+      // Get message ID (handle both snake_case and camelCase)
+      const messageId = (wsMessage.id || wsMessage.message_id) as string;
 
-      // DEDUPLICATION: Skip cache invalidation if this is our own recently sent message
-      // The optimistic update already added it to the cache, so we don't want to
-      // invalidate and cause a refetch that could temporarily remove the message
+      // DEDUPLICATION: Skip if this is our own recently sent message
+      // The optimistic update already added it to the cache
       if (messageId && isRecentlySentMessage(messageId)) {
-        log.message.debug('[useMessages] Skipping cache invalidation for recently sent message:', messageId);
+        log.message.debug('[useMessages] Skipping - recently sent message:', messageId);
         return;
       }
 
-      // For messages from other users, add directly to cache instead of invalidating
-      // This provides instant updates without the flash of content disappearing
-      if (msg.id && msg.content !== undefined) {
-        queryClient.setQueryData(
-          queryKeys.messages.list(conversationId, { limit }),
-          (oldData: unknown) => {
-            if (!oldData || typeof oldData !== 'object') {
-              // No existing data, need to fetch
-              queryClient.invalidateQueries({
-                queryKey: queryKeys.messages.list(conversationId, { limit }),
-              });
-              return oldData;
-            }
+      // Transform WebSocket message from snake_case to camelCase
+      // This is critical - server sends snake_case, but cache expects camelCase
+      const transformedMessage = transformWebSocketMessage(wsMessage);
 
-            const data = oldData as { pages: Array<{ data: Message[] }>; pageParams: unknown[] };
-
-            // Check if message already exists in cache (prevent duplicates)
-            const messageExists = data.pages.some(page =>
-              page.data.some(m => m.id === msg.id)
-            );
-
-            if (messageExists) {
-              log.message.debug('[useMessages] Message already in cache, skipping:', msg.id);
-              return oldData;
-            }
-
-            // Add message to the last page (most recent messages)
-            const newPages = data.pages.map((page, index) => {
-              if (index === data.pages.length - 1) {
-                return {
-                  ...page,
-                  data: [...page.data, msg as Message],
-                };
-              }
-              return page;
-            });
-
-            log.message.debug('[useMessages] Added new message to cache:', msg.id);
-
-            return {
-              ...data,
-              pages: newPages,
-            };
-          }
-        );
-      } else {
-        // Fallback: If message data is incomplete, invalidate to refetch
-        log.message.debug('[useMessages] Incomplete message data, invalidating cache');
+      // Validate we have required fields after transformation
+      if (!transformedMessage.id || !transformedMessage.createdAt) {
+        log.message.warn('[useMessages] Invalid message data after transform, invalidating cache');
         queryClient.invalidateQueries({
           queryKey: queryKeys.messages.list(conversationId, { limit }),
         });
+        return;
       }
+
+      // Add message directly to cache for instant updates
+      queryClient.setQueryData(
+        queryKeys.messages.list(conversationId, { limit }),
+        (oldData: unknown) => {
+          if (!oldData || typeof oldData !== 'object') {
+            // No existing data, need to fetch
+            log.message.debug('[useMessages] No cache data, invalidating');
+            queryClient.invalidateQueries({
+              queryKey: queryKeys.messages.list(conversationId, { limit }),
+            });
+            return oldData;
+          }
+
+          const data = oldData as { pages: Array<{ data: Message[] }>; pageParams: unknown[] };
+
+          // Check if message already exists in cache (prevent duplicates)
+          const messageExists = data.pages.some(page =>
+            page.data.some(m => m.id === transformedMessage.id)
+          );
+
+          if (messageExists) {
+            log.message.debug('[useMessages] Message already in cache, skipping:', transformedMessage.id);
+            return oldData;
+          }
+
+          // Add message to the last page (most recent messages)
+          const newPages = data.pages.map((page, index) => {
+            if (index === data.pages.length - 1) {
+              return {
+                ...page,
+                data: [...page.data, transformedMessage],
+              };
+            }
+            return page;
+          });
+
+          log.message.debug('[useMessages] Added new message to cache:', transformedMessage.id);
+
+          return {
+            ...data,
+            pages: newPages,
+          };
+        }
+      );
 
       // If this is a system message about member/conversation changes,
       // also invalidate conversation queries for real-time updates across all clients
-      if (msg.type === 'SYSTEM' && msg.metadata?.system) {
-        const eventType = msg.metadata.system.eventType;
+      if (transformedMessage.type === 'SYSTEM' && transformedMessage.metadata?.system) {
+        const eventType = transformedMessage.metadata.system.eventType;
 
         if (
           eventType === 'member_added' ||
