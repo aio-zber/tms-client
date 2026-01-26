@@ -7,7 +7,9 @@ import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 import { messageService } from '../services/messageService';
+import { transformServerMessage } from '../hooks/useMessages';
 import { log } from '@/lib/logger';
+import type { Message } from '@/types/message';
 
 // Generate random waveform bars for preview visualization
 const generatePreviewBars = (): number[] => {
@@ -26,6 +28,8 @@ interface VoiceRecordButtonProps {
   onRecordingStart?: () => void;
   onRecordingEnd?: () => void;
   onSendSuccess?: () => void;
+  /** Callback when voice message is uploaded - used for optimistic UI updates */
+  onVoiceUploaded?: (message: Message) => void;
   disabled?: boolean;
   className?: string;
 }
@@ -40,6 +44,7 @@ export function VoiceRecordButton({
   onRecordingStart,
   onRecordingEnd,
   onSendSuccess,
+  onVoiceUploaded,
   disabled = false,
   className,
 }: VoiceRecordButtonProps) {
@@ -118,13 +123,20 @@ export function VoiceRecordButton({
         type: audioBlob.type || 'audio/webm',
       });
 
-      await messageService.sendVoiceMessage({
+      const rawMessage = await messageService.sendVoiceMessage({
         conversationId,
         audioFile,
         duration,
         replyToId,
         onProgress: (progress) => setUploadProgress(progress),
       });
+
+      // Transform and add to UI immediately (Messenger/Telegram pattern)
+      if (rawMessage && onVoiceUploaded) {
+        const message = transformServerMessage(rawMessage as unknown as Record<string, unknown>);
+        log.info('[VoiceRecordButton] Voice uploaded, adding to UI:', message.id);
+        onVoiceUploaded(message);
+      }
 
       // Success
       clearRecording();
@@ -137,7 +149,7 @@ export function VoiceRecordButton({
       setIsUploading(false);
       setUploadProgress(0);
     }
-  }, [audioBlob, conversationId, duration, replyToId, clearRecording, onSendSuccess]);
+  }, [audioBlob, conversationId, duration, replyToId, clearRecording, onSendSuccess, onVoiceUploaded]);
 
   // Create audio URL for preview
   const audioUrl = audioBlob ? URL.createObjectURL(audioBlob) : null;
