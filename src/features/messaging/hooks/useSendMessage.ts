@@ -11,6 +11,7 @@
 import { log } from '@/lib/logger';
 import { useState, useCallback } from 'react';
 import { messageService } from '../services/messageService';
+import { transformServerMessage } from './useMessages';
 import type { SendMessageRequest, Message } from '@/types/message';
 
 // Module-level tracking of recently sent messages to prevent WebSocket race conditions
@@ -66,9 +67,13 @@ export function useSendMessage(): UseSendMessageReturn {
       setError(null);
 
       try {
-        const message = await messageService.sendMessage(data);
+        const rawMessage = await messageService.sendMessage(data);
 
-        if (message) {
+        if (rawMessage) {
+          // Transform API response from snake_case to camelCase
+          // This ensures consistency whether API returns snake_case or camelCase
+          const message = transformServerMessage(rawMessage as unknown as Record<string, unknown>);
+
           // Track this message ID to prevent WebSocket handler from invalidating cache
           // This preserves the optimistic update when we receive our own message back
           trackSentMessage(message.id);
@@ -79,9 +84,11 @@ export function useSendMessage(): UseSendMessageReturn {
             log.message.debug('[useSendMessage] Calling optimistic add callback with message:', message);
             onOptimisticAdd(message);
           }
+
+          return message;
         }
 
-        return message;
+        return null;
       } catch (err) {
         setError(err as Error);
         log.message.error('Failed to send message:', err);

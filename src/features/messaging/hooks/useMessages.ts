@@ -22,11 +22,14 @@ import type { Message, MessageReaction } from '@/types/message';
 import { log } from '@/lib/logger';
 
 /**
- * Transform WebSocket message (snake_case) to client format (camelCase)
+ * Transform server message (snake_case) to client format (camelCase)
  * Server sends: { id, conversation_id, sender_id, created_at, ... }
  * Client expects: { id, conversationId, senderId, createdAt, ... }
+ *
+ * This handles BOTH WebSocket messages AND API responses to ensure consistency.
+ * We check both snake_case and camelCase versions of each field for robustness.
  */
-function transformWebSocketMessage(wsMessage: Record<string, unknown>): Message {
+export function transformServerMessage(wsMessage: Record<string, unknown>): Message {
   // Transform reactions if present
   const rawReactions = wsMessage.reactions as Array<Record<string, unknown>> | undefined;
   const reactions: MessageReaction[] | undefined = rawReactions?.map(r => ({
@@ -184,6 +187,16 @@ export function useMessages(
     const handleNewMessage = (wsMessage: Record<string, unknown>) => {
       log.message.debug('New message received via WebSocket:', wsMessage);
 
+      // Get conversation ID from message (handle both snake_case and camelCase)
+      const msgConversationId = (wsMessage.conversation_id || wsMessage.conversationId) as string;
+
+      // IMPORTANT: Only process messages for THIS conversation
+      // The WebSocket broadcasts to all clients, but we only update the current conversation's cache
+      if (msgConversationId !== conversationId) {
+        log.message.debug('[useMessages] Skipping message for different conversation:', msgConversationId);
+        return;
+      }
+
       // Get message ID (handle both snake_case and camelCase)
       const messageId = (wsMessage.id || wsMessage.message_id) as string;
 
@@ -196,11 +209,23 @@ export function useMessages(
 
       // Transform WebSocket message from snake_case to camelCase
       // This is critical - server sends snake_case, but cache expects camelCase
-      const transformedMessage = transformWebSocketMessage(wsMessage);
+      const transformedMessage = transformServerMessage(wsMessage);
 
       // Validate we have required fields after transformation
       if (!transformedMessage.id || !transformedMessage.createdAt) {
         log.message.warn('[useMessages] Invalid message data after transform, invalidating cache');
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.messages.list(conversationId, { limit }),
+        });
+        return;
+      }
+
+      // Check if we have existing cache data before attempting to update
+      const existingData = queryClient.getQueryData(queryKeys.messages.list(conversationId, { limit }));
+
+      if (!existingData) {
+        // No cache data exists - invalidate to trigger a fetch
+        log.message.debug('[useMessages] No cache data exists, invalidating to fetch');
         queryClient.invalidateQueries({
           queryKey: queryKeys.messages.list(conversationId, { limit }),
         });
@@ -212,15 +237,18 @@ export function useMessages(
         queryKeys.messages.list(conversationId, { limit }),
         (oldData: unknown) => {
           if (!oldData || typeof oldData !== 'object') {
-            // No existing data, need to fetch
-            log.message.debug('[useMessages] No cache data, invalidating');
-            queryClient.invalidateQueries({
-              queryKey: queryKeys.messages.list(conversationId, { limit }),
-            });
+            // This shouldn't happen since we checked above, but be safe
+            log.message.warn('[useMessages] Unexpected: oldData is empty in setQueryData');
             return oldData;
           }
 
           const data = oldData as { pages: Array<{ data: Message[] }>; pageParams: unknown[] };
+
+          // Validate pages array exists
+          if (!data.pages || data.pages.length === 0) {
+            log.message.warn('[useMessages] No pages in cache data');
+            return oldData;
+          }
 
           // Check if message already exists in cache (prevent duplicates)
           const messageExists = data.pages.some(page =>
@@ -243,7 +271,7 @@ export function useMessages(
             return page;
           });
 
-          log.message.debug('[useMessages] Added new message to cache:', transformedMessage.id);
+          log.message.info('[useMessages] ✅ Added new message to cache:', transformedMessage.id, 'type:', transformedMessage.type);
 
           return {
             ...data,
