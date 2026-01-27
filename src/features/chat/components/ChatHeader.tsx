@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useIsUserOnline } from '@/hooks/usePresence';
+import { getUserImageUrl } from '@/lib/imageUtils';
 import type { Conversation } from '@/types/conversation';
 
 interface ChatHeaderProps {
@@ -70,7 +71,7 @@ export function ChatHeader({
       {/* Avatar with Online Indicator */}
       <div className="relative overflow-visible">
         <Avatar className="w-10 h-10 md:w-12 md:h-12">
-          <AvatarImage src={conversation.avatarUrl} />
+          <AvatarImage src={getUserImageUrl(conversation.avatarUrl)} />
           <AvatarFallback className="bg-viber-purple text-white font-semibold">
             {conversationTitle.charAt(0).toUpperCase()}
           </AvatarFallback>

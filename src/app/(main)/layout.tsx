@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { AppHeader } from '@/components/layout/AppHeader';
-import { CenterPanel } from '@/components/layout/CenterPanel';
+import ConversationList from '@/features/chat/components/ConversationList';
 import { NotificationCenter } from '@/features/notifications';
 import { useNotificationEvents } from '@/features/notifications';
 import { ConnectionStatus } from '@/components/ConnectionStatus';
@@ -69,7 +69,7 @@ export default function MainLayout({
           <div className="hidden lg:grid lg:grid-cols-[400px_1fr] h-full">
             {/* Center Panel - Messages/Conversations List */}
             <aside className="bg-white border-r border-gray-200">
-              <CenterPanel />
+              <ConversationList />
             </aside>
 
             {/* Right Panel - Chat View (children) */}

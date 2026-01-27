@@ -17,7 +17,7 @@ import { useSendMessage } from '@/features/messaging/hooks/useSendMessage';
 import { useMessageActions } from '@/features/messaging/hooks/useMessageActions';
 import { useSocket } from '@/hooks/useSocket';
 import { messageService } from '@/features/messaging/services/messageService';
-import { CenterPanel } from '@/components/layout/CenterPanel';
+import ConversationList from '@/features/chat/components/ConversationList';
 import type { Message } from '@/types';
 import { useConversationQuery } from '@/features/conversations/hooks/useConversationsQuery';
 import { useCurrentUser } from '@/features/users/hooks/useCurrentUser';
@@ -318,7 +318,7 @@ export function Chat({
 
         {/* Conversation List */}
         <div className="h-[calc(100%-73px)] overflow-y-auto">
-          <CenterPanel />
+          <ConversationList />
         </div>
       </div>
 
