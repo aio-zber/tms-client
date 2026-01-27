@@ -1,6 +1,7 @@
 'use client';
 import { log } from '@/lib/logger';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { getUserImageUrl } from '@/lib/imageUtils';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -145,6 +146,7 @@ export function AppHeader() {
         <DropdownMenuTrigger asChild>
           <button className="flex items-center gap-2 px-2 md:px-3 py-2 rounded-lg hover:bg-gray-100 transition">
             <Avatar className="h-8 w-8 md:h-9 md:w-9">
+              <AvatarImage src={getUserImageUrl(user.image)} alt={getUserDisplayName(user)} />
               <AvatarFallback className="bg-viber-purple text-white font-semibold text-xs md:text-sm">
                 {getUserInitials(user)}
               </AvatarFallback>
@@ -162,6 +164,7 @@ export function AppHeader() {
             <div className="flex items-center gap-3 mb-3">
               <div className="relative">
                 <Avatar className="h-16 w-16">
+                  <AvatarImage src={getUserImageUrl(user.image)} alt={getUserDisplayName(user)} />
                   <AvatarFallback className="bg-viber-purple text-white font-semibold text-lg">
                     {getUserInitials(user)}
                   </AvatarFallback>
