@@ -67,6 +67,17 @@ function ConversationListContent() {
     refresh,
   } = useConversations();
 
+  // Debug: Log conversation data to verify avatarUrl is present
+  if (conversations.length > 0 && typeof window !== 'undefined') {
+    console.log('[ConversationList] First conversation:', {
+      id: conversations[0].id,
+      name: conversations[0].name,
+      display_name: conversations[0].display_name,
+      avatarUrl: conversations[0].avatarUrl,
+      type: conversations[0].type,
+    });
+  }
+
   // Debounce search query to reduce API calls (for message search)
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
