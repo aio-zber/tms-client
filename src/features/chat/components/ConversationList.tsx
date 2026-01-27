@@ -11,6 +11,7 @@ import { MessageCircle, Search, Plus, FileText } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { OnlineIndicator } from '@/components/ui/OnlineIndicator';
 import { formatSidebarTimestamp } from '@/lib/dateUtils';
 import { getUserImageUrl } from '@/lib/imageUtils';
@@ -66,17 +67,6 @@ function ConversationListContent() {
     error: fetchError,
     refresh,
   } = useConversations();
-
-  // Debug: Log conversation data to verify avatarUrl is present
-  if (conversations.length > 0 && typeof window !== 'undefined') {
-    console.log('[ConversationList] First conversation:', {
-      id: conversations[0].id,
-      name: conversations[0].name,
-      display_name: conversations[0].display_name,
-      avatarUrl: conversations[0].avatarUrl,
-      type: conversations[0].type,
-    });
-  }
 
   // Debounce search query to reduce API calls (for message search)
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
@@ -265,12 +255,6 @@ function ConversationListContent() {
                     conversation={conversation}
                     currentUserId={currentUser?.id}
                   />
-                  {/* Unread badge - positioned at top-right, above online indicator */}
-                  {conversation.unreadCount && conversation.unreadCount > 0 && (
-                    <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                      {conversation.unreadCount > 9 ? '9+' : conversation.unreadCount}
-                    </div>
-                  )}
                 </div>
 
                 {/* Content */}
@@ -285,20 +269,27 @@ function ConversationListContent() {
                       </span>
                     )}
                   </div>
-                  <p className="text-sm text-gray-600 truncate">
-                    {conversation.lastMessage ? (
-                      <>
-                        {conversation.type === 'group' && conversation.lastMessage.senderId && (
-                          <span className="font-medium">
-                            {conversation.lastMessage.senderId}:{' '}
-                          </span>
-                        )}
-                        {conversation.lastMessage.content}
-                      </>
-                    ) : (
-                      <span className="text-gray-400 italic">No messages yet</span>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm text-gray-600 truncate">
+                      {conversation.lastMessage ? (
+                        <>
+                          {conversation.type === 'group' && conversation.lastMessage.senderId && (
+                            <span className="font-medium">
+                              {conversation.lastMessage.senderId}:{' '}
+                            </span>
+                          )}
+                          {conversation.lastMessage.content}
+                        </>
+                      ) : (
+                        <span className="text-gray-400 italic">No messages yet</span>
+                      )}
+                    </p>
+                    {conversation.unreadCount > 0 && (
+                      <Badge className="bg-viber-purple hover:bg-viber-purple-dark shrink-0 h-5 min-w-5 px-1.5 text-xs">
+                        {conversation.unreadCount}
+                      </Badge>
                     )}
-                  </p>
+                  </div>
                 </div>
               </button>
             ))}

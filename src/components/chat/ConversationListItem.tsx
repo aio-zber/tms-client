@@ -1,6 +1,7 @@
 'use client';
 
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { getUserImageUrl } from '@/lib/imageUtils';
 import { Badge } from '@/components/ui/badge';
 import { OnlineIndicator } from '@/components/ui/OnlineIndicator';
 import type { Conversation } from '@/types';
@@ -117,6 +118,7 @@ export function ConversationListItem({
       {/* Avatar */}
       <div className="relative shrink-0 overflow-visible">
         <Avatar className="h-12 w-12">
+          <AvatarImage src={getUserImageUrl(conversation.avatarUrl)} />
           <AvatarFallback className="bg-viber-purple text-white font-semibold">
             {getNameInitials(displayName)}
           </AvatarFallback>

@@ -2,7 +2,7 @@
 
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { CenterPanel } from '@/components/layout/CenterPanel';
+import ConversationList from '@/features/chat/components/ConversationList';
 import { Chat } from '@/features/chat/components/Chat';
 
 function ChatsContent() {
@@ -14,7 +14,7 @@ function ChatsContent() {
       <>
         {/* Mobile: Show conversation list */}
         <div className="h-full lg:hidden">
-          <CenterPanel />
+          <ConversationList />
         </div>
 
         {/* Desktop: Show empty state (sidebar already visible) */}
