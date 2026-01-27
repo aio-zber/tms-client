@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { OnlineIndicator } from '@/components/ui/OnlineIndicator';
 import { formatSidebarTimestamp } from '@/lib/dateUtils';
+import { getUserImageUrl } from '@/lib/imageUtils';
 import { useConversations, useConversationSearch } from '@/features/conversations';
 import { useUnifiedSearch } from '@/features/messaging/hooks/useUnifiedSearch';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -243,7 +244,7 @@ function ConversationListContent() {
                 {/* Avatar with Online Indicator */}
                 <div className="relative overflow-visible">
                   <Avatar className="w-12 h-12">
-                    <AvatarImage src={conversation.avatarUrl} />
+                    <AvatarImage src={getUserImageUrl(conversation.avatarUrl)} />
                     <AvatarFallback className="bg-viber-purple text-white">
                       {getInitials(conversation.display_name || conversation.name || 'Chat')}
                     </AvatarFallback>
