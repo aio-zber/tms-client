@@ -3,12 +3,13 @@
  * Manages conversation list fetching and state with real-time WebSocket updates.
  *
  * Real-time strategy (same as useMessages):
+ * - Join ALL conversation rooms so WebSocket events are received for every chat
  * - DIRECT CACHE UPDATE (setQueryData) for instant sidebar rendering
  * - Background invalidation as fallback to sync with server truth
  */
 
 import { log } from '@/lib/logger';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { socketClient } from '@/lib/socket';
 import { authService } from '@/features/auth/services/authService';
@@ -114,6 +115,9 @@ export function useConversations(
   const queryClient = useQueryClient();
   const socketReady = useSocketReady();
 
+  // Track which conversation rooms we've already joined to avoid re-joining
+  const joinedRoomsRef = useRef<Set<string>>(new Set());
+
   // Use TanStack Query infinite query
   const {
     conversations,
@@ -128,32 +132,70 @@ export function useConversations(
     enabled: autoLoad,
   });
 
-  // WebSocket: Real-time direct cache updates + background invalidation
-  // Re-runs when socketReady changes (fixes race condition on mount)
+  // SINGLE EFFECT: Join rooms + attach listeners (mirrors useMessages pattern)
+  //
+  // Critical: Room joining and listener attachment MUST be in the same effect.
+  // Socket.IO broadcasts new_message to rooms — if listeners are attached
+  // before rooms are joined, events are never received.
+  //
+  // useMessages (chatbox) works because it joins the room and attaches
+  // listeners in one effect. The previous split into two effects caused
+  // a race condition where listeners ran before rooms were joined.
   useEffect(() => {
-    const socket = socketClient.getSocket();
-    if (!socket || !socketReady) {
-      log.message.debug('[useConversations] Socket not ready, waiting...');
-      return;
+    if (!socketReady || conversations.length === 0) return;
+
+    log.message.debug('[useConversations] Setting up: joining rooms + attaching listeners');
+
+    // ── Step 1: Join ALL conversation rooms ──
+    // Server broadcasts new_message to Socket.IO rooms (conversation:{id}).
+    // Without joining, the sidebar never receives events.
+    const newRooms: string[] = [];
+    for (const conv of conversations) {
+      if (!joinedRoomsRef.current.has(conv.id)) {
+        joinedRoomsRef.current.add(conv.id);
+        newRooms.push(conv.id);
+      }
     }
 
+    if (newRooms.length > 0) {
+      log.message.debug(
+        `[useConversations] Joining ${newRooms.length} conversation rooms`
+      );
+      for (const id of newRooms) {
+        socketClient.joinConversation(id);
+      }
+    }
+
+    // ── Step 2: Resolve current user for own-message detection ──
     let currentUserId: string | null = null;
 
     const initializeUser = async () => {
       try {
         const currentUser = await authService.getCurrentUser();
         currentUserId = currentUser?.id || null;
-        log.message.debug('[useConversations] Current user ID:', currentUserId);
-      } catch (error) {
-        log.message.warn('[useConversations] Failed to get current user:', error);
+      } catch (err) {
+        log.message.warn('[useConversations] Failed to get current user:', err);
       }
     };
 
     initializeUser();
 
-    log.message.debug('[useConversations] Setting up WebSocket listeners');
+    // ── Step 3: Handle reconnection (re-join rooms + refresh) ──
+    const handleConnect = () => {
+      log.ws.info('[useConversations] Socket reconnected — re-joining all rooms');
+      joinedRoomsRef.current.forEach((id) => {
+        socketClient.joinConversation(id);
+      });
+      // Refresh to catch messages missed during disconnection
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.all,
+      });
+    };
 
-    // The query key used by useConversationsQuery
+    const socket = socketClient.getSocket();
+    socket?.on('connect', handleConnect);
+
+    // ── Step 4: Attach WebSocket listeners ──
     const listQueryKey = queryKeys.conversations.list({ limit, offset: 0, type });
 
     // Listen for new messages — direct cache update for instant sidebar rendering
@@ -165,22 +207,14 @@ export function useConversations(
 
       const isOwnMessage = senderId === currentUserId;
 
-      log.message.debug('[useConversations] New message received:', {
-        conversationId,
-        senderId,
-        isOwnMessage,
-      });
-
       // INSTANT UPDATE: Directly update the conversation cache
-      const existingData = queryClient.getQueryData(listQueryKey);
-      if (existingData) {
-        queryClient.setQueryData(
-          listQueryKey,
-          (oldData: unknown) =>
-            updateConversationCacheWithNewMessage(oldData, conversationId, message, isOwnMessage)
-        );
-        log.message.debug('[useConversations] Direct cache update applied for:', conversationId);
-      }
+      queryClient.setQueryData(
+        listQueryKey,
+        (oldData: unknown) => {
+          if (!oldData) return oldData;
+          return updateConversationCacheWithNewMessage(oldData, conversationId, message, isOwnMessage);
+        }
+      );
 
       // Update unread counts for messages from others
       if (!isOwnMessage) {
@@ -193,7 +227,6 @@ export function useConversations(
       }
 
       // Background sync: invalidate to eventually reconcile with server
-      // (handles edge cases like conversation not in cache, ordering drift, etc.)
       queryClient.invalidateQueries({
         queryKey: queryKeys.conversations.all,
       });
@@ -207,30 +240,27 @@ export function useConversations(
 
       if (status === 'read' && userId === currentUserId && conversationId) {
         // Reset unread count to 0 instantly when current user marks as read
-        const existingData = queryClient.getQueryData(listQueryKey);
-        if (existingData) {
-          queryClient.setQueryData(
-            listQueryKey,
-            (oldData: unknown) => {
-              if (!oldData || typeof oldData !== 'object') return oldData;
-              const data = oldData as {
-                pages: Array<ConversationListResponse>;
-                pageParams: unknown[];
-              };
-              if (!data.pages) return oldData;
+        queryClient.setQueryData(
+          listQueryKey,
+          (oldData: unknown) => {
+            if (!oldData || typeof oldData !== 'object') return oldData;
+            const typedData = oldData as {
+              pages: Array<ConversationListResponse>;
+              pageParams: unknown[];
+            };
+            if (!typedData.pages) return oldData;
 
-              const newPages = data.pages.map((page) => ({
-                ...page,
-                data: page.data.map((conv) =>
-                  conv.id === conversationId
-                    ? { ...conv, unreadCount: 0 }
-                    : conv
-                ),
-              }));
-              return { ...data, pages: newPages };
-            }
-          );
-        }
+            const newPages = typedData.pages.map((page) => ({
+              ...page,
+              data: page.data.map((conv) =>
+                conv.id === conversationId
+                  ? { ...conv, unreadCount: 0 }
+                  : conv
+              ),
+            }));
+            return { ...typedData, pages: newPages };
+          }
+        );
 
         queryClient.invalidateQueries({
           queryKey: queryKeys.unreadCount.conversation(conversationId),
@@ -247,7 +277,6 @@ export function useConversations(
 
       log.message.debug('[useConversations] Conversation updated:', conversationId);
 
-      // Invalidate to refetch updated details
       queryClient.invalidateQueries({
         queryKey: queryKeys.conversations.detail(conversationId),
       });
@@ -265,13 +294,12 @@ export function useConversations(
       socketClient.off('new_message', handleNewMessage);
       socketClient.off('message_status', handleMessageStatus);
       socketClient.off('conversation_updated', handleConversationUpdated);
+      socket?.off('connect', handleConnect);
     };
-  }, [queryClient, socketReady, limit, type]);
+  }, [queryClient, socketReady, limit, type, conversations]);
 
   return {
     conversations,
-    // Only show loading skeleton on initial load (no cached data yet).
-    // Background refetches from WebSocket invalidation update data seamlessly.
     loading: isLoading,
     error: error as Error | null,
     hasMore: hasNextPage ?? false,
