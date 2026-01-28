@@ -9,86 +9,17 @@ import { formatSidebarTimestamp } from '@/lib/dateUtils';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useIsUserOnline } from '@/hooks/usePresence';
+import {
+  getConversationDisplayName,
+  getNameInitials,
+  getOtherUserId,
+} from '@/lib/conversationUtils';
 
 interface ConversationListItemProps {
   conversation: Conversation;
   isActive?: boolean;
   currentUserId?: string;
 }
-
-// Helper function to get initials from a name string
-const getNameInitials = (name: string): string => {
-  return name
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2) || 'U';
-};
-
-// Helper function to get the other user's ID in a DM conversation
-const getOtherUserId = (
-  conversation: Conversation,
-  currentUserId?: string
-): string | undefined => {
-  if (conversation.type !== 'dm' || !conversation.members) {
-    return undefined;
-  }
-  const otherMember = conversation.members.find(
-    (m) => m.userId !== currentUserId
-  );
-  return otherMember?.userId;
-};
-
-// Helper function to get conversation display name
-const getConversationDisplayName = (
-  conversation: Conversation,
-  currentUserId?: string
-): string => {
-  // For group conversations, use the group name
-  if (conversation.type === 'group') {
-    return conversation.name || 'Group Chat';
-  }
-
-  // For DM conversations, get the other user's name
-  if (!conversation.members || conversation.members.length === 0) {
-    return 'Direct Message';
-  }
-
-  const otherMember = conversation.members.find(
-    (m) => m.userId !== currentUserId
-  );
-
-  if (!otherMember) return 'Direct Message';
-
-  // Check if member has enriched user data from backend
-  const memberData = otherMember as unknown as Record<string, unknown>;
-  const userData = memberData.user as Record<string, unknown> | undefined;
-
-  if (userData) {
-    // Try to get full name from various fields
-    const firstName = userData.firstName || userData.first_name || '';
-    const middleName = userData.middleName || userData.middle_name || '';
-    const lastName = userData.lastName || userData.last_name || '';
-    const name = userData.name;
-
-    // Build full name
-    if (name) return String(name);
-
-    const fullName = [firstName, middleName, lastName]
-      .filter(Boolean)
-      .join(' ')
-      .trim();
-
-    if (fullName) return fullName;
-
-    // Fallback to email
-    if (userData.email) return String(userData.email);
-  }
-
-  // Final fallback
-  return `User ${otherMember.userId?.slice(0, 8) || 'Unknown'}`;
-};
 
 export function ConversationListItem({
   conversation,

@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useState, Suspense, useMemo } from 'react';
+import { useState, Suspense, useMemo, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { MessageCircle, Search, Plus, FileText } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -15,6 +15,11 @@ import { Badge } from '@/components/ui/badge';
 import { OnlineIndicator } from '@/components/ui/OnlineIndicator';
 import { formatSidebarTimestamp } from '@/lib/dateUtils';
 import { getUserImageUrl } from '@/lib/imageUtils';
+import {
+  getConversationDisplayName,
+  getNameInitials,
+  getOtherUserId,
+} from '@/lib/conversationUtils';
 import { useConversations, useConversationSearch } from '@/features/conversations';
 import { useUnifiedSearch } from '@/features/messaging/hooks/useUnifiedSearch';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -34,16 +39,13 @@ function ConversationOnlineIndicator({
   conversation: Conversation;
   currentUserId: string | undefined;
 }) {
-  // Get the other user's ID for DM conversations
-  const otherUserId = useMemo(() => {
-    if (conversation.type !== 'dm' || !currentUserId) return undefined;
-    const otherMember = conversation.members.find(m => m.userId !== currentUserId);
-    return otherMember?.userId;
-  }, [conversation, currentUserId]);
+  const otherUserId = useMemo(
+    () => getOtherUserId(conversation, currentUserId),
+    [conversation, currentUserId]
+  );
 
   const isOnline = useIsUserOnline(otherUserId);
 
-  // Only show indicator for DM conversations
   if (conversation.type !== 'dm') return null;
 
   return <OnlineIndicator isOnline={isOnline} size="md" />;
@@ -74,7 +76,6 @@ function ConversationListContent() {
   // Conversation search (Telegram/Messenger pattern: fuzzy + backend)
   const {
     conversations: searchedConversations,
-    isSearching: isSearchingConversations,
     isSearchActive,
   } = useConversationSearch({
     query: searchQuery, // Not debounced - hook handles debouncing internally
@@ -89,7 +90,6 @@ function ConversationListContent() {
   });
 
   const error = fetchError ? fetchError.message : null;
-  const isSearching = isSearchingConversations || isSearchingMessages;
 
   const handleConversationCreated = (conversationId: string) => {
     refresh();
@@ -100,27 +100,50 @@ function ConversationListContent() {
     router.push(`/chats?id=${conversationId}`);
   };
 
-  const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map(word => word[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-  };
+  // Build a lookup map from conversation ID to display name for message search results
+  const conversationNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const conv of conversations) {
+      map.set(conv.id, getConversationDisplayName(conv, currentUser?.id));
+    }
+    return map;
+  }, [conversations, currentUser?.id]);
+
+  // Resolve message search result conversation name
+  const resolveMessageConversationName = useCallback(
+    (message: { conversation_id: string; conversation_name?: string }) => {
+      // First try the local lookup (most reliable - uses enriched member data)
+      const localName = conversationNameMap.get(message.conversation_id);
+      if (localName) return localName;
+      // Fallback to backend-provided name
+      if (message.conversation_name) return message.conversation_name;
+      return 'Chat';
+    },
+    [conversationNameMap]
+  );
 
   // Hybrid search strategy (Telegram/Messenger pattern):
-  // - Query < 2 chars: Client-side filter (instant)
+  // - Query < 2 chars: Client-side filter (instant, no loading)
   // - Query >= 2 chars: Backend search (accurate + fuzzy)
-  const displayConversations = isSearchActive
-    ? searchedConversations // Backend search with fuzzy matching
-    : searchQuery.length > 0 && searchQuery.length < 2
-    ? conversations.filter(conv =>
-        (conv.name || '').toLowerCase().includes(searchQuery.toLowerCase())
-      ) // Client-side filter for 1 char
-    : conversations; // No search - show all
-
-  const filteredConversations = displayConversations;
+  const displayConversations = useMemo(() => {
+    if (isSearchActive) {
+      return searchedConversations;
+    }
+    if (searchQuery.length > 0 && searchQuery.length < 2) {
+      const query = searchQuery.toLowerCase();
+      return conversations.filter(conv => {
+        // Search by group name
+        if (conv.name?.toLowerCase().includes(query)) return true;
+        // Search by display_name
+        if (conv.display_name?.toLowerCase().includes(query)) return true;
+        // Search by member names (for DMs)
+        const displayName = getConversationDisplayName(conv, currentUser?.id);
+        if (displayName.toLowerCase().includes(query)) return true;
+        return false;
+      });
+    }
+    return conversations;
+  }, [isSearchActive, searchedConversations, searchQuery, conversations, currentUser?.id]);
 
   if (isLoading) {
     return (
@@ -141,7 +164,7 @@ function ConversationListContent() {
   if (error) {
     return (
       <div className="p-4 text-center">
-        <div className="text-red-500 mb-2">❌ {error}</div>
+        <div className="text-red-500 mb-2">{error}</div>
         <button
           onClick={() => refresh()}
           className="text-viber-purple hover:underline text-sm"
@@ -187,7 +210,7 @@ function ConversationListContent() {
               <div className="flex items-center text-xs text-gray-600 mb-2">
                 <FileText className="w-3 h-3 mr-1" />
                 <span className="font-medium">Messages ({searchMessages.length})</span>
-                {isSearching && <span className="ml-2 text-gray-400">Searching...</span>}
+                {isSearchingMessages && <span className="ml-2 text-gray-400">Searching...</span>}
               </div>
               <div className="space-y-1">
                 {searchMessages.slice(0, 5).map((message) => (
@@ -199,7 +222,7 @@ function ConversationListContent() {
                     <MessageCircle className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs text-gray-500 mb-0.5 truncate">
-                        {message.conversation_name || 'Unknown Chat'}
+                        {resolveMessageConversationName(message)}
                       </p>
                       <p className="text-sm text-gray-900 line-clamp-2">
                         {message.content}
@@ -212,7 +235,7 @@ function ConversationListContent() {
           </div>
         )}
 
-        {filteredConversations.length === 0 && searchMessages.length === 0 && debouncedSearchQuery ? (
+        {displayConversations.length === 0 && searchMessages.length === 0 && debouncedSearchQuery ? (
           <div className="p-8 text-center">
             <MessageCircle className="mx-auto h-12 w-12 text-gray-300 mb-3" />
             <p className="text-gray-500 text-sm">
@@ -222,7 +245,7 @@ function ConversationListContent() {
               Try a different search term
             </p>
           </div>
-        ) : filteredConversations.length === 0 && !searchQuery ? (
+        ) : displayConversations.length === 0 && !searchQuery ? (
           <div className="p-8 text-center">
             <MessageCircle className="mx-auto h-12 w-12 text-gray-300 mb-3" />
             <p className="text-gray-500 text-sm">
@@ -232,67 +255,63 @@ function ConversationListContent() {
               Start a new conversation
             </p>
           </div>
-        ) : filteredConversations.length > 0 ? (
+        ) : displayConversations.length > 0 ? (
           <div className="p-2 space-y-1">
-            {filteredConversations.map((conversation) => (
-              <button
-                key={conversation.id}
-                onClick={() => handleConversationClick(conversation.id)}
-                className={`w-full flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors ${
-                  selectedId === conversation.id ? 'bg-viber-purple-bg' : ''
-                }`}
-              >
-                {/* Avatar with Online Indicator */}
-                <div className="relative overflow-visible">
-                  <Avatar className="w-12 h-12">
-                    <AvatarImage src={getUserImageUrl(conversation.avatarUrl)} />
-                    <AvatarFallback className="bg-viber-purple text-white">
-                      {getInitials(conversation.display_name || conversation.name || 'Chat')}
-                    </AvatarFallback>
-                  </Avatar>
-                  {/* Online indicator (Messenger-style green dot) */}
-                  <ConversationOnlineIndicator
-                    conversation={conversation}
-                    currentUserId={currentUser?.id}
-                  />
-                </div>
+            {displayConversations.map((conversation) => {
+              const displayName = getConversationDisplayName(conversation, currentUser?.id);
+              return (
+                <button
+                  key={conversation.id}
+                  onClick={() => handleConversationClick(conversation.id)}
+                  className={`w-full flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors ${
+                    selectedId === conversation.id ? 'bg-viber-purple-bg' : ''
+                  }`}
+                >
+                  {/* Avatar with Online Indicator */}
+                  <div className="relative overflow-visible">
+                    <Avatar className="w-12 h-12">
+                      <AvatarImage src={getUserImageUrl(conversation.avatarUrl)} />
+                      <AvatarFallback className="bg-viber-purple text-white">
+                        {getNameInitials(displayName)}
+                      </AvatarFallback>
+                    </Avatar>
+                    {/* Online indicator (Messenger-style green dot) */}
+                    <ConversationOnlineIndicator
+                      conversation={conversation}
+                      currentUserId={currentUser?.id}
+                    />
+                  </div>
 
-                {/* Content */}
-                <div className="flex-1 min-w-0 text-left">
-                  <div className="flex items-baseline justify-between mb-1">
-                    <h3 className="font-semibold text-gray-900 truncate">
-                      {conversation.display_name || conversation.name || 'Direct Message'}
-                    </h3>
-                    {conversation.lastMessage && (
-                      <span className="text-xs text-gray-500 ml-2 shrink-0 min-w-fit">
-                        {formatSidebarTimestamp(conversation.lastMessage.timestamp)}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm text-gray-600 truncate">
-                      {conversation.lastMessage ? (
-                        <>
-                          {conversation.type === 'group' && conversation.lastMessage.senderId && (
-                            <span className="font-medium">
-                              {conversation.lastMessage.senderId}:{' '}
-                            </span>
-                          )}
-                          {conversation.lastMessage.content}
-                        </>
-                      ) : (
-                        <span className="text-gray-400 italic">No messages yet</span>
+                  {/* Content */}
+                  <div className="flex-1 min-w-0 text-left">
+                    <div className="flex items-baseline justify-between mb-1">
+                      <h3 className="font-semibold text-gray-900 truncate">
+                        {displayName}
+                      </h3>
+                      {conversation.lastMessage && (
+                        <span className="text-xs text-gray-500 ml-2 shrink-0 min-w-fit">
+                          {formatSidebarTimestamp(conversation.lastMessage.timestamp)}
+                        </span>
                       )}
-                    </p>
-                    {conversation.unreadCount > 0 && (
-                      <Badge className="bg-viber-purple hover:bg-viber-purple-dark shrink-0 h-5 min-w-5 px-1.5 text-xs">
-                        {conversation.unreadCount}
-                      </Badge>
-                    )}
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm text-gray-600 truncate">
+                        {conversation.lastMessage ? (
+                          conversation.lastMessage.content
+                        ) : (
+                          <span className="text-gray-400 italic">No messages yet</span>
+                        )}
+                      </p>
+                      {conversation.unreadCount > 0 && (
+                        <Badge className="bg-viber-purple hover:bg-viber-purple-dark shrink-0 h-5 min-w-5 px-1.5 text-xs">
+                          {conversation.unreadCount}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </button>
-            ))}
+                </button>
+              );
+            })}
           </div>
         ) : null}
       </div>
