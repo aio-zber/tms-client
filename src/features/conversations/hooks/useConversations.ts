@@ -11,6 +11,7 @@ import { socketClient } from '@/lib/socket';
 import { authService } from '@/features/auth/services/authService';
 import { queryKeys } from '@/lib/queryClient';
 import { useConversationsQuery } from './useConversationsQuery';
+import { useSocketReady } from '@/components/providers/SocketProvider';
 import type { ConversationType } from '@/types/conversation';
 
 interface UseConversationsOptions {
@@ -24,6 +25,7 @@ export function useConversations(
 ) {
   const { limit = 20, type, autoLoad = true } = options;
   const queryClient = useQueryClient();
+  const socketReady = useSocketReady();
 
   // Use TanStack Query infinite query
   const {
@@ -40,10 +42,11 @@ export function useConversations(
   });
 
   // WebSocket: Real-time query invalidation (server as source of truth)
+  // Re-runs when socketReady changes (fixes race condition where socket wasn't ready on first mount)
   useEffect(() => {
     const socket = socketClient.getSocket();
-    if (!socket) {
-      log.message.debug('[useConversations] Socket not initialized, skipping WebSocket listeners');
+    if (!socket || !socketReady) {
+      log.message.debug('[useConversations] Socket not ready, waiting...');
       return;
     }
 
@@ -145,7 +148,7 @@ export function useConversations(
       socketClient.off('message_status', handleMessageStatus);
       socketClient.off('conversation_updated', handleConversationUpdated);
     };
-  }, [queryClient]); // Include queryClient in deps
+  }, [queryClient, socketReady]);
 
   return {
     conversations,

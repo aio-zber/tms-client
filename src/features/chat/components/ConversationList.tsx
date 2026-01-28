@@ -7,7 +7,7 @@
 
 import { useState, Suspense, useMemo, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { MessageCircle, Search, Plus, FileText } from 'lucide-react';
+import { MessageCircle, Search, Plus } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -27,6 +27,28 @@ import { useCurrentUser } from '@/features/users/hooks/useCurrentUser';
 import { useIsUserOnline } from '@/hooks/usePresence';
 import NewConversationDialog from '@/features/conversations/components/NewConversationDialog';
 import type { Conversation } from '@/types/conversation';
+
+/**
+ * Highlights matching text in search results (Viber-style purple highlight).
+ */
+function HighlightMatch({ text, query }: { text: string; query: string }) {
+  if (!query || query.length < 2) return <>{text}</>;
+
+  const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const parts = text.split(new RegExp(`(${escapedQuery})`, 'gi'));
+
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.toLowerCase() === query.toLowerCase() ? (
+          <span key={i} className="text-viber-purple font-semibold">{part}</span>
+        ) : (
+          part
+        )
+      )}
+    </>
+  );
+}
 
 /**
  * Helper component to display online indicator for a conversation.
@@ -84,7 +106,7 @@ function ConversationListContent() {
   });
 
   // Search messages when query is present
-  const { messages: searchMessages, isSearching: isSearchingMessages } = useUnifiedSearch({
+  const { messages: searchMessages } = useUnifiedSearch({
     query: debouncedSearchQuery,
     enabled: debouncedSearchQuery.length >= 2,
   });
@@ -111,12 +133,12 @@ function ConversationListContent() {
 
   // Resolve message search result conversation name
   const resolveMessageConversationName = useCallback(
-    (message: { conversation_id: string; conversation_name?: string }) => {
+    (message: { conversationId: string; conversationName?: string }) => {
       // First try the local lookup (most reliable - uses enriched member data)
-      const localName = conversationNameMap.get(message.conversation_id);
+      const localName = conversationNameMap.get(message.conversationId);
       if (localName) return localName;
       // Fallback to backend-provided name
-      if (message.conversation_name) return message.conversation_name;
+      if (message.conversationName) return message.conversationName;
       return 'Chat';
     },
     [conversationNameMap]
@@ -203,34 +225,46 @@ function ConversationListContent() {
 
       {/* Conversation List */}
       <div className="flex-1 overflow-y-auto">
-        {/* Show message search results if searching */}
+        {/* Message search results (Viber-style: conversation name, sender prefix, highlighted match) */}
         {debouncedSearchQuery.length >= 2 && searchMessages.length > 0 && (
-          <div className="border-b border-gray-200 bg-gray-50">
-            <div className="p-2 px-3">
-              <div className="flex items-center text-xs text-gray-600 mb-2">
-                <FileText className="w-3 h-3 mr-1" />
-                <span className="font-medium">Messages ({searchMessages.length})</span>
-                {isSearchingMessages && <span className="ml-2 text-gray-400">Searching...</span>}
-              </div>
-              <div className="space-y-1">
-                {searchMessages.slice(0, 5).map((message) => (
+          <div className="border-b border-gray-200">
+            <div className="px-3 pt-3 pb-1">
+              <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                Messages
+              </span>
+            </div>
+            <div>
+              {searchMessages.slice(0, 5).map((message) => {
+                const convName = resolveMessageConversationName(message);
+                return (
                   <button
                     key={message.id}
-                    onClick={() => handleConversationClick(message.conversation_id)}
-                    className="w-full flex items-start space-x-2 p-2 rounded hover:bg-white transition-colors text-left"
+                    onClick={() => {
+                      if (message.conversationId) {
+                        handleConversationClick(message.conversationId);
+                      }
+                    }}
+                    className="w-full flex items-center space-x-3 p-3 hover:bg-gray-50 transition-colors text-left"
                   >
-                    <MessageCircle className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                    <Avatar className="w-10 h-10 shrink-0">
+                      <AvatarFallback className="bg-gray-200 text-gray-600 text-xs">
+                        {getNameInitials(convName)}
+                      </AvatarFallback>
+                    </Avatar>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs text-gray-500 mb-0.5 truncate">
-                        {resolveMessageConversationName(message)}
+                      <p className="font-semibold text-sm text-gray-900 truncate">
+                        {convName}
                       </p>
-                      <p className="text-sm text-gray-900 line-clamp-2">
-                        {message.content}
+                      <p className="text-sm text-gray-500 truncate">
+                        {message.senderName && (
+                          <span className="text-gray-600 font-medium">{message.senderName}: </span>
+                        )}
+                        <HighlightMatch text={message.content} query={searchQuery} />
                       </p>
                     </div>
                   </button>
-                ))}
-              </div>
+                );
+              })}
             </div>
           </div>
         )}
