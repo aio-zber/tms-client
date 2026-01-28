@@ -144,11 +144,18 @@ export function useConversations(
   useEffect(() => {
     if (!socketReady || conversations.length === 0) return;
 
+    let cancelled = false;
+
     log.message.debug('[useConversations] Setting up: joining rooms + attaching listeners');
 
-    // ── Step 1: Join ALL conversation rooms ──
+    // ── Step 1: Join ALL conversation rooms (staggered) ──
     // Server broadcasts new_message to Socket.IO rooms (conversation:{id}).
     // Without joining, the sidebar never receives events.
+    //
+    // IMPORTANT: Room joins are staggered to avoid exhausting the server's
+    // database connection pool. Each join_conversation triggers a DB query
+    // on the server (membership check + mark-read). Joining all rooms
+    // simultaneously floods the pool (QueuePool limit reached).
     const newRooms: string[] = [];
     for (const conv of conversations) {
       if (!joinedRoomsRef.current.has(conv.id)) {
@@ -159,11 +166,20 @@ export function useConversations(
 
     if (newRooms.length > 0) {
       log.message.debug(
-        `[useConversations] Joining ${newRooms.length} conversation rooms`
+        `[useConversations] Staggering ${newRooms.length} room joins`
       );
-      for (const id of newRooms) {
-        socketClient.joinConversation(id);
-      }
+
+      // Join rooms sequentially with a delay to avoid overwhelming the server
+      const joinRoomsStaggered = async () => {
+        for (const id of newRooms) {
+          if (cancelled) break;
+          socketClient.joinConversation(id);
+          // 150ms between joins — fast enough for UX, gentle on the server pool
+          await new Promise((resolve) => setTimeout(resolve, 150));
+        }
+      };
+
+      joinRoomsStaggered();
     }
 
     // ── Step 2: Resolve current user for own-message detection ──
@@ -180,12 +196,18 @@ export function useConversations(
 
     initializeUser();
 
-    // ── Step 3: Handle reconnection (re-join rooms + refresh) ──
+    // ── Step 3: Handle reconnection (staggered re-join + refresh) ──
     const handleConnect = () => {
       log.ws.info('[useConversations] Socket reconnected — re-joining all rooms');
-      joinedRoomsRef.current.forEach((id) => {
-        socketClient.joinConversation(id);
-      });
+      const roomIds = Array.from(joinedRoomsRef.current);
+      const rejoinStaggered = async () => {
+        for (const id of roomIds) {
+          if (cancelled) break;
+          socketClient.joinConversation(id);
+          await new Promise((resolve) => setTimeout(resolve, 150));
+        }
+      };
+      rejoinStaggered();
       // Refresh to catch messages missed during disconnection
       queryClient.invalidateQueries({
         queryKey: queryKeys.conversations.all,
@@ -290,6 +312,7 @@ export function useConversations(
     socketClient.onConversationUpdated(handleConversationUpdated);
 
     return () => {
+      cancelled = true;
       log.message.debug('[useConversations] Cleaning up WebSocket listeners');
       socketClient.off('new_message', handleNewMessage);
       socketClient.off('message_status', handleMessageStatus);
