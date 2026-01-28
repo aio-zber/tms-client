@@ -2,14 +2,15 @@
  * useConversations Hook
  * Manages conversation list fetching and state with real-time WebSocket updates.
  *
- * Real-time strategy (same as useMessages):
- * - Join ALL conversation rooms so WebSocket events are received for every chat
+ * Real-time strategy (Telegram pattern):
+ * - Server auto-joins ALL conversation rooms on connect (one DB query)
+ * - Client only listens for events — no per-room join calls needed
  * - DIRECT CACHE UPDATE (setQueryData) for instant sidebar rendering
  * - Background invalidation as fallback to sync with server truth
  */
 
 import { log } from '@/lib/logger';
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { socketClient } from '@/lib/socket';
 import { authService } from '@/features/auth/services/authService';
@@ -115,9 +116,6 @@ export function useConversations(
   const queryClient = useQueryClient();
   const socketReady = useSocketReady();
 
-  // Track which conversation rooms we've already joined to avoid re-joining
-  const joinedRoomsRef = useRef<Set<string>>(new Set());
-
   // Use TanStack Query infinite query
   const {
     conversations,
@@ -132,57 +130,19 @@ export function useConversations(
     enabled: autoLoad,
   });
 
-  // SINGLE EFFECT: Join rooms + attach listeners (mirrors useMessages pattern)
+  // WebSocket listeners for real-time sidebar updates.
   //
-  // Critical: Room joining and listener attachment MUST be in the same effect.
-  // Socket.IO broadcasts new_message to rooms — if listeners are attached
-  // before rooms are joined, events are never received.
+  // Telegram pattern: Server auto-joins ALL conversation rooms on connect
+  // (one DB query in the connect handler). The client only needs to listen
+  // for events — no per-room join_conversation calls from the sidebar.
   //
-  // useMessages (chatbox) works because it joins the room and attaches
-  // listeners in one effect. The previous split into two effects caused
-  // a race condition where listeners ran before rooms were joined.
+  // join_conversation is still called by useMessages when the user OPENS
+  // a specific chat, which triggers mark-as-read on the server.
   useEffect(() => {
-    if (!socketReady || conversations.length === 0) return;
+    if (!socketReady) return;
 
-    let cancelled = false;
+    log.message.debug('[useConversations] Attaching WebSocket listeners');
 
-    log.message.debug('[useConversations] Setting up: joining rooms + attaching listeners');
-
-    // ── Step 1: Join ALL conversation rooms (staggered) ──
-    // Server broadcasts new_message to Socket.IO rooms (conversation:{id}).
-    // Without joining, the sidebar never receives events.
-    //
-    // IMPORTANT: Room joins are staggered to avoid exhausting the server's
-    // database connection pool. Each join_conversation triggers a DB query
-    // on the server (membership check + mark-read). Joining all rooms
-    // simultaneously floods the pool (QueuePool limit reached).
-    const newRooms: string[] = [];
-    for (const conv of conversations) {
-      if (!joinedRoomsRef.current.has(conv.id)) {
-        joinedRoomsRef.current.add(conv.id);
-        newRooms.push(conv.id);
-      }
-    }
-
-    if (newRooms.length > 0) {
-      log.message.debug(
-        `[useConversations] Staggering ${newRooms.length} room joins`
-      );
-
-      // Join rooms sequentially with a delay to avoid overwhelming the server
-      const joinRoomsStaggered = async () => {
-        for (const id of newRooms) {
-          if (cancelled) break;
-          socketClient.joinConversation(id);
-          // 150ms between joins — fast enough for UX, gentle on the server pool
-          await new Promise((resolve) => setTimeout(resolve, 150));
-        }
-      };
-
-      joinRoomsStaggered();
-    }
-
-    // ── Step 2: Resolve current user for own-message detection ──
     let currentUserId: string | null = null;
 
     const initializeUser = async () => {
@@ -196,19 +156,10 @@ export function useConversations(
 
     initializeUser();
 
-    // ── Step 3: Handle reconnection (staggered re-join + refresh) ──
+    // On reconnect, server auto-rejoins all rooms. Just refresh data
+    // to catch any messages missed during disconnection.
     const handleConnect = () => {
-      log.ws.info('[useConversations] Socket reconnected — re-joining all rooms');
-      const roomIds = Array.from(joinedRoomsRef.current);
-      const rejoinStaggered = async () => {
-        for (const id of roomIds) {
-          if (cancelled) break;
-          socketClient.joinConversation(id);
-          await new Promise((resolve) => setTimeout(resolve, 150));
-        }
-      };
-      rejoinStaggered();
-      // Refresh to catch messages missed during disconnection
+      log.ws.info('[useConversations] Socket reconnected — refreshing data');
       queryClient.invalidateQueries({
         queryKey: queryKeys.conversations.all,
       });
@@ -217,7 +168,6 @@ export function useConversations(
     const socket = socketClient.getSocket();
     socket?.on('connect', handleConnect);
 
-    // ── Step 4: Attach WebSocket listeners ──
     const listQueryKey = queryKeys.conversations.list({ limit, offset: 0, type });
 
     // Listen for new messages — direct cache update for instant sidebar rendering
@@ -312,14 +262,13 @@ export function useConversations(
     socketClient.onConversationUpdated(handleConversationUpdated);
 
     return () => {
-      cancelled = true;
       log.message.debug('[useConversations] Cleaning up WebSocket listeners');
       socketClient.off('new_message', handleNewMessage);
       socketClient.off('message_status', handleMessageStatus);
       socketClient.off('conversation_updated', handleConversationUpdated);
       socket?.off('connect', handleConnect);
     };
-  }, [queryClient, socketReady, limit, type, conversations]);
+  }, [queryClient, socketReady, limit, type]);
 
   return {
     conversations,
