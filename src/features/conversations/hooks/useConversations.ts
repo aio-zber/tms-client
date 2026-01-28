@@ -29,7 +29,6 @@ export function useConversations(
   const {
     conversations,
     isLoading,
-    isFetchingNextPage,
     hasNextPage,
     fetchNextPage,
     error,
@@ -150,7 +149,9 @@ export function useConversations(
 
   return {
     conversations,
-    loading: isLoading || isFetchingNextPage,
+    // Only show loading skeleton on initial load (no cached data yet).
+    // Background refetches from WebSocket invalidation update data seamlessly.
+    loading: isLoading,
     error: error as Error | null,
     hasMore: hasNextPage ?? false,
     loadConversations: refetch,
