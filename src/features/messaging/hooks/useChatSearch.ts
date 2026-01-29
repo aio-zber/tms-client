@@ -51,7 +51,7 @@ interface UseChatSearchReturn {
  * then navigates between results using jumpToMessage
  */
 export function useChatSearch({
-  messages,
+  messages: _messages,
   conversationId,
   _enabled = true,
   onResultSelect,
