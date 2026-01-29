@@ -1,6 +1,6 @@
 /**
  * ChatSearchBar Component
- * Telegram/Messenger-style inline search for messages within a conversation
+ * Viber-style inline search for messages within a conversation
  *
  * This is a PURE UI COMPONENT that receives all state and actions as props.
  * Search logic is handled by the useChatSearch hook.
@@ -9,7 +9,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { Search, X, ChevronUp, ChevronDown } from 'lucide-react';
+import { Search, X, ChevronUp, ChevronDown, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -24,6 +24,7 @@ interface ChatSearchBarProps {
   setSearchQuery: (query: string) => void;
   currentIndex: number;
   totalResults: number;
+  isSearching?: boolean;
 
   // Navigation actions from useChatSearch hook
   goToNext: () => void;
@@ -37,6 +38,7 @@ export default function ChatSearchBar({
   setSearchQuery,
   currentIndex,
   totalResults,
+  isSearching = false,
   goToNext,
   goToPrevious,
 }: ChatSearchBarProps) {
@@ -91,7 +93,9 @@ export default function ChatSearchBar({
       {/* Results Counter & Navigation */}
       {searchQuery.trim() && (
         <div className="flex items-center gap-2 flex-shrink-0">
-          {totalResults > 0 ? (
+          {isSearching ? (
+            <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+          ) : totalResults > 0 ? (
             <>
               {/* Counter */}
               <span className="text-xs text-gray-600 font-medium min-w-[60px] text-center">
