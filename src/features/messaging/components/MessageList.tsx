@@ -1,14 +1,13 @@
 /**
  * MessageList Component
- * Scrollable message container with date grouping and auto-scroll
+ * Scrollable message container with Messenger-style time separators and auto-scroll
  */
 
 'use client';
 
 import { log } from '@/lib/logger';
 import { useEffect, useLayoutEffect, useRef, useState, memo, useMemo } from 'react';
-import { format } from 'date-fns';
-import { formatDateSeparator, formatTimeSeparator, validateTimestamp } from '@/lib/dateUtils';
+import { formatTimeSeparator, parseTimestamp } from '@/lib/dateUtils';
 import { MessageBubble } from './MessageBubble';
 import { Loader2, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -32,11 +31,6 @@ interface MessageListProps {
   registerMessageRef?: (messageId: string, element: HTMLElement | null) => void;
   searchQuery?: string; // Search query for highlighting text
   searchHighlightId?: string | null; // ID of the currently highlighted search result
-}
-
-interface MessageGroup {
-  date: string;
-  messages: Message[];
 }
 
 /**
@@ -145,39 +139,20 @@ export function MessageList({
     log.message.debug(`  [${idx}] id=${msg.id}, createdAt=${msg.createdAt}, content='${msg.content?.substring(0, 20)}...'`);
   });
 
-  // Group messages by date - MEMOIZED to prevent infinite re-renders
-  const groupedMessages: MessageGroup[] = useMemo(() => {
-    return (messages || []).reduce((groups, message) => {
+  // Filter out messages with invalid timestamps (memoized)
+  const validMessages = useMemo(() => {
+    return (messages || []).filter((message) => {
       try {
-        // Validate and parse timestamp (throws error if invalid)
-        const messageDate = validateTimestamp(message.createdAt, 'MessageList');
-        const dateKey = format(messageDate, 'yyyy-MM-dd');
-
-        // Find or create group for this date
-        const existingGroup = groups.find((g) => g.date === dateKey);
-        if (existingGroup) {
-          existingGroup.messages.push(message);
-        } else {
-          groups.push({
-            date: dateKey,
-            messages: [message],
-          });
-        }
-
-        return groups;
-      } catch (error) {
-        // Skip messages with invalid timestamps (logged by validateTimestamp)
-        log.message.debug('[MessageList] Skipping message with invalid timestamp:', message, error);
-        return groups;
+        parseTimestamp(message.createdAt);
+        return true;
+      } catch {
+        log.message.debug('[MessageList] Skipping message with invalid timestamp:', message);
+        return false;
       }
-    }, [] as MessageGroup[]);
-  }, [messages]); // Only recalculate when messages array changes
+    });
+  }, [messages]);
 
-  log.message.debug('[MessageList] Grouped messages:', {
-    groupCount: groupedMessages.length,
-    totalMessages: groupedMessages.reduce((sum, g) => sum + g.messages.length, 0),
-    groups: groupedMessages
-  });
+  log.message.debug('[MessageList] Valid messages:', { count: validMessages.length });
 
   // Preserve scroll position when loading more messages (prepending to top)
   // Using useLayoutEffect to run synchronously after DOM updates but before browser paint
@@ -351,94 +326,80 @@ export function MessageList({
           </div>
         )}
 
-        {/* Grouped Messages */}
-        {groupedMessages.map((group) => (
-          <div key={group.date} className="space-y-3 md:space-y-4">
-            {/* Date Separator */}
-            <div className="flex items-center justify-center py-2">
-              <div className="px-3 md:px-4 py-1 md:py-1.5 bg-white border border-gray-200 rounded-full text-xs md:text-sm text-gray-600 shadow-sm">
-                {formatDateSeparator(group.date)}
-              </div>
-            </div>
+        {/* Messages - Flat list with Messenger-style inline time separators */}
+        <div className="space-y-2 md:space-y-3">
+          {validMessages.map((message, index) => {
+            const isSent = message.senderId === currentUserId;
 
-            {/* Messages */}
-            <div className="space-y-2 md:space-y-3">
-              {group.messages.map((message, index) => {
-                const isSent = message.senderId === currentUserId;
+            // Debug logging for first message
+            if (index === 0) {
+              log.message.debug('[MessageList] Message senderId:', message.senderId);
+              log.message.debug('[MessageList] Current userId:', currentUserId);
+              log.message.debug('[MessageList] isSent:', isSent);
+            }
 
-                // Debug logging for first message
+            const previousMessage = validMessages[index - 1];
+            const showSender =
+              isGroupChat &&
+              !isSent &&
+              (!previousMessage || previousMessage.senderId !== message.senderId);
+
+            const isHighlighted = highlightedMessageId === message.id;
+            const isSearchHighlighted = searchHighlightId === message.id;
+
+            // Messenger-style: show time separator for first message
+            // and when messages are >20 min apart (no date pill)
+            let showTimeSeparator = false;
+            let timeSeparatorText = '';
+            if (message.createdAt) {
+              try {
                 if (index === 0) {
-                  log.message.debug('[MessageList] Message senderId:', message.senderId);
-                  log.message.debug('[MessageList] Current userId:', currentUserId);
-                  log.message.debug('[MessageList] isSent:', isSent);
-                  log.message.debug('[MessageList] Match:', message.senderId === currentUserId);
-                }
-
-                const previousMessage = group.messages[index - 1];
-                const showSender =
-                  isGroupChat &&
-                  !isSent &&
-                  (!previousMessage || previousMessage.senderId !== message.senderId);
-
-                const isHighlighted = highlightedMessageId === message.id;
-                const isSearchHighlighted = searchHighlightId === message.id;
-
-                // Messenger-style: show time separator for first message in group
-                // and when messages are >20 min apart
-                let showTimeSeparator = false;
-                let timeSeparatorText = '';
-                if (message.createdAt) {
-                  try {
-                    if (index === 0) {
-                      // First message in date group always shows time (time only
-                      // since the date separator above already provides date context)
-                      showTimeSeparator = true;
-                      timeSeparatorText = formatTimeSeparator(message.createdAt, true);
-                    } else if (previousMessage?.createdAt) {
-                      const currTime = new Date(message.createdAt).getTime();
-                      const prevTime = new Date(previousMessage.createdAt).getTime();
-                      const gapMinutes = (currTime - prevTime) / 60000;
-                      if (gapMinutes >= 20) {
-                        showTimeSeparator = true;
-                        timeSeparatorText = formatTimeSeparator(message.createdAt);
-                      }
-                    }
-                  } catch {
-                    // Skip time separator on parse error
+                  // First message always shows time context
+                  showTimeSeparator = true;
+                  timeSeparatorText = formatTimeSeparator(message.createdAt);
+                } else if (previousMessage?.createdAt) {
+                  const currTime = new Date(message.createdAt).getTime();
+                  const prevTime = new Date(previousMessage.createdAt).getTime();
+                  const gapMinutes = (currTime - prevTime) / 60000;
+                  if (gapMinutes >= 20) {
+                    showTimeSeparator = true;
+                    timeSeparatorText = formatTimeSeparator(message.createdAt);
                   }
                 }
+              } catch {
+                // Skip time separator on parse error
+              }
+            }
 
-                return (
-                  <div key={message.id} ref={(el) => registerMessageRef?.(message.id, el)}>
-                    {/* Time separator for large gaps (Messenger pattern) */}
-                    {showTimeSeparator && (
-                      <div className="flex items-center justify-center py-2">
-                        <span className="text-[11px] text-gray-400">
-                          {timeSeparatorText}
-                        </span>
-                      </div>
-                    )}
-                    <MessageItem
-                      message={message}
-                      isSent={isSent}
-                      showSender={showSender}
-                      senderName={getUserName ? getUserName(message.senderId) : undefined}
-                      currentUserId={currentUserId}
-                      onEdit={onEdit}
-                      onDelete={onDelete}
-                      onReply={onReply}
-                      onReact={onReact}
-                      getUserName={getUserName}
-                      searchQuery={searchQuery}
-                      isHighlighted={isHighlighted}
-                      isSearchHighlighted={isSearchHighlighted}
-                    />
+            return (
+              <div key={message.id} ref={(el) => registerMessageRef?.(message.id, el)}>
+                {/* Inline time separator (Messenger pattern - no date pill) */}
+                {showTimeSeparator && (
+                  <div className="flex items-center justify-center py-2">
+                    <span className="text-[11px] text-gray-400">
+                      {timeSeparatorText}
+                    </span>
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+                )}
+                <MessageItem
+                  message={message}
+                  isSent={isSent}
+                  showSender={showSender}
+                  senderName={getUserName ? getUserName(message.senderId) : undefined}
+                  currentUserId={currentUserId}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                  onReply={onReply}
+                  onReact={onReact}
+                  getUserName={getUserName}
+                  searchQuery={searchQuery}
+                  isHighlighted={isHighlighted}
+                  isSearchHighlighted={isSearchHighlighted}
+                />
+              </div>
+            );
+          })}
+        </div>
 
         {/* Scroll Anchor */}
         <div ref={bottomRef} />
