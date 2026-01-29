@@ -225,21 +225,24 @@ export const formatDateSeparator = (timestamp: string | Date): string => {
  * Format timestamp for time-based separators between messages
  * Messenger-style: shows when there's a significant time gap between messages
  *
- * Format logic:
- * - Today: "h:mm a" (e.g., "7:59 PM")
- * - This week: "EEE h:mm a" (e.g., "Mon 7:59 PM")
- * - This year: "EEE, MMM dd, h:mm a" (e.g., "Mon, Aug 18, 7:59 PM")
- * - Older: "EEE, MMM dd, yyyy, h:mm a" (e.g., "Mon, Aug 18, 2025, 7:59 PM")
- *
- * Used in: MessageList.tsx for time-gap separators
+ * When used as the first separator under a date header, only the time is needed
+ * since the date header already provides context. For mid-group separators
+ * (time gaps), the full context is shown.
  *
  * @param timestamp - ISO string or Date object
+ * @param timeOnly - If true, only return the time (for use directly under a date separator)
  * @returns Formatted time separator string
  */
-export const formatTimeSeparator = (timestamp: string | Date): string => {
+export const formatTimeSeparator = (timestamp: string | Date, timeOnly: boolean = false): string => {
   try {
     const date = parseTimestamp(timestamp);
 
+    // Under a date separator, just show the time to avoid redundancy
+    if (timeOnly) {
+      return format(date, 'h:mm a'); // e.g., "7:59 PM"
+    }
+
+    // Full context for mid-group time gaps
     if (isToday(date)) return format(date, 'h:mm a'); // e.g., "7:59 PM"
     if (isYesterday(date)) return format(date, "'Yesterday' h:mm a"); // e.g., "Yesterday 7:59 PM"
     if (isThisWeek(date)) return format(date, 'EEE h:mm a'); // e.g., "Mon 7:59 PM"
