@@ -5,11 +5,14 @@
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
+import toast from 'react-hot-toast';
 import { socketClient } from '@/lib/socket';
 import { useNotificationStore } from '@/store/notificationStore';
 import { useUserStore } from '@/store/userStore';
 import type { Notification, NotificationType } from '../types';
 import { showBrowserNotification } from '../services/browserNotificationService';
+import { useNotificationSound } from './useNotificationSound';
+import { NotificationToast } from '../components/NotificationToast';
 import { checkDndActive } from './useDndStatus';
 import { log } from '@/lib/logger';
 
@@ -39,6 +42,11 @@ function detectMention(messageContent: string, currentUser: { username?: string;
 
   return mentions.some((mention) => {
     const cleanMention = mention.slice(1).toLowerCase().trim();
+
+    // @all and @everyone mention everyone
+    if (cleanMention === 'all' || cleanMention === 'everyone') {
+      return true;
+    }
 
     // Try display name first (more intuitive)
     if (currentDisplayName && cleanMention === currentDisplayName) {
@@ -105,6 +113,9 @@ export function useNotificationEvents() {
   const mutedConversations = useNotificationStore((state) => state.mutedConversations);
   const currentUser = useUserStore((state) => state.currentUser);
 
+  // Notification sound
+  const { playSound } = useNotificationSound(preferences);
+
   // Track socket ready state
   const [isSocketReady, setIsSocketReady] = useState(false);
 
@@ -128,6 +139,15 @@ export function useNotificationEvents() {
       // Add to store
       addNotification(notification);
 
+      // Play notification sound
+      playSound();
+
+      // Show in-app toast notification
+      toast.custom(
+        (t) => <NotificationToast notification={notification} toastId={t.id} />,
+        { duration: 5000, position: 'top-right' }
+      );
+
       // Show browser notification
       if (preferences.browserNotificationsEnabled) {
         showBrowserNotification(notification, preferences);
@@ -135,7 +155,7 @@ export function useNotificationEvents() {
 
       log.notification.info('Notification created:', notification.type);
     },
-    [addNotification, preferences, mutedConversations]
+    [addNotification, preferences, mutedConversations, playSound]
   );
 
   /**
@@ -338,12 +358,13 @@ export function useNotificationEvents() {
       // Check if message contains @mention
       const isMentioned = detectMention(message.content, currentUser);
 
-      // Check if message should be grouped
-      const shouldGroup = shouldGroupMessage(message.conversation_id, message.sender_id);
-
-      if (shouldGroup) {
-        log.notification.debug('Message grouped - skipping notification');
-        return;
+      // Check if message should be grouped (mentions are never grouped)
+      if (!isMentioned) {
+        const shouldGroup = shouldGroupMessage(message.conversation_id, message.sender_id);
+        if (shouldGroup) {
+          log.notification.debug('Message grouped - skipping notification');
+          return;
+        }
       }
 
       // Create notification

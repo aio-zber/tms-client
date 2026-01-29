@@ -1,6 +1,6 @@
 'use client';
 
-import { Menu, MoreVertical, Search, Users, LogOut, User } from 'lucide-react';
+import { Menu, MoreVertical, Search, Users, LogOut, User, Bell, BellOff } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { OnlineIndicator } from '@/components/ui/OnlineIndicator';
 import {
@@ -12,6 +12,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useIsUserOnline } from '@/hooks/usePresence';
 import { getUserImageUrl } from '@/lib/imageUtils';
+import { useNotificationPreferences } from '@/features/notifications/hooks/useNotificationPreferences';
+import { useNotificationStore } from '@/store/notificationStore';
 import type { Conversation } from '@/types/conversation';
 
 interface ChatHeaderProps {
@@ -55,6 +57,19 @@ export function ChatHeader({
   // Check if other user is online (for DM conversations)
   const isOtherUserOnline = useIsUserOnline(otherUserId);
 
+  // Mute state (Messenger pattern)
+  const { muteConversation, unmuteConversation } = useNotificationPreferences();
+  const mutedConversations = useNotificationStore((state) => state.mutedConversations);
+  const isMuted = mutedConversations.has(conversation.id);
+
+  const handleToggleMute = () => {
+    if (isMuted) {
+      unmuteConversation(conversation.id);
+    } else {
+      muteConversation(conversation.id);
+    }
+  };
+
   return (
     <div className="p-3 md:p-4 border-b border-gray-200 bg-white flex items-center gap-2 md:gap-3">
       {/* Hamburger Menu (Mobile Only) */}
@@ -83,7 +98,12 @@ export function ChatHeader({
       </div>
 
       <div className="flex-1 min-w-0">
-        <h1 className="text-base md:text-lg font-semibold truncate">{conversationTitle}</h1>
+        <div className="flex items-center gap-1.5">
+          <h1 className="text-base md:text-lg font-semibold truncate">{conversationTitle}</h1>
+          {isMuted && (
+            <BellOff className="w-4 h-4 text-gray-400 flex-shrink-0" aria-label="Muted" />
+          )}
+        </div>
         {conversation.type === 'group' ? (
           <p className="text-xs md:text-sm text-gray-500">
             {conversation.members.length} member{conversation.members.length > 1 ? 's' : ''}
@@ -129,6 +149,19 @@ export function ChatHeader({
                 <DropdownMenuSeparator />
               </>
             )}
+            <DropdownMenuItem onClick={handleToggleMute}>
+              {isMuted ? (
+                <>
+                  <Bell className="w-4 h-4 mr-2" />
+                  Unmute
+                </>
+              ) : (
+                <>
+                  <BellOff className="w-4 h-4 mr-2" />
+                  Mute
+                </>
+              )}
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={onOpenSearch}>
               <Search className="w-4 h-4 mr-2" />
               Search Messages

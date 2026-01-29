@@ -19,6 +19,7 @@ import {
 import { getUserInitials, getUserDisplayName, User } from '@/types';
 import { useState, useEffect } from 'react';
 import { authService } from '@/features/auth/services/authService';
+import { useTheme } from '@/hooks/useTheme';
 import { STORAGE_KEYS } from '@/lib/constants';
 import {
   Sun,
@@ -36,7 +37,7 @@ import { NotificationBadge, NotificationSettings } from '@/features/notification
 export function AppHeader() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('light');
+  const { theme, setTheme } = useTheme();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [notificationSettingsOpen, setNotificationSettingsOpen] = useState(false);
 
@@ -90,7 +91,6 @@ export function AppHeader() {
 
   const handleThemeChange = (newTheme: 'light' | 'dark' | 'system') => {
     setTheme(newTheme);
-    // TODO: Implement actual theme switching
   };
 
   const toggleNotifications = () => {
