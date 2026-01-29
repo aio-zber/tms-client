@@ -312,8 +312,8 @@ export default function NewConversationDialog({
                 disabled={selectedUsers.length > 1}
                 className={`flex-1 text-sm md:text-base transition ${
                   effectiveType === 'dm'
-                    ? 'bg-gray-900 text-white hover:bg-gray-800'
-                    : 'bg-white text-gray-900 border border-gray-300 hover:bg-gray-50'
+                    ? 'bg-viber-purple text-white hover:bg-viber-purple-dark'
+                    : 'bg-white text-gray-900 border border-gray-300 hover:bg-viber-purple-bg'
                 }`}
               >
                 <MessageCircle className="h-4 w-4 mr-2" />
@@ -325,8 +325,8 @@ export default function NewConversationDialog({
                 onClick={() => setConversationType('group')}
                 className={`flex-1 text-sm md:text-base transition ${
                   effectiveType === 'group'
-                    ? 'bg-gray-900 text-white hover:bg-gray-800'
-                    : 'bg-white text-gray-900 border border-gray-300 hover:bg-gray-50'
+                    ? 'bg-viber-purple text-white hover:bg-viber-purple-dark'
+                    : 'bg-white text-gray-900 border border-gray-300 hover:bg-viber-purple-bg'
                 }`}
               >
                 <Users className="h-4 w-4 mr-2" />

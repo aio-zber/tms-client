@@ -75,23 +75,41 @@ export function SocketProvider({ children }: SocketProviderProps) {
 
     const socket = socketClient.connect(token);
 
-    // Connection successful
+    // Connection successful — socket is connected but NOT ready yet.
+    // Ready state is set when server confirms rooms are joined (rooms_joined event).
+    // This prevents the race condition where components try to use the socket
+    // before the server has finished joining conversation rooms.
     const handleConnect = () => {
-      log.ws.info('[SocketProvider] WebSocket connected successfully');
+      log.ws.info('[SocketProvider] WebSocket connected, waiting for server room join...');
       setIsConnected(true);
       setIsConnecting(false);
       setConnectionError(null);
       setReconnectAttempts(0);
 
-      // Set ready after a brief delay to ensure socket is fully initialized
-      // This prevents race conditions where components try to use socket immediately
+      // Safety fallback: if rooms_joined doesn't arrive within 3s, mark ready anyway.
+      // This prevents the app from hanging if the server fails to emit rooms_joined.
       if (readyTimeoutRef.current) {
         clearTimeout(readyTimeoutRef.current);
       }
       readyTimeoutRef.current = setTimeout(() => {
-        setIsReady(true);
-        log.ws.info('[SocketProvider] Socket is now ready for use');
-      }, 100);
+        setIsReady((prev) => {
+          if (!prev) {
+            log.ws.warn('[SocketProvider] Fallback: rooms_joined not received in 3s, marking ready');
+          }
+          return true;
+        });
+      }, 3000);
+    };
+
+    // Server confirms all conversation rooms are joined (Telegram pattern).
+    // Only NOW is the socket ready for use — listeners can safely attach.
+    const handleRoomsJoined = () => {
+      log.ws.info('[SocketProvider] Server confirmed rooms joined — socket is ready');
+      if (readyTimeoutRef.current) {
+        clearTimeout(readyTimeoutRef.current);
+        readyTimeoutRef.current = null;
+      }
+      setIsReady(true);
     };
 
     // Connection lost
@@ -135,12 +153,14 @@ export function SocketProvider({ children }: SocketProviderProps) {
 
     // Attach listeners
     socket.on('connect', handleConnect);
+    socket.on('rooms_joined', handleRoomsJoined);
     socket.on('disconnect', handleDisconnect);
     socket.on('connect_error', handleError);
     socket.io.on('reconnect_attempt', handleReconnectAttempt);
     socket.io.on('reconnect_failed', handleReconnectFailed);
 
-    // If already connected (socket reuse), trigger ready state
+    // If already connected (socket reuse), trigger connect handler
+    // which sets up the 3s fallback timeout for rooms_joined
     if (socket.connected) {
       handleConnect();
     }
@@ -148,6 +168,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
     // Cleanup function for when provider unmounts
     return () => {
       socket.off('connect', handleConnect);
+      socket.off('rooms_joined', handleRoomsJoined);
       socket.off('disconnect', handleDisconnect);
       socket.off('connect_error', handleError);
       socket.io.off('reconnect_attempt', handleReconnectAttempt);
