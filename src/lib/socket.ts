@@ -6,6 +6,7 @@
 import { io, Socket } from 'socket.io-client';
 import { log } from './logger';
 import { getWebSocketUrl } from './runtimeConfig';
+import { startKeepaliveWorker, stopKeepaliveWorker } from './keepaliveWorker';
 
 /**
  * Get Socket.IO URL dynamically at runtime
@@ -86,11 +87,21 @@ class SocketClient {
           this.socket?.emit('join_conversation', { conversation_id: conversationId });
         });
       }
+
+      // Start Web Worker keepalive to maintain connection in background tabs
+      // Sends keepalive event every 30s via Web Worker (not throttled by browser)
+      startKeepaliveWorker(() => {
+        if (this.socket?.connected) {
+          this.socket.emit('keepalive');
+        }
+      }, 30000);
     });
 
     // Essential log #2: Disconnected (with reason)
     this.socket.on('disconnect', (reason) => {
       log.ws.warn('Disconnected:', reason);
+      // Stop keepalive worker on disconnect (will restart on reconnect)
+      stopKeepaliveWorker();
     });
 
     // Essential log #3 & #4: Connection error & max reconnection attempts
@@ -324,6 +335,7 @@ class SocketClient {
    * Clears socket instance and active rooms to ensure clean state for next user
    */
   disconnect() {
+    stopKeepaliveWorker();
     if (this.socket) {
       this.socket.disconnect();
       this.socket = null;

@@ -95,11 +95,13 @@ export function Chat({
     setSearchQuery,
     currentIndex,
     totalResults,
+    isSearching,
     goToNext,
     goToPrevious,
     closeSearch,
   } = useChatSearch({
     messages: messages || [],
+    conversationId,
     _enabled: isSearchOpen,
     onResultSelect: handleSearchResultSelect,
   });
@@ -351,6 +353,7 @@ export function Chat({
           setSearchQuery={setSearchQuery}
           currentIndex={currentIndex}
           totalResults={totalResults}
+          isSearching={isSearching}
           goToNext={goToNext}
           goToPrevious={goToPrevious}
         />

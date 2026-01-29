@@ -1,14 +1,19 @@
 /**
  * useChatSearch Hook
  * Manages in-conversation message search state and operations
- * Uses client-side filtering for instant results
+ * Uses server-side search API to find ALL messages (not just loaded ones)
+ *
+ * Viber-style search: results counter with up/down navigation
  */
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { messageService } from '@/features/messaging/services/messageService';
+import { transformServerMessage } from '@/features/messaging/hooks/useMessages';
 import type { Message } from '@/types/message';
 
 interface UseChatSearchOptions {
-  messages: Message[]; // Pass loaded messages for client-side filtering
+  messages: Message[]; // Loaded messages for matching results that are already in view
+  conversationId: string;
   _enabled?: boolean;
   onResultSelect?: (messageId: string) => void;
 }
@@ -40,64 +45,107 @@ interface UseChatSearchReturn {
 
 /**
  * Hook for managing in-conversation message search
- * Provides Telegram/Messenger-style search functionality
- * 
- * Uses client-side filtering for instant results with loaded messages
+ * Provides Viber-style search functionality with server-side search
+ *
+ * Uses server-side API to search ALL messages in the conversation,
+ * then navigates between results using jumpToMessage
  */
 export function useChatSearch({
   messages,
+  conversationId,
   _enabled = true,
   onResultSelect,
 }: UseChatSearchOptions): UseChatSearchReturn {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQueryState] = useState('');
+  const [serverResults, setServerResults] = useState<Message[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
   // Store onResultSelect callback in ref to prevent infinite re-renders
   const onResultSelectRef = useRef(onResultSelect);
+  const searchTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Update ref when callback changes
   useEffect(() => {
     onResultSelectRef.current = onResultSelect;
   }, [onResultSelect]);
 
-  // Client-side search: Filter messages by content
+  // All server results for count display and navigation
   const results = useMemo(() => {
-    if (!isSearchOpen || !searchQuery.trim()) {
-      return [];
+    return serverResults;
+  }, [serverResults]);
+
+  // Server-side search with debounce
+  const setSearchQuery = useCallback((query: string) => {
+    setSearchQueryState(query);
+
+    // Clear existing timer
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current);
     }
 
-    const query = searchQuery.trim().toLowerCase();
-    
-    // Filter messages that contain the search query
-    const filteredMessages = messages.filter((message) => {
-      // Only search text messages with content
-      if (!message.content || message.type !== 'TEXT') {
-        return false;
-      }
-
-      return message.content.toLowerCase().includes(query);
-    });
-
-    // Sort by createdAt descending (newest first)
-    // This matches Telegram's behavior
-    return filteredMessages.sort((a, b) => {
-      const dateA = new Date(a.createdAt || 0).getTime();
-      const dateB = new Date(b.createdAt || 0).getTime();
-      return dateB - dateA;
-    });
-  }, [messages, searchQuery, isSearchOpen]);
-
-  // Auto-select first result when search results change
-  useEffect(() => {
-    if (results.length > 0) {
-      setCurrentIndex(1);
-      onResultSelectRef.current?.(results[0].id);
-    } else {
+    if (!query.trim()) {
+      setServerResults([]);
       setCurrentIndex(0);
+      setIsSearching(false);
+      setError(null);
+      return;
     }
-  }, [results]);
+
+    // Debounce 300ms before searching
+    setIsSearching(true);
+    searchTimerRef.current = setTimeout(async () => {
+      try {
+        const response = await messageService.searchMessages({
+          query: query.trim(),
+          conversation_id: conversationId,
+          limit: 100,
+        });
+
+        // Transform server results (snake_case to camelCase) and sort
+        const transformed = (response.data || []).map((msg: Record<string, unknown> | Message) => {
+          // If already camelCase (has createdAt), use as-is; otherwise transform
+          if ('createdAt' in msg && msg.createdAt) return msg as Message;
+          return transformServerMessage(msg as Record<string, unknown>);
+        });
+
+        // Sort results by createdAt descending (newest first) - Viber pattern
+        const sorted = transformed.sort((a, b) => {
+          const dateA = new Date(a.createdAt || 0).getTime();
+          const dateB = new Date(b.createdAt || 0).getTime();
+          return dateB - dateA;
+        });
+
+        setServerResults(sorted);
+        setError(null);
+
+        // Auto-select first result
+        if (sorted.length > 0) {
+          setCurrentIndex(1);
+          onResultSelectRef.current?.(sorted[0].id);
+        } else {
+          setCurrentIndex(0);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err : new Error('Search failed'));
+        setServerResults([]);
+        setCurrentIndex(0);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300);
+  }, [conversationId]);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimerRef.current) {
+        clearTimeout(searchTimerRef.current);
+      }
+    };
+  }, []);
 
   // Open search
   const openSearch = useCallback(() => {
@@ -107,9 +155,14 @@ export function useChatSearch({
   // Close search
   const closeSearch = useCallback(() => {
     setIsSearchOpen(false);
-    setSearchQuery('');
+    setSearchQueryState('');
+    setServerResults([]);
     setCurrentIndex(0);
+    setIsSearching(false);
     setError(null);
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current);
+    }
   }, []);
 
   // Toggle search
@@ -121,7 +174,7 @@ export function useChatSearch({
     }
   }, [isSearchOpen, closeSearch, openSearch]);
 
-  // Go to next result (with wrapping)
+  // Go to next result (with wrapping) - Viber style: down arrow goes to older messages
   const goToNext = useCallback(() => {
     if (results.length === 0) return;
 
@@ -130,7 +183,7 @@ export function useChatSearch({
     onResultSelectRef.current?.(results[newIndex - 1].id);
   }, [results, currentIndex]);
 
-  // Go to previous result (with wrapping)
+  // Go to previous result (with wrapping) - Viber style: up arrow goes to newer messages
   const goToPrevious = useCallback(() => {
     if (results.length === 0) return;
 
@@ -152,9 +205,14 @@ export function useChatSearch({
 
   // Clear search results but keep search open
   const clearSearch = useCallback(() => {
-    setSearchQuery('');
+    setSearchQueryState('');
+    setServerResults([]);
     setCurrentIndex(0);
+    setIsSearching(false);
     setError(null);
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current);
+    }
   }, []);
 
   // Computed values
@@ -170,7 +228,7 @@ export function useChatSearch({
     results,
     currentIndex,
     totalResults: results.length,
-    isSearching: false, // Client-side search is instant
+    isSearching,
     error,
 
     // Actions

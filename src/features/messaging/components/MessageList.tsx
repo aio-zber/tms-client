@@ -8,7 +8,7 @@
 import { log } from '@/lib/logger';
 import { useEffect, useLayoutEffect, useRef, useState, memo, useMemo } from 'react';
 import { format } from 'date-fns';
-import { formatDateSeparator, validateTimestamp } from '@/lib/dateUtils';
+import { formatDateSeparator, formatTimeSeparator, validateTimestamp } from '@/lib/dateUtils';
 import { MessageBubble } from './MessageBubble';
 import { Loader2, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -383,8 +383,33 @@ export function MessageList({
                 const isHighlighted = highlightedMessageId === message.id;
                 const isSearchHighlighted = searchHighlightId === message.id;
 
+                // Messenger-style: show time separator when messages are >20 min apart
+                let showTimeSeparator = false;
+                let timeSeparatorText = '';
+                if (previousMessage && message.createdAt && previousMessage.createdAt) {
+                  try {
+                    const currTime = new Date(message.createdAt).getTime();
+                    const prevTime = new Date(previousMessage.createdAt).getTime();
+                    const gapMinutes = (currTime - prevTime) / 60000;
+                    if (gapMinutes >= 20) {
+                      showTimeSeparator = true;
+                      timeSeparatorText = formatTimeSeparator(message.createdAt);
+                    }
+                  } catch {
+                    // Skip time separator on parse error
+                  }
+                }
+
                 return (
                   <div key={message.id} ref={(el) => registerMessageRef?.(message.id, el)}>
+                    {/* Time separator for large gaps (Messenger pattern) */}
+                    {showTimeSeparator && (
+                      <div className="flex items-center justify-center py-2">
+                        <span className="text-[11px] text-gray-400">
+                          {timeSeparatorText}
+                        </span>
+                      </div>
+                    )}
                     <MessageItem
                       message={message}
                       isSent={isSent}
