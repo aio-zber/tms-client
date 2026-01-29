@@ -187,25 +187,65 @@ export const MessageBubble = memo(function MessageBubble({
       return isSent ? 'You removed a message' : `${senderName || 'User'} removed a message`;
     }
 
-    if (!searchQuery || !searchQuery.trim() || !message.content) {
+    if (!message.content) return message.content;
+
+    // Highlight @mentions + search query
+    // Split by @mention pattern first, then apply search highlighting
+    const mentionRegex = /(@(?:all|everyone|[\w\s]+?)(?=\s|$|[.,!?;:]))/gi;
+    const searchRegex = searchQuery?.trim()
+      ? new RegExp(`(${searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
+      : null;
+
+    // Combined regex: match @mentions first, then search term
+    const combinedPattern = searchRegex
+      ? new RegExp(`(${mentionRegex.source}|${searchRegex.source})`, 'gi')
+      : mentionRegex;
+
+    const parts = message.content.split(combinedPattern);
+
+    // Check if any part needs highlighting
+    const hasMentions = mentionRegex.test(message.content);
+    const hasSearchMatch = searchRegex ? searchRegex.test(message.content) : false;
+
+    if (!hasMentions && !hasSearchMatch) {
       return message.content;
     }
 
-    const parts = message.content.split(new RegExp(`(${searchQuery})`, 'gi'));
     return (
       <>
-        {parts.map((part, index) =>
-          part.toLowerCase() === searchQuery.toLowerCase() ? (
-            <mark
-              key={index}
-              className="bg-yellow-200 text-gray-900 rounded px-0.5"
-            >
-              {part}
-            </mark>
-          ) : (
-            part
-          )
-        )}
+        {parts.map((part, index) => {
+          if (!part) return null;
+
+          // Check if this part is a @mention
+          if (/^@(?:all|everyone|[\w\s]+?)$/i.test(part)) {
+            const isAllMention = /^@(?:all|everyone)$/i.test(part);
+            return (
+              <span
+                key={index}
+                className={`font-semibold ${
+                  isSent
+                    ? 'text-white underline decoration-white/60'
+                    : isAllMention
+                      ? 'text-viber-purple-dark'
+                      : 'text-viber-purple'
+                }`}
+              >
+                {part}
+              </span>
+            );
+          }
+
+          // Check if this part matches search query
+          if (searchQuery && part.toLowerCase() === searchQuery.toLowerCase()) {
+            return (
+              <mark key={index} className="bg-yellow-200 text-gray-900 rounded px-0.5">
+                {part}
+              </mark>
+            );
+          }
+
+          return part;
+        })}
       </>
     );
   }, [message.content, message.deletedAt, searchQuery, isSent, senderName]);

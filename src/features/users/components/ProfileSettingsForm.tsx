@@ -6,6 +6,7 @@ import { useProfileSettings } from '../hooks/useProfileSettings';
 import { Sun, Moon, Monitor, Bell, BellOff, Volume2, VolumeX, Eye, EyeOff } from 'lucide-react';
 import { useState } from 'react';
 import type { UserSettings } from '@/types/user';
+import { useTheme } from '@/hooks/useTheme';
 
 /**
  * Form component for editing local user settings
@@ -23,6 +24,7 @@ import type { UserSettings } from '@/types/user';
 export function ProfileSettingsForm() {
   const { settings, updateSettings, isUpdating } = useProfileSettings();
   const [localSettings, setLocalSettings] = useState<UserSettings>(settings);
+  const { setTheme: applyTheme } = useTheme();
 
   // Theme options
   const themeOptions = [
@@ -33,6 +35,7 @@ export function ProfileSettingsForm() {
 
   const handleThemeChange = async (theme: 'light' | 'dark' | 'system') => {
     setLocalSettings({ ...localSettings, theme });
+    applyTheme(theme);
     await updateSettings({ theme });
   };
 

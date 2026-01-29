@@ -6,7 +6,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { UserMinus, LogOut, X, UserPlus, Camera } from 'lucide-react';
+import { UserMinus, LogOut, X, UserPlus, Camera, Bell, BellOff } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -25,6 +25,8 @@ import { useConversationEvents } from '../hooks/useConversationEvents';
 import { useConversationQuery } from '../hooks/useConversationsQuery';
 import { useUserSearch } from '@/features/users/hooks/useUserSearch';
 import { UserProfileDialog } from '@/features/users/components/UserProfileDialog';
+import { useNotificationPreferences } from '@/features/notifications/hooks/useNotificationPreferences';
+import { useNotificationStore } from '@/store/notificationStore';
 import { uploadConversationAvatar } from '../services/conversationService';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queryClient';
@@ -70,6 +72,19 @@ export default function ConversationSettingsDialog({
   } = useConversationActions();
 
   const { query, results, isSearching, search, clearSearch } = useUserSearch();
+
+  // Mute conversation (Messenger pattern)
+  const { muteConversation, unmuteConversation, isMutingConversation, isUnmutingConversation } = useNotificationPreferences();
+  const mutedConversations = useNotificationStore((state) => state.mutedConversations);
+  const isMuted = mutedConversations.has(conversation.id);
+
+  const handleToggleMute = () => {
+    if (isMuted) {
+      unmuteConversation(conversation.id);
+    } else {
+      muteConversation(conversation.id);
+    }
+  };
 
   // Fetch live conversation data with TanStack Query (real-time updates via cache invalidation)
   const { conversation: liveConversation } = useConversationQuery(conversation.id, true);
@@ -308,6 +323,42 @@ export default function ConversationSettingsDialog({
               <p className="text-sm text-gray-600">
                 {new Date(conversation.createdAt).toLocaleDateString()}
               </p>
+            </div>
+
+            {/* Mute Notifications (Messenger-style) */}
+            <div className="pt-4 border-t">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  {isMuted ? (
+                    <BellOff className="w-5 h-5 text-gray-400" />
+                  ) : (
+                    <Bell className="w-5 h-5 text-viber-purple" />
+                  )}
+                  <div>
+                    <p className="text-sm font-medium">Mute Notifications</p>
+                    <p className="text-xs text-gray-500">
+                      {isMuted
+                        ? 'You won\'t be notified except for @mentions'
+                        : 'Receive all notifications for this conversation'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleToggleMute}
+                  disabled={isMutingConversation || isUnmutingConversation}
+                  className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-viber-purple focus:ring-offset-2 disabled:opacity-50"
+                  style={{ backgroundColor: isMuted ? '#7360F2' : '#D1D5DB' }}
+                  role="switch"
+                  aria-checked={isMuted}
+                  aria-label="Mute notifications"
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      isMuted ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
             </div>
 
             {/* Leave Conversation Button */}

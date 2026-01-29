@@ -18,6 +18,8 @@ import { useMessagesQuery } from './useMessagesQuery';
 import { isPendingDelete } from './useMessageActions';
 import { isRecentlySentMessage } from './useSendMessage';
 import { nowUTC } from '@/lib/dateUtils';
+import { useUserStore } from '@/store/userStore';
+import { markMessagesAsDelivered } from '../services/messageService';
 import type { Message, MessageReaction } from '@/types/message';
 import { log } from '@/lib/logger';
 
@@ -183,6 +185,9 @@ export function useMessages(
     );
   }, [queryClient, conversationId, limit]);
 
+  // Get current user ID for delivery marking
+  const currentUserId = useUserStore((state) => state.currentUser?.id);
+
   // WebSocket: Real-time message updates with query invalidation
   // Attaches listeners immediately like useConversations does
   // The socketClient methods handle connection state internally
@@ -305,6 +310,17 @@ export function useMessages(
           };
         }
       );
+
+      // Messenger pattern: auto-mark as delivered when received via WebSocket
+      // This ensures delivery status updates in real-time without page reload
+      if (currentUserId && transformedMessage.senderId !== currentUserId) {
+        markMessagesAsDelivered({
+          conversation_id: conversationId,
+          message_ids: [transformedMessage.id],
+        }).catch((err) => {
+          log.message.warn('Failed to mark message as delivered:', err);
+        });
+      }
 
       // If this is a system message about member/conversation changes,
       // also invalidate conversation queries for real-time updates across all clients
@@ -705,7 +721,7 @@ export function useMessages(
       socketClient.off('poll_closed', handlePollClosed);
       socket?.off('connect', handleConnect);
     };
-  }, [conversationId, queryClient, limit]);
+  }, [conversationId, queryClient, limit, currentUserId]);
 
   return {
     messages,

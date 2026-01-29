@@ -393,6 +393,7 @@ export function Chat({
             log.debug('[Chat] File/voice uploaded, adding to UI:', message.id);
             addOptimisticMessage(message);
           }}
+          members={conversation?.members}
         />
 
         {/* Conversation Settings Dialog */}

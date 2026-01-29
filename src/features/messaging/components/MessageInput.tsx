@@ -6,10 +6,11 @@
 'use client';
 
 import { log } from '@/lib/logger';
-import { useState, useRef, useEffect, KeyboardEvent } from 'react';
+import { useState, useRef, useEffect, useCallback, KeyboardEvent } from 'react';
 import { Send, X, BarChart3 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { Message } from '@/types/message';
+import type { ConversationMember } from '@/types/conversation';
 import { Button } from '@/components/ui/button';
 import PollCreator from './PollCreator';
 import { usePollActions } from '../hooks/usePollActions';
@@ -17,6 +18,7 @@ import { EmojiPickerButton } from './EmojiPickerButton';
 import { FileUploadButton } from './FileUploadButton';
 import { FilePreview } from './FilePreview';
 import { VoiceRecordButton } from './VoiceRecordButton';
+import { MentionSuggestions, type MentionSuggestion } from './MentionSuggestions';
 import { messageService } from '../services/messageService';
 import { transformServerMessage } from '../hooks/useMessages';
 
@@ -33,6 +35,8 @@ interface MessageInputProps {
   disabled?: boolean;
   /** Callback when a file/voice message is uploaded - used for optimistic UI updates */
   onFileUploaded?: (message: Message) => void;
+  /** Conversation members for @mention autocomplete */
+  members?: ConversationMember[];
 }
 
 export function MessageInput({
@@ -47,6 +51,7 @@ export function MessageInput({
   placeholder = 'Type a message...',
   disabled = false,
   onFileUploaded,
+  members = [],
 }: MessageInputProps) {
   const [content, setContent] = useState('');
   const [showPollCreator, setShowPollCreator] = useState(false);
@@ -56,6 +61,13 @@ export function MessageInput({
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { createPoll } = usePollActions();
+
+  // @mention state
+  const [mentionActive, setMentionActive] = useState(false);
+  const [mentionFilter, setMentionFilter] = useState('');
+  const [mentionStartPos, setMentionStartPos] = useState(0);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const mentionSuggestionsRef = useRef<MentionSuggestion[]>([]);
 
   // Handle emoji selection - insert at cursor position
   const handleEmojiSelect = (emoji: string) => {
@@ -78,6 +90,65 @@ export function MessageInput({
       textarea.setSelectionRange(newCursorPos, newCursorPos);
     }, 0);
   };
+
+  // Handle content change with @mention detection
+  const handleContentChange = useCallback(
+    (value: string) => {
+      setContent(value);
+
+      // Detect @ mention trigger
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+
+      const cursorPos = textarea.selectionStart;
+      const textBeforeCursor = value.slice(0, cursorPos);
+
+      // Find the last @ that could be a mention trigger
+      // Must be at start of text or preceded by a space/newline
+      const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+      if (lastAtIndex >= 0) {
+        const charBefore = lastAtIndex === 0 ? ' ' : textBeforeCursor[lastAtIndex - 1];
+        if (charBefore === ' ' || charBefore === '\n' || lastAtIndex === 0) {
+          const filter = textBeforeCursor.slice(lastAtIndex + 1);
+          // Only show if no space in filter (single word/name matching)
+          if (!filter.includes(' ') || filter.length <= 30) {
+            setMentionActive(true);
+            setMentionFilter(filter);
+            setMentionStartPos(lastAtIndex);
+            setMentionIndex(0);
+            return;
+          }
+        }
+      }
+
+      setMentionActive(false);
+    },
+    []
+  );
+
+  // Handle mention selection
+  const handleMentionSelect = useCallback(
+    (suggestion: MentionSuggestion) => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+
+      const before = content.slice(0, mentionStartPos);
+      const after = content.slice(textarea.selectionStart);
+      const mentionText = `@${suggestion.displayName} `;
+      const newContent = before + mentionText + after;
+
+      setContent(newContent);
+      setMentionActive(false);
+
+      // Restore cursor position after mention
+      setTimeout(() => {
+        const newPos = mentionStartPos + mentionText.length;
+        textarea.focus();
+        textarea.setSelectionRange(newPos, newPos);
+      }, 0);
+    },
+    [content, mentionStartPos]
+  );
 
   // Update content when editingMessage changes
   useEffect(() => {
@@ -131,6 +202,31 @@ export function MessageInput({
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Handle mention suggestions keyboard navigation
+    if (mentionActive && mentionSuggestionsRef.current.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionIndex((prev) => Math.min(prev + 1, mentionSuggestionsRef.current.length - 1));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionIndex((prev) => Math.max(0, prev - 1));
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        const selected = mentionSuggestionsRef.current[mentionIndex];
+        if (selected) handleMentionSelect(selected);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setMentionActive(false);
+        return;
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       // If file is selected, send file; otherwise send text (Messenger/Telegram pattern)
@@ -323,12 +419,22 @@ export function MessageInput({
             />
           </div>
 
-          {/* Textarea */}
+          {/* Textarea with @mention suggestions */}
           <div className="flex-1 relative">
+            {/* @mention autocomplete dropdown */}
+            <MentionSuggestions
+              members={members}
+              filter={mentionFilter}
+              selectedIndex={mentionIndex}
+              onSelect={handleMentionSelect}
+              onIndexChange={setMentionIndex}
+              onSuggestionsChange={(s) => { mentionSuggestionsRef.current = s; }}
+              visible={mentionActive}
+            />
             <textarea
               ref={textareaRef}
               value={content}
-              onChange={(e) => setContent(e.target.value)}
+              onChange={(e) => handleContentChange(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={isVoiceRecording ? 'Recording voice message...' : placeholder}
               disabled={sending || disabled || isVoiceRecording}
