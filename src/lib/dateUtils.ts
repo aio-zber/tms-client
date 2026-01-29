@@ -222,33 +222,31 @@ export const formatDateSeparator = (timestamp: string | Date): string => {
 };
 
 /**
- * Format timestamp for time-based separators between messages
- * Messenger-style: shows when there's a significant time gap between messages
+ * Format timestamp for inline time separators between messages
+ * Messenger-style: a single label with enough date+time context
  *
- * When used as the first separator under a date header, only the time is needed
- * since the date header already provides context. For mid-group separators
- * (time gaps), the full context is shown.
+ * No separate date pill — the time separator IS the date context.
+ *
+ * Format logic (matches Messenger exactly):
+ * - Today: "h:mm a" (e.g., "8:26 AM")
+ * - This week (incl. yesterday): "EEE h:mm a" (e.g., "Tue 8:50 PM")
+ * - This year: "MMM dd, h:mm a" (e.g., "Aug 18, 7:59 PM")
+ * - Older: "MMM dd, yyyy, h:mm a" (e.g., "Jan 18, 2026, 1:15 PM")
+ *
+ * Used in: MessageList.tsx
  *
  * @param timestamp - ISO string or Date object
- * @param timeOnly - If true, only return the time (for use directly under a date separator)
  * @returns Formatted time separator string
  */
-export const formatTimeSeparator = (timestamp: string | Date, timeOnly: boolean = false): string => {
+export const formatTimeSeparator = (timestamp: string | Date): string => {
   try {
     const date = parseTimestamp(timestamp);
 
-    // Under a date separator, just show the time to avoid redundancy
-    if (timeOnly) {
-      return format(date, 'h:mm a'); // e.g., "7:59 PM"
-    }
+    if (isToday(date)) return format(date, 'h:mm a');
+    if (isThisWeek(date) || isYesterday(date)) return format(date, 'EEE h:mm a');
+    if (isThisYear(date)) return format(date, 'MMM dd, h:mm a');
 
-    // Full context for mid-group time gaps
-    if (isToday(date)) return format(date, 'h:mm a'); // e.g., "7:59 PM"
-    if (isYesterday(date)) return format(date, "'Yesterday' h:mm a"); // e.g., "Yesterday 7:59 PM"
-    if (isThisWeek(date)) return format(date, 'EEE h:mm a'); // e.g., "Mon 7:59 PM"
-    if (isThisYear(date)) return format(date, 'EEE, MMM dd, h:mm a'); // e.g., "Mon, Aug 18, 7:59 PM"
-
-    return format(date, 'EEE, MMM dd, yyyy, h:mm a'); // e.g., "Mon, Aug 18, 2025, 7:59 PM"
+    return format(date, 'MMM dd, yyyy, h:mm a');
   } catch {
     return '';
   }
