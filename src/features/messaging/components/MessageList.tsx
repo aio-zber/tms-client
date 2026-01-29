@@ -383,17 +383,25 @@ export function MessageList({
                 const isHighlighted = highlightedMessageId === message.id;
                 const isSearchHighlighted = searchHighlightId === message.id;
 
-                // Messenger-style: show time separator when messages are >20 min apart
+                // Messenger-style: show time separator for first message in group
+                // and when messages are >20 min apart
                 let showTimeSeparator = false;
                 let timeSeparatorText = '';
-                if (previousMessage && message.createdAt && previousMessage.createdAt) {
+                if (message.createdAt) {
                   try {
-                    const currTime = new Date(message.createdAt).getTime();
-                    const prevTime = new Date(previousMessage.createdAt).getTime();
-                    const gapMinutes = (currTime - prevTime) / 60000;
-                    if (gapMinutes >= 20) {
+                    if (index === 0) {
+                      // First message in date group always shows time (time only
+                      // since the date separator above already provides date context)
                       showTimeSeparator = true;
-                      timeSeparatorText = formatTimeSeparator(message.createdAt);
+                      timeSeparatorText = formatTimeSeparator(message.createdAt, true);
+                    } else if (previousMessage?.createdAt) {
+                      const currTime = new Date(message.createdAt).getTime();
+                      const prevTime = new Date(previousMessage.createdAt).getTime();
+                      const gapMinutes = (currTime - prevTime) / 60000;
+                      if (gapMinutes >= 20) {
+                        showTimeSeparator = true;
+                        timeSeparatorText = formatTimeSeparator(message.createdAt);
+                      }
                     }
                   } catch {
                     // Skip time separator on parse error
