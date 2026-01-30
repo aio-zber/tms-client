@@ -190,8 +190,8 @@ export const MessageBubble = memo(function MessageBubble({
     if (!message.content) return message.content;
 
     // Highlight @mentions + search query
-    // Split by @mention pattern first, then apply search highlighting
-    const mentionRegex = /(@(?:all|everyone|[\w\s]+?)(?=\s|$|[.,!?;:]))/gi;
+    // Greedy regex: matches @all, @everyone, or @Word Word... (multi-word display names)
+    const mentionRegex = /(@(?:all|everyone|\w+(?:\s\w+)*))/gi;
     const searchRegex = searchQuery?.trim()
       ? new RegExp(`(${searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
       : null;
@@ -217,7 +217,7 @@ export const MessageBubble = memo(function MessageBubble({
           if (!part) return null;
 
           // Check if this part is a @mention
-          if (/^@(?:all|everyone|[\w\s]+?)$/i.test(part)) {
+          if (/^@(?:all|everyone|\w+(?:\s\w+)*)$/i.test(part)) {
             const isAllMention = /^@(?:all|everyone)$/i.test(part);
             return (
               <span
@@ -394,7 +394,7 @@ export const MessageBubble = memo(function MessageBubble({
   if (message.type === 'SYSTEM') {
     return (
       <div className="flex justify-center my-2">
-        <div className="text-xs md:text-sm text-gray-500 text-center px-4 py-1">
+        <div className="text-xs md:text-sm text-gray-500 dark:text-dark-text-secondary text-center px-4 py-1">
           {message.content}
         </div>
       </div>
@@ -413,7 +413,7 @@ export const MessageBubble = memo(function MessageBubble({
         >
           {/* Sender Name (for group chats) */}
           {showSender && !isSent && senderName && (
-            <span className="text-xs md:text-sm text-gray-600 mb-1 px-3">{senderName}</span>
+            <span className="text-xs md:text-sm text-gray-600 dark:text-dark-text-secondary mb-1 px-3">{senderName}</span>
           )}
 
           {/* Reply-to Message - NEW DESIGN matching the image */}
@@ -421,8 +421,8 @@ export const MessageBubble = memo(function MessageBubble({
           <div
             className={`text-xs md:text-sm px-3 py-2 rounded-t-xl mb-[-8px] border-l-4 ${
               isSent
-                ? 'bg-gray-100/50 border-viber-purple'
-                : 'bg-gray-100 border-viber-purple'
+                ? 'bg-gray-100/50 dark:bg-dark-border/50 border-viber-purple'
+                : 'bg-gray-100 dark:bg-dark-border border-viber-purple'
             } max-w-full`}
           >
             {/* Sender name in viber purple */}
@@ -430,7 +430,7 @@ export const MessageBubble = memo(function MessageBubble({
               {getUserName ? getUserName(message.replyTo.senderId) : 'User'}
             </div>
             {/* Message content in gray */}
-            <div className="truncate text-gray-700">
+            <div className="truncate text-gray-700 dark:text-dark-text-secondary">
               {message.replyTo.content.length > 50
                 ? message.replyTo.content.slice(0, 50) + '...'
                 : message.replyTo.content}
@@ -450,7 +450,7 @@ export const MessageBubble = memo(function MessageBubble({
               className={`px-3 md:px-4 py-2 md:py-3 ${message.replyTo ? 'rounded-b-2xl rounded-t-md' : 'rounded-2xl'} ${
                 isSent
                   ? 'bg-viber-purple/60 text-white/70 rounded-br-sm order-1'
-                  : 'bg-gray-100 text-gray-500 rounded-bl-sm order-2'
+                  : 'bg-gray-100 dark:bg-dark-received-bubble text-gray-500 dark:text-dark-text-secondary rounded-bl-sm order-2'
               } italic text-sm`}
             >
               {isSent ? 'You deleted this message' : `${senderName || 'User'} deleted this message`}
@@ -480,7 +480,7 @@ export const MessageBubble = memo(function MessageBubble({
               className={`${message.replyTo ? 'rounded-b-2xl rounded-t-md' : 'rounded-2xl'} ${
                 isSent
                   ? 'bg-viber-purple rounded-br-sm order-1'
-                  : 'bg-gray-100 rounded-bl-sm order-2'
+                  : 'bg-gray-100 dark:bg-dark-received-bubble rounded-bl-sm order-2'
               } overflow-hidden cursor-pointer transition-all hover:opacity-90`}
               onClick={() => setLightboxOpen(true)}
             >
@@ -515,7 +515,7 @@ export const MessageBubble = memo(function MessageBubble({
               className={`${message.replyTo ? 'rounded-b-2xl rounded-t-md' : 'rounded-2xl'} ${
                 isSent
                   ? 'bg-viber-purple rounded-br-sm order-1'
-                  : 'bg-gray-100 rounded-bl-sm order-2'
+                  : 'bg-gray-100 dark:bg-dark-received-bubble rounded-bl-sm order-2'
               } overflow-hidden`}
             >
               <VideoPlayer
@@ -550,7 +550,7 @@ export const MessageBubble = memo(function MessageBubble({
               className={`px-3 md:px-4 py-3 ${message.replyTo ? 'rounded-b-2xl rounded-t-md' : 'rounded-2xl'} ${
                 isSent
                   ? 'bg-viber-purple text-white rounded-br-sm order-1'
-                  : 'bg-gray-100 text-gray-900 rounded-bl-sm order-2'
+                  : 'bg-gray-100 dark:bg-dark-received-bubble text-gray-900 dark:text-dark-text rounded-bl-sm order-2'
               } transition-all min-w-[200px] max-w-xs`}
             >
               <div className="flex items-center gap-3">
@@ -634,7 +634,7 @@ export const MessageBubble = memo(function MessageBubble({
               className={`px-3 py-2.5 ${message.replyTo ? 'rounded-b-2xl rounded-t-md' : 'rounded-2xl'} ${
                 isSent
                   ? 'bg-viber-purple text-white rounded-br-sm order-1'
-                  : 'bg-gray-100 text-gray-900 rounded-bl-sm order-2'
+                  : 'bg-gray-100 dark:bg-dark-received-bubble text-gray-900 dark:text-dark-text rounded-bl-sm order-2'
               } transition-all`}
             >
               <VoiceMessagePlayer
@@ -661,7 +661,7 @@ export const MessageBubble = memo(function MessageBubble({
               className={`px-3 md:px-4 py-2 md:py-2.5 ${message.replyTo ? 'rounded-b-2xl rounded-t-md' : 'rounded-2xl'} ${
                 isSent
                   ? 'bg-viber-purple text-white rounded-br-sm order-1'
-                  : 'bg-gray-100 text-gray-900 rounded-bl-sm order-2'
+                  : 'bg-gray-100 dark:bg-dark-received-bubble text-gray-900 dark:text-dark-text rounded-bl-sm order-2'
               } ${message.status === 'failed' ? 'opacity-60' : ''} ${
                 isSearchHighlighted ? 'ring-2 ring-yellow-400 bg-yellow-50' : ''
               } transition-all`}
@@ -714,7 +714,7 @@ export const MessageBubble = memo(function MessageBubble({
 
         {/* Timestamp (outside bubble, only shown on right-click) */}
         {showTimestamp && (
-          <div className={`text-[10px] text-gray-400 mt-1 px-1 ${isSent ? 'text-right' : 'text-left'}`}>
+          <div className={`text-[10px] text-gray-400 dark:text-dark-text-secondary mt-1 px-1 ${isSent ? 'text-right' : 'text-left'}`}>
             {formatMessageTimestamp(message.createdAt)}
           </div>
         )}
@@ -742,8 +742,8 @@ export const MessageBubble = memo(function MessageBubble({
                   title={getReactorNames(emoji)}
                   className={`px-1.5 py-0.5 rounded-full text-xs flex items-center gap-0.5 transition-all shadow-sm border ${
                     hasUserReacted
-                      ? 'bg-white border-viber-purple text-viber-purple font-semibold'
-                      : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-200'
+                      ? 'bg-white dark:bg-dark-surface border-viber-purple text-viber-purple font-semibold'
+                      : 'bg-white dark:bg-dark-surface hover:bg-gray-50 dark:hover:bg-dark-border text-gray-700 dark:text-dark-text border-gray-200 dark:border-dark-border'
                   }`}
                   onClick={() => onReact && onReact(message.id, emoji)}
                 >
@@ -761,7 +761,7 @@ export const MessageBubble = memo(function MessageBubble({
       {contextMenu && (
         <div
           ref={contextMenuRef}
-          className="fixed z-50 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[160px] max-w-[200px] sm:max-w-none"
+          className="fixed z-50 bg-white dark:bg-dark-surface rounded-lg shadow-lg border border-gray-200 dark:border-dark-border py-1 min-w-[160px] max-w-[200px] sm:max-w-none"
           style={{
             left: `${contextMenu.x}px`,
             top: `${contextMenu.y}px`,
@@ -774,7 +774,7 @@ export const MessageBubble = memo(function MessageBubble({
                 // Mobile: Use Dialog (centered modal) to prevent overflow
                 <Dialog.Root>
                   <Dialog.Trigger asChild>
-                    <button className="w-full px-4 py-2 justify-start text-sm md:text-base hover:bg-gray-100 flex items-center gap-2 text-gray-700 transition rounded-none h-auto">
+                    <button className="w-full px-4 py-2 justify-start text-sm md:text-base hover:bg-gray-100 dark:hover:bg-dark-border flex items-center gap-2 text-gray-700 dark:text-dark-text transition rounded-none h-auto">
                       <Smile className="w-4 h-4 md:w-5 md:h-5" />
                       <span>React</span>
                     </button>
@@ -800,7 +800,7 @@ export const MessageBubble = memo(function MessageBubble({
                     onReact(message.id, emoji);
                     setContextMenu(null);
                   }}
-                  triggerClassName="w-full px-4 py-2 justify-start text-sm md:text-base hover:bg-gray-100 flex items-center gap-2 text-gray-700 transition rounded-none h-auto"
+                  triggerClassName="w-full px-4 py-2 justify-start text-sm md:text-base hover:bg-gray-100 dark:hover:bg-dark-border flex items-center gap-2 text-gray-700 dark:text-dark-text transition rounded-none h-auto"
                   triggerIcon={
                     <>
                       <Smile className="w-4 h-4 md:w-5 md:h-5" />
@@ -818,7 +818,7 @@ export const MessageBubble = memo(function MessageBubble({
           {onReply && !message.deletedAt && (
             <button
               onClick={() => handleMenuAction(() => onReply(message))}
-              className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-gray-100 flex items-center gap-2 text-gray-700 transition"
+              className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-gray-100 dark:hover:bg-dark-border flex items-center gap-2 text-gray-700 dark:text-dark-text transition"
             >
               <Reply className="w-4 h-4 md:w-5 md:h-5" />
               Reply
@@ -829,7 +829,7 @@ export const MessageBubble = memo(function MessageBubble({
           {currentUserId && message.senderId === currentUserId && onEdit && !message.deletedAt && (
             <button
               onClick={() => handleMenuAction(() => onEdit(message.id))}
-              className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-gray-100 flex items-center gap-2 text-gray-700 transition"
+              className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-gray-100 dark:hover:bg-dark-border flex items-center gap-2 text-gray-700 dark:text-dark-text transition"
             >
               <Edit className="w-4 h-4 md:w-5 md:h-5" />
               Edit
@@ -840,7 +840,7 @@ export const MessageBubble = memo(function MessageBubble({
           {onDelete && !message.deletedAt && (
             <button
               onClick={() => handleMenuAction(() => onDelete(message.id, 'me'))}
-              className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-gray-100 flex items-center gap-2 text-gray-700 transition"
+              className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-gray-100 dark:hover:bg-dark-border flex items-center gap-2 text-gray-700 dark:text-dark-text transition"
             >
               <Trash2 className="w-4 h-4 md:w-5 md:h-5" />
               Delete for Me
@@ -851,7 +851,7 @@ export const MessageBubble = memo(function MessageBubble({
           {currentUserId && message.senderId === currentUserId && onDelete && !message.deletedAt && canDeleteForEveryone && (
             <button
               onClick={() => handleMenuAction(() => onDelete(message.id, 'everyone'))}
-              className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-red-50 flex items-center gap-2 text-red-600 transition"
+              className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2 text-red-600 dark:text-red-400 transition"
             >
               <Trash2 className="w-4 h-4 md:w-5 md:h-5" />
               Delete for Everyone
@@ -864,7 +864,7 @@ export const MessageBubble = memo(function MessageBubble({
       {showEmojiPicker && (
         <div
           ref={emojiPickerRef}
-          className="fixed z-50 bg-white rounded-lg shadow-lg border border-gray-200 p-3 md:p-4"
+          className="fixed z-50 bg-white dark:bg-dark-surface rounded-lg shadow-lg border border-gray-200 dark:border-dark-border p-3 md:p-4"
           style={{
             left: isSent ? 'auto' : '50%',
             right: isSent ? '20px' : 'auto',

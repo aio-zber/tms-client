@@ -172,10 +172,10 @@ function ConversationListContent() {
       <div className="space-y-2 p-2">
         {[...Array(6)].map((_, i) => (
           <div key={i} className="flex items-center space-x-3 p-3 rounded-lg animate-pulse">
-            <div className="w-12 h-12 rounded-full bg-gray-200" />
+            <div className="w-12 h-12 rounded-full bg-gray-200 dark:bg-dark-border" />
             <div className="flex-1 space-y-2">
-              <div className="h-4 bg-gray-200 rounded w-3/4" />
-              <div className="h-3 bg-gray-200 rounded w-1/2" />
+              <div className="h-4 bg-gray-200 dark:bg-dark-border rounded w-3/4" />
+              <div className="h-3 bg-gray-200 dark:bg-dark-border rounded w-1/2" />
             </div>
           </div>
         ))}
@@ -186,7 +186,7 @@ function ConversationListContent() {
   if (error) {
     return (
       <div className="p-4 text-center">
-        <div className="text-red-500 mb-2">{error}</div>
+        <div className="text-red-500 dark:text-red-400 mb-2">{error}</div>
         <button
           onClick={() => refresh()}
           className="text-viber-purple hover:underline text-sm"
@@ -201,7 +201,7 @@ function ConversationListContent() {
     <>
       <div className="flex flex-col h-full">
         {/* Header with New Conversation Button */}
-        <div className="p-3 border-b border-gray-200 space-y-3">
+        <div className="p-3 border-b border-gray-200 dark:border-dark-border space-y-3">
           <Button
             onClick={() => setShowNewConversationDialog(true)}
             className="w-full bg-viber-purple hover:bg-viber-purple-dark"
@@ -212,7 +212,7 @@ function ConversationListContent() {
 
           {/* Search */}
           <div className="relative">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400 dark:text-dark-text-secondary" />
             <Input
               type="text"
               placeholder="Search conversations and messages..."
@@ -227,9 +227,9 @@ function ConversationListContent() {
       <div className="flex-1 overflow-y-auto">
         {/* Message search results (Viber-style: conversation name, sender prefix, highlighted match) */}
         {debouncedSearchQuery.length >= 2 && searchMessages.length > 0 && (
-          <div className="border-b border-gray-200">
+          <div className="border-b border-gray-200 dark:border-dark-border">
             <div className="px-3 pt-3 pb-1">
-              <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+              <span className="text-xs font-medium text-gray-500 dark:text-dark-text-secondary uppercase tracking-wide">
                 Messages
               </span>
             </div>
@@ -244,20 +244,20 @@ function ConversationListContent() {
                         handleConversationClick(message.conversationId);
                       }
                     }}
-                    className="w-full flex items-center space-x-3 p-3 hover:bg-gray-50 transition-colors text-left"
+                    className="w-full flex items-center space-x-3 p-3 hover:bg-gray-50 dark:hover:bg-dark-border transition-colors text-left"
                   >
                     <Avatar className="w-10 h-10 shrink-0">
-                      <AvatarFallback className="bg-gray-200 text-gray-600 text-xs">
+                      <AvatarFallback className="bg-gray-200 dark:bg-dark-border text-gray-600 dark:text-dark-text-secondary text-xs">
                         {getNameInitials(convName)}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm text-gray-900 truncate">
+                      <p className="font-semibold text-sm text-gray-900 dark:text-dark-text truncate">
                         {convName}
                       </p>
-                      <p className="text-sm text-gray-500 truncate">
+                      <p className="text-sm text-gray-500 dark:text-dark-text-secondary truncate">
                         {message.senderName && (
-                          <span className="text-gray-600 font-medium">{message.senderName}: </span>
+                          <span className="text-gray-600 dark:text-dark-text-secondary font-medium">{message.senderName}: </span>
                         )}
                         <HighlightMatch text={message.content} query={searchQuery} />
                       </p>
@@ -271,21 +271,21 @@ function ConversationListContent() {
 
         {displayConversations.length === 0 && searchMessages.length === 0 && debouncedSearchQuery ? (
           <div className="p-8 text-center">
-            <MessageCircle className="mx-auto h-12 w-12 text-gray-300 mb-3" />
-            <p className="text-gray-500 text-sm">
+            <MessageCircle className="mx-auto h-12 w-12 text-gray-300 dark:text-dark-border mb-3" />
+            <p className="text-gray-500 dark:text-dark-text-secondary text-sm">
               No results found
             </p>
-            <p className="text-gray-400 text-xs mt-1">
+            <p className="text-gray-400 dark:text-dark-text-secondary text-xs mt-1">
               Try a different search term
             </p>
           </div>
         ) : displayConversations.length === 0 && !searchQuery ? (
           <div className="p-8 text-center">
-            <MessageCircle className="mx-auto h-12 w-12 text-gray-300 mb-3" />
-            <p className="text-gray-500 text-sm">
+            <MessageCircle className="mx-auto h-12 w-12 text-gray-300 dark:text-dark-border mb-3" />
+            <p className="text-gray-500 dark:text-dark-text-secondary text-sm">
               No conversations yet
             </p>
-            <p className="text-gray-400 text-xs mt-1">
+            <p className="text-gray-400 dark:text-dark-text-secondary text-xs mt-1">
               Start a new conversation
             </p>
           </div>
@@ -297,8 +297,8 @@ function ConversationListContent() {
                 <button
                   key={conversation.id}
                   onClick={() => handleConversationClick(conversation.id)}
-                  className={`w-full flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors ${
-                    selectedId === conversation.id ? 'bg-viber-purple-bg' : ''
+                  className={`w-full flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-border transition-colors ${
+                    selectedId === conversation.id ? 'bg-viber-purple-bg dark:bg-viber-purple/15' : ''
                   }`}
                 >
                   {/* Avatar with Online Indicator */}
@@ -319,21 +319,21 @@ function ConversationListContent() {
                   {/* Content */}
                   <div className="flex-1 min-w-0 text-left">
                     <div className="flex items-baseline justify-between mb-1">
-                      <h3 className="font-semibold text-gray-900 truncate">
+                      <h3 className="font-semibold text-gray-900 dark:text-dark-text truncate">
                         {displayName}
                       </h3>
                       {conversation.lastMessage && (
-                        <span className="text-xs text-gray-500 ml-2 shrink-0 min-w-fit">
+                        <span className="text-xs text-gray-500 dark:text-dark-text-secondary ml-2 shrink-0 min-w-fit">
                           {formatSidebarTimestamp(conversation.lastMessage.timestamp)}
                         </span>
                       )}
                     </div>
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm text-gray-600 truncate">
+                      <p className="text-sm text-gray-600 dark:text-dark-text-secondary truncate">
                         {conversation.lastMessage ? (
                           conversation.lastMessage.content
                         ) : (
-                          <span className="text-gray-400 italic">No messages yet</span>
+                          <span className="text-gray-400 dark:text-dark-text-secondary italic">No messages yet</span>
                         )}
                       </p>
                       {conversation.unreadCount > 0 && (
@@ -367,10 +367,10 @@ export default function ConversationList() {
       <div className="space-y-2 p-2">
         {[...Array(6)].map((_, i) => (
           <div key={i} className="flex items-center space-x-3 p-3 rounded-lg animate-pulse">
-            <div className="w-12 h-12 rounded-full bg-gray-200" />
+            <div className="w-12 h-12 rounded-full bg-gray-200 dark:bg-dark-border" />
             <div className="flex-1 space-y-2">
-              <div className="h-4 bg-gray-200 rounded w-3/4" />
-              <div className="h-3 bg-gray-200 rounded w-1/2" />
+              <div className="h-4 bg-gray-200 dark:bg-dark-border rounded w-3/4" />
+              <div className="h-3 bg-gray-200 dark:bg-dark-border rounded w-1/2" />
             </div>
           </div>
         ))}

@@ -64,14 +64,14 @@ export async function updateNotificationPreferences(
  * Mute a conversation
  */
 export async function muteConversation(conversationId: string): Promise<void> {
-  await apiClient.post<void>(`/conversations/${conversationId}/mute`);
+  await apiClient.post<void>(`${BASE_PATH}/conversations/${conversationId}/mute`);
 }
 
 /**
  * Unmute a conversation
  */
 export async function unmuteConversation(conversationId: string): Promise<void> {
-  await apiClient.delete<void>(`/conversations/${conversationId}/mute`);
+  await apiClient.delete<void>(`${BASE_PATH}/conversations/${conversationId}/mute`);
 }
 
 /**

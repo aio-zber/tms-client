@@ -310,7 +310,7 @@ export function MessageInput({
   };
 
   return (
-    <div className="p-3 md:p-4 border-t border-gray-200 bg-white">
+    <div className="p-3 md:p-4 border-t border-gray-200 dark:border-dark-border bg-white dark:bg-dark-surface">
       <div className="max-w-4xl mx-auto">
         {/* Edit Preview */}
         {editingMessage && (
@@ -438,7 +438,7 @@ export function MessageInput({
               onKeyDown={handleKeyDown}
               placeholder={isVoiceRecording ? 'Recording voice message...' : placeholder}
               disabled={sending || disabled || isVoiceRecording}
-              className="w-full px-3 md:px-4 py-2 md:py-2.5 text-sm md:text-base border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-viber-purple focus:border-transparent resize-none disabled:opacity-50 disabled:cursor-not-allowed transition"
+              className="w-full px-3 md:px-4 py-2 md:py-2.5 text-sm md:text-base border border-gray-300 dark:border-dark-border dark:bg-dark-bg dark:text-dark-text rounded-2xl focus:outline-none focus:ring-2 focus:ring-viber-purple focus:border-transparent resize-none disabled:opacity-50 disabled:cursor-not-allowed transition"
               rows={1}
               style={{ minHeight: '44px', maxHeight: '120px' }}
             />
@@ -468,7 +468,7 @@ export function MessageInput({
         </div>
 
         {/* Helper Text */}
-        <p className="text-xs md:text-sm text-gray-400 mt-2 text-center hidden md:block">
+        <p className="text-xs md:text-sm text-gray-400 dark:text-dark-text-secondary mt-2 text-center hidden md:block">
           Press Enter to send, Shift+Enter for new line
         </p>
 

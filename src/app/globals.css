@@ -7,6 +7,10 @@
     @apply border-gray-200;
   }
 
+  .dark * {
+    @apply border-dark-border;
+  }
+
   html {
     @apply antialiased;
   }

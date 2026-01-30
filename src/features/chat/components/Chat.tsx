@@ -272,10 +272,10 @@ export function Chat({
 
   if (loadingConversation) {
     return (
-      <div className={`h-full flex items-center justify-center bg-gray-50 ${className}`}>
+      <div className={`h-full flex items-center justify-center bg-gray-50 dark:bg-dark-bg ${className}`}>
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin text-viber-purple mx-auto mb-3" />
-          <p className="text-gray-500">Loading conversation...</p>
+          <p className="text-gray-500 dark:text-dark-text-secondary">Loading conversation...</p>
         </div>
       </div>
     );
@@ -283,9 +283,9 @@ export function Chat({
 
   if (!conversation) {
     return (
-      <div className={`h-full flex items-center justify-center bg-gray-50 ${className}`}>
+      <div className={`h-full flex items-center justify-center bg-gray-50 dark:bg-dark-bg ${className}`}>
         <div className="text-center p-6">
-          <p className="text-gray-500 mb-4">Conversation not found</p>
+          <p className="text-gray-500 dark:text-dark-text-secondary mb-4">Conversation not found</p>
         </div>
       </div>
     );
@@ -303,16 +303,16 @@ export function Chat({
 
       {/* Mobile Drawer */}
       <div
-        className={`fixed top-0 left-0 h-full w-[280px] sm:w-[320px] bg-white z-50 transform transition-transform duration-300 lg:hidden ${
+        className={`fixed top-0 left-0 h-full w-[280px] sm:w-[320px] bg-white dark:bg-dark-surface z-50 transform transition-transform duration-300 lg:hidden ${
           isMobileDrawerOpen ? 'translate-x-0' : '-translate-x-full'
         } shadow-2xl`}
       >
         {/* Drawer Header */}
-        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Chats</h2>
+        <div className="p-4 border-b border-gray-200 dark:border-dark-border flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-dark-text">Chats</h2>
           <button
             onClick={() => setIsMobileDrawerOpen(false)}
-            className="p-2 hover:bg-gray-100 rounded-full transition"
+            className="p-2 hover:bg-gray-100 dark:hover:bg-dark-border rounded-full transition"
           >
             <X className="w-5 h-5" />
           </button>

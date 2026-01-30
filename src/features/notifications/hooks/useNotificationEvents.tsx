@@ -9,6 +9,8 @@ import toast from 'react-hot-toast';
 import { socketClient } from '@/lib/socket';
 import { useNotificationStore } from '@/store/notificationStore';
 import { useUserStore } from '@/store/userStore';
+import { queryClient, queryKeys } from '@/lib/queryClient';
+import type { Message } from '@/types/message';
 import type { Notification, NotificationType } from '../types';
 import { showBrowserNotification } from '../services/browserNotificationService';
 import { useNotificationSound } from './useNotificationSound';
@@ -389,43 +391,70 @@ export function useNotificationEvents() {
     };
 
     // Handle reactions
+    // Server payload: { message_id: string, reaction: { id, message_id, user_id, emoji, created_at } }
     const handleReactionAdded = (data: Record<string, unknown>) => {
-      const reaction = data as {
+      const payload = data as {
         message_id: string;
-        conversation_id: string;
-        conversation_name: string;
-        user_id: string;
-        user_name: string;
-        user_avatar?: string;
-        emoji: string;
-        message_sender_id: string;
+        reaction: {
+          id: string;
+          message_id: string;
+          user_id: string;
+          emoji: string;
+          created_at: string;
+        };
       };
 
-      // Only notify if it's YOUR message that was reacted to
-      if (reaction.message_sender_id !== currentUser?.id) {
-        return;
-      }
+      const reactorId = payload.reaction.user_id;
 
       // Don't notify for own reactions
-      if (reaction.user_id === currentUser?.id) {
+      if (reactorId === currentUser?.id) {
         return;
       }
 
+      // Look up the message from TanStack Query cache to find sender and conversation
+      let foundMessage: Message | undefined;
+      const queriesData = queryClient.getQueriesData<{
+        pages: Array<{ data: Message[] }>;
+        pageParams: unknown[];
+      }>({ queryKey: queryKeys.messages.lists() });
+
+      for (const [, cachedData] of queriesData) {
+        if (!cachedData?.pages) continue;
+        for (const page of cachedData.pages) {
+          const msg = page.data.find((m) => m.id === payload.message_id);
+          if (msg) {
+            foundMessage = msg;
+            break;
+          }
+        }
+        if (foundMessage) break;
+      }
+
+      // Only notify if it's YOUR message that was reacted to
+      if (!foundMessage || foundMessage.senderId !== currentUser?.id) {
+        return;
+      }
+
+      // Look up reactor's display name from user store cache
+      const userStore = useUserStore.getState();
+      const reactorUser = userStore.getCachedUser(reactorId);
+      const reactorName = reactorUser?.name || reactorUser?.username || 'Someone';
+
       const notification: Notification = {
-        id: `notif-reaction-${reaction.message_id}-${Date.now()}`,
+        id: `notif-reaction-${payload.message_id}-${Date.now()}`,
         type: 'reaction',
-        conversationId: reaction.conversation_id,
-        conversationName: reaction.conversation_name,
-        senderId: reaction.user_id,
-        senderName: reaction.user_name,
-        senderAvatar: reaction.user_avatar,
-        content: `Reacted with ${reaction.emoji}`,
+        conversationId: foundMessage.conversationId,
+        conversationName: '', // Will use conversation lookup in toast if needed
+        senderId: reactorId,
+        senderName: reactorName,
+        senderAvatar: reactorUser?.image,
+        content: `Reacted ${payload.reaction.emoji} to your message`,
         timestamp: new Date().toISOString(),
         isRead: false,
         priority: 'low',
         metadata: {
-          messageId: reaction.message_id,
-          emoji: reaction.emoji,
+          messageId: payload.message_id,
+          emoji: payload.reaction.emoji,
         },
       };
 

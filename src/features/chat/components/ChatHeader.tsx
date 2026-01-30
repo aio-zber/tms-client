@@ -71,12 +71,12 @@ export function ChatHeader({
   };
 
   return (
-    <div className="p-3 md:p-4 border-b border-gray-200 bg-white flex items-center gap-2 md:gap-3">
+    <div className="p-3 md:p-4 border-b border-gray-200 dark:border-dark-border bg-white dark:bg-dark-surface flex items-center gap-2 md:gap-3">
       {/* Hamburger Menu (Mobile Only) */}
       {showMobileMenu && onMobileMenuToggle && (
         <button
           onClick={onMobileMenuToggle}
-          className="p-2 hover:bg-gray-100 rounded-full transition lg:hidden"
+          className="p-2 hover:bg-gray-100 dark:hover:bg-dark-border rounded-full transition lg:hidden"
           aria-label="Open conversations"
         >
           <Menu className="w-5 h-5" />
@@ -99,18 +99,18 @@ export function ChatHeader({
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
-          <h1 className="text-base md:text-lg font-semibold truncate">{conversationTitle}</h1>
+          <h1 className="text-base md:text-lg font-semibold dark:text-dark-text truncate">{conversationTitle}</h1>
           {isMuted && (
-            <BellOff className="w-4 h-4 text-gray-400 flex-shrink-0" aria-label="Muted" />
+            <BellOff className="w-4 h-4 text-gray-400 dark:text-dark-text-secondary flex-shrink-0" aria-label="Muted" />
           )}
         </div>
         {conversation.type === 'group' ? (
-          <p className="text-xs md:text-sm text-gray-500">
+          <p className="text-xs md:text-sm text-gray-500 dark:text-dark-text-secondary">
             {conversation.members.length} member{conversation.members.length > 1 ? 's' : ''}
           </p>
         ) : (
           /* Online status text for DM conversations (Messenger-style) */
-          <p className="text-xs md:text-sm text-gray-500">
+          <p className="text-xs md:text-sm text-gray-500 dark:text-dark-text-secondary">
             {isOtherUserOnline ? 'Active now' : 'Offline'}
           </p>
         )}
@@ -119,11 +119,11 @@ export function ChatHeader({
       <div className="flex items-center gap-1">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="p-2 hover:bg-gray-100 rounded-full transition">
-              <MoreVertical className="w-5 h-5 md:w-6 md:h-6 text-gray-600" />
+            <button className="p-2 hover:bg-gray-100 dark:hover:bg-dark-border rounded-full transition">
+              <MoreVertical className="w-5 h-5 md:w-6 md:h-6 text-gray-600 dark:text-dark-text-secondary" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuContent align="end" className="w-48 dark:bg-dark-surface dark:border-dark-border">
             {conversation.type === 'dm' && otherUserId && onViewProfile && (
               <>
                 <DropdownMenuItem onClick={() => onViewProfile(otherUserId)}>

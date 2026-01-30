@@ -114,19 +114,19 @@ export function AppHeader() {
   // Show loading state if user is not loaded
   if (loading || !user) {
     return (
-      <header className="h-[60px] md:h-[70px] bg-white border-b border-gray-200 flex items-center justify-between px-4 md:px-6 shrink-0">
+      <header className="h-[60px] md:h-[70px] bg-white dark:bg-dark-surface border-b border-gray-200 dark:border-dark-border flex items-center justify-between px-4 md:px-6 shrink-0">
         <div className="flex items-center gap-2 md:gap-3">
           <h1 className="text-lg md:text-xl lg:text-2xl font-bold text-viber-purple">GCG Team Chat</h1>
         </div>
         <div className="animate-pulse">
-          <div className="w-8 h-8 bg-gray-200 rounded-full"></div>
+          <div className="w-8 h-8 bg-gray-200 dark:bg-dark-border rounded-full"></div>
         </div>
       </header>
     );
   }
 
   return (
-    <header className="h-[60px] md:h-[70px] bg-white border-b border-gray-200 flex items-center justify-between px-4 md:px-6 shrink-0">
+    <header className="h-[60px] md:h-[70px] bg-white dark:bg-dark-surface border-b border-gray-200 dark:border-dark-border flex items-center justify-between px-4 md:px-6 shrink-0">
       {/* App Branding */}
       <div className="flex items-center gap-2 md:gap-3">
         <h1 className="text-lg md:text-xl lg:text-2xl font-bold text-viber-purple">GCG Team Chat</h1>
@@ -144,21 +144,21 @@ export function AppHeader() {
         {/* Settings Dropdown */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className="flex items-center gap-2 px-2 md:px-3 py-2 rounded-lg hover:bg-gray-100 transition">
+          <button className="flex items-center gap-2 px-2 md:px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-border transition">
             <Avatar className="h-8 w-8 md:h-9 md:w-9">
               <AvatarImage src={getUserImageUrl(user.image)} alt={getUserDisplayName(user)} />
               <AvatarFallback className="bg-viber-purple text-white font-semibold text-xs md:text-sm">
                 {getUserInitials(user)}
               </AvatarFallback>
             </Avatar>
-            <span className="text-sm md:text-base font-medium text-gray-900 hidden md:block">
+            <span className="text-sm md:text-base font-medium text-gray-900 dark:text-dark-text hidden md:block">
               {user.username}
             </span>
-            <ChevronDown className="w-4 h-4 text-gray-500 hidden md:block" />
+            <ChevronDown className="w-4 h-4 text-gray-500 dark:text-dark-text-secondary hidden md:block" />
           </button>
         </DropdownMenuTrigger>
 
-        <DropdownMenuContent align="end" className="w-80">
+        <DropdownMenuContent align="end" className="w-80 dark:bg-dark-surface dark:border-dark-border">
           {/* Profile Section */}
           <div className="p-4">
             <div className="flex items-center gap-3 mb-3">
@@ -170,22 +170,22 @@ export function AppHeader() {
                   </AvatarFallback>
                 </Avatar>
                 {/* Online Status Indicator */}
-                <div className="absolute bottom-0 right-0 w-4 h-4 bg-viber-online border-2 border-white rounded-full" />
+                <div className="absolute bottom-0 right-0 w-4 h-4 bg-viber-online border-2 border-white dark:border-dark-surface rounded-full" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-semibold text-gray-900 text-base">
+                <p className="font-semibold text-gray-900 dark:text-dark-text text-base">
                   {getUserDisplayName(user)}
                 </p>
-                <p className="text-sm text-gray-600">@{user.username || user.tmsUserId?.slice(0, 8)}</p>
-                <p className="text-xs text-gray-500 mt-1">{user.email}</p>
+                <p className="text-sm text-gray-600 dark:text-dark-text-secondary">@{user.username || user.tmsUserId?.slice(0, 8)}</p>
+                <p className="text-xs text-gray-500 dark:text-dark-text-secondary mt-1">{user.email}</p>
               </div>
             </div>
 
             {/* Position Title */}
             {user.positionTitle && (
-              <div className="px-3 py-2 bg-viber-purple-bg rounded-lg">
-                <p className="text-xs text-gray-500 uppercase mb-0.5">Position</p>
-                <p className="text-sm text-gray-700">{user.positionTitle}</p>
+              <div className="px-3 py-2 bg-viber-purple-bg dark:bg-viber-purple/10 rounded-lg">
+                <p className="text-xs text-gray-500 dark:text-dark-text-secondary uppercase mb-0.5">Position</p>
+                <p className="text-sm text-gray-700 dark:text-dark-text">{user.positionTitle}</p>
               </div>
             )}
           </div>
@@ -193,7 +193,7 @@ export function AppHeader() {
           <DropdownMenuSeparator />
 
           {/* Theme Selector */}
-          <DropdownMenuLabel className="text-xs text-gray-500 uppercase font-semibold">
+          <DropdownMenuLabel className="text-xs text-gray-500 dark:text-dark-text-secondary uppercase font-semibold">
             Theme
           </DropdownMenuLabel>
 
@@ -233,7 +233,7 @@ export function AppHeader() {
           <DropdownMenuSeparator />
 
           {/* Notification Settings */}
-          <DropdownMenuLabel className="text-xs text-gray-500 uppercase font-semibold">
+          <DropdownMenuLabel className="text-xs text-gray-500 dark:text-dark-text-secondary uppercase font-semibold">
             Notifications
           </DropdownMenuLabel>
 
@@ -251,7 +251,7 @@ export function AppHeader() {
               <div
                 className={cn(
                   'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
-                  notificationsEnabled ? 'bg-viber-purple' : 'bg-gray-200'
+                  notificationsEnabled ? 'bg-viber-purple' : 'bg-gray-200 dark:bg-dark-border'
                 )}
               >
                 <span

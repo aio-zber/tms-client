@@ -264,10 +264,10 @@ export function MessageList({
 
   if (loading && (!messages || messages.length === 0)) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-gray-50">
+      <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-dark-bg">
         <div className="text-center">
           <Loader2 className="w-8 h-8 md:w-10 md:h-10 animate-spin text-viber-purple mx-auto mb-3" />
-          <p className="text-gray-500 text-sm md:text-base">Loading messages...</p>
+          <p className="text-gray-500 dark:text-dark-text-secondary text-sm md:text-base">Loading messages...</p>
         </div>
       </div>
     );
@@ -275,13 +275,13 @@ export function MessageList({
 
   if (!loading && (!messages || messages.length === 0)) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-gray-50">
+      <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-dark-bg">
         <div className="text-center p-6">
-          <div className="w-16 h-16 md:w-20 md:h-20 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="w-16 h-16 md:w-20 md:h-20 bg-gray-200 dark:bg-dark-border rounded-full flex items-center justify-center mx-auto mb-4">
             <span className="text-3xl md:text-4xl">💬</span>
           </div>
-          <p className="text-gray-500 mb-2 text-base md:text-lg">No messages yet</p>
-          <p className="text-sm md:text-base text-gray-400">
+          <p className="text-gray-500 dark:text-dark-text-secondary mb-2 text-base md:text-lg">No messages yet</p>
+          <p className="text-sm md:text-base text-gray-400 dark:text-dark-text-secondary">
             Start a conversation by sending a message below
           </p>
         </div>
@@ -293,7 +293,7 @@ export function MessageList({
     <div
       ref={scrollAreaRef}
       onScroll={handleScroll}
-      className="flex-1 overflow-y-auto bg-gray-50 px-3 md:px-4 py-3 md:py-4"
+      className="flex-1 overflow-y-auto bg-gray-50 dark:bg-dark-bg px-3 md:px-4 py-3 md:py-4"
     >
       <div className="max-w-4xl mx-auto space-y-3 md:space-y-4">
         {/* Load More Button */}
