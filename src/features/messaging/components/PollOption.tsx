@@ -12,10 +12,6 @@ const VIBER_COLORS = {
   primary: '#7360F2',
   accent: '#A18CFF',
   voted: '#00C853',
-  background: '#F5F4F8',
-  border: '#E4E3EB',
-  textPrimary: '#2D2C3C',
-  textSecondary: '#8B8A97',
 };
 
 interface PollOptionProps {
@@ -50,44 +46,6 @@ export default function PollOption({
       : `${voterNames.slice(0, 3).join(', ')} +${voterNames.length - 3} more`
     : null;
 
-  const buttonStyle: React.CSSProperties = {
-    position: 'relative',
-    width: '100%',
-    padding: '12px 16px',
-    borderRadius: '12px',
-    border: isVoted ? 'none' : `1px solid ${VIBER_COLORS.border}`,
-    background: isVoted
-      ? `linear-gradient(135deg, ${VIBER_COLORS.primary}, ${VIBER_COLORS.accent})`
-      : VIBER_COLORS.background,
-    color: isVoted ? 'white' : VIBER_COLORS.textPrimary,
-    cursor: isClosed || disabled ? 'default' : 'pointer',
-    transition: 'all 200ms ease',
-    overflow: 'hidden',
-    boxShadow: isVoted ? `0 4px 12px rgba(115, 96, 242, 0.25)` : 'none',
-  };
-
-  const progressBarStyle: React.CSSProperties = {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    height: '100%',
-    width: `${percentage}%`,
-    background: isVoted
-      ? 'rgba(255, 255, 255, 0.2)'
-      : `linear-gradient(135deg, ${VIBER_COLORS.primary}15, ${VIBER_COLORS.accent}15)`,
-    transition: 'width 300ms ease-out',
-    zIndex: 0,
-  };
-
-  const contentStyle: React.CSSProperties = {
-    position: 'relative',
-    zIndex: 1,
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: '12px',
-  };
-
   const handleClick = () => {
     if (!isClosed && !disabled) {
       onClick();
@@ -98,54 +56,41 @@ export default function PollOption({
     <div className="w-full">
       <button
         onClick={handleClick}
-        style={buttonStyle}
-        className="poll-option"
+        className={`poll-option relative w-full px-4 py-3 rounded-xl overflow-hidden transition-all duration-200 ${
+          isVoted
+            ? 'border-0 text-white shadow-[0_4px_12px_rgba(115,96,242,0.25)]'
+            : 'border border-gray-200 dark:border-dark-border bg-gray-100 dark:bg-dark-received-bubble text-gray-900 dark:text-dark-text hover:bg-gray-200 dark:hover:bg-[#3A3A3C] hover:border-viber-purple'
+        }`}
+        style={isVoted ? { background: `linear-gradient(135deg, ${VIBER_COLORS.primary}, ${VIBER_COLORS.accent})` } : undefined}
         disabled={isClosed || disabled}
-        onMouseEnter={(e) => {
-          if (!isClosed && !disabled && !isVoted) {
-            e.currentTarget.style.background = '#ECECF4';
-            e.currentTarget.style.borderColor = VIBER_COLORS.primary;
-          }
-        }}
-        onMouseLeave={(e) => {
-          if (!isClosed && !disabled && !isVoted) {
-            e.currentTarget.style.background = VIBER_COLORS.background;
-            e.currentTarget.style.borderColor = VIBER_COLORS.border;
-          }
-        }}
       >
         {/* Progress Bar Background */}
-        <div style={progressBarStyle} />
+        <div
+          className="absolute left-0 top-0 h-full transition-[width] duration-300 ease-out"
+          style={{
+            width: `${percentage}%`,
+            background: isVoted
+              ? 'rgba(255, 255, 255, 0.2)'
+              : `linear-gradient(135deg, rgba(115,96,242,0.08), rgba(161,140,255,0.08))`,
+            zIndex: 0,
+          }}
+        />
 
         {/* Content */}
-        <div style={contentStyle}>
+        <div className="relative z-[1] flex justify-between items-center gap-3">
           <div className="flex items-center gap-2 flex-1">
             {/* Checkmark for voted option */}
             {isVoted && (
               <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '20px',
-                  height: '20px',
-                  borderRadius: '50%',
-                  background: VIBER_COLORS.voted,
-                  flexShrink: 0,
-                }}
+                className="flex items-center justify-center w-5 h-5 rounded-full flex-shrink-0"
+                style={{ background: VIBER_COLORS.voted }}
               >
                 <Check className="h-3 w-3 text-white" />
               </div>
             )}
 
             {/* Option Text */}
-            <span
-              className="text-left font-medium"
-              style={{
-                fontSize: '14px',
-                lineHeight: '1.4',
-              }}
-            >
+            <span className="text-left font-medium text-sm leading-snug">
               {option.optionText}
             </span>
           </div>
@@ -155,23 +100,16 @@ export default function PollOption({
             {totalVotes > 0 && (
               <>
                 <span
-                  style={{
-                    fontSize: '14px',
-                    fontWeight: 500,
-                    color: isVoted ? 'white' : VIBER_COLORS.primary,
-                  }}
+                  className={`text-sm font-medium ${isVoted ? 'text-white' : 'text-viber-purple'}`}
                 >
                   {percentage}%
                 </span>
                 <div
-                  style={{
-                    padding: '4px 8px',
-                    borderRadius: '8px',
-                    background: isVoted ? 'rgba(255, 255, 255, 0.2)' : 'rgba(115, 96, 242, 0.08)',
-                    fontSize: '12px',
-                    fontWeight: 500,
-                    color: isVoted ? 'white' : VIBER_COLORS.primary,
-                  }}
+                  className={`px-2 py-1 rounded-lg text-xs font-medium ${
+                    isVoted
+                      ? 'bg-white/20 text-white'
+                      : 'bg-viber-purple/[0.08] text-viber-purple'
+                  }`}
                 >
                   {option.voteCount}
                 </div>
@@ -183,13 +121,7 @@ export default function PollOption({
 
       {/* Voters List - Shown below the option like Telegram */}
       {votersText && (
-        <div
-          className="mt-1 ml-3 text-xs"
-          style={{
-            color: VIBER_COLORS.textSecondary,
-            fontSize: '11px',
-          }}
-        >
+        <div className="mt-1 ml-3 text-[11px] text-gray-500 dark:text-dark-text-secondary">
           {votersText}
         </div>
       )}

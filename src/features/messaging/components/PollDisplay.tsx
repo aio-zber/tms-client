@@ -16,10 +16,6 @@ const VIBER_COLORS = {
   primary: '#7360F2',
   accent: '#A18CFF',
   voted: '#00C853',
-  background: '#F5F4F8',
-  border: '#E4E3EB',
-  textPrimary: '#2D2C3C',
-  textSecondary: '#8B8A97',
 };
 
 interface PollDisplayProps {
@@ -106,28 +102,12 @@ export default function PollDisplay({
   const timeRemaining = getTimeRemaining();
 
   return (
-    <div
-      style={{
-        background: 'white',
-        border: `1px solid ${VIBER_COLORS.border}`,
-        borderRadius: '16px',
-        padding: '16px',
-        boxShadow: '0 2px 8px rgba(115, 96, 242, 0.08)',
-      }}
-    >
+    <div className="bg-white dark:bg-dark-surface border border-gray-200 dark:border-dark-border rounded-2xl p-4 shadow-[0_2px_8px_rgba(115,96,242,0.08)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.3)]">
       {/* Poll Question */}
       <div className="mb-3">
         <div className="flex items-start gap-2">
           <span className="text-2xl">📊</span>
-          <h3
-            style={{
-              fontSize: '16px',
-              fontWeight: 600,
-              color: VIBER_COLORS.textPrimary,
-              lineHeight: '1.4',
-              flex: 1,
-            }}
-          >
+          <h3 className="text-base font-semibold text-gray-900 dark:text-dark-text leading-snug flex-1">
             {poll.question}
           </h3>
         </div>
@@ -152,13 +132,7 @@ export default function PollDisplay({
       </div>
 
       {/* Poll Footer */}
-      <div
-        className="flex items-center justify-between"
-        style={{
-          fontSize: '12px',
-          color: VIBER_COLORS.textSecondary,
-        }}
-      >
+      <div className="flex items-center justify-between text-xs text-gray-500 dark:text-dark-text-secondary">
         <div className="flex items-center gap-2">
           <span>
             {poll.totalVotes} {poll.totalVotes === 1 ? 'vote' : 'votes'}
@@ -173,21 +147,12 @@ export default function PollDisplay({
 
         <div className="flex items-center gap-2">
           {poll.isClosed && (
-            <span
-              style={{
-                padding: '2px 8px',
-                borderRadius: '8px',
-                background: VIBER_COLORS.background,
-                color: VIBER_COLORS.textSecondary,
-                fontSize: '11px',
-                fontWeight: 500,
-              }}
-            >
+            <span className="px-2 py-0.5 rounded-lg bg-gray-100 dark:bg-dark-received-bubble text-gray-500 dark:text-dark-text-secondary text-[11px] font-medium">
               Closed
             </span>
           )}
           {!poll.isClosed && timeRemaining && (
-            <span style={{ color: VIBER_COLORS.textSecondary }}>
+            <span className="text-gray-500 dark:text-dark-text-secondary">
               {timeRemaining}
             </span>
           )}
@@ -195,25 +160,7 @@ export default function PollDisplay({
             <button
               onClick={handleClosePoll}
               disabled={isClosing}
-              style={{
-                padding: '4px 8px',
-                borderRadius: '8px',
-                background: 'transparent',
-                border: `1px solid ${VIBER_COLORS.border}`,
-                color: VIBER_COLORS.textSecondary,
-                fontSize: '11px',
-                fontWeight: 500,
-                cursor: 'pointer',
-                transition: 'all 200ms ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = VIBER_COLORS.primary;
-                e.currentTarget.style.color = VIBER_COLORS.primary;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = VIBER_COLORS.border;
-                e.currentTarget.style.color = VIBER_COLORS.textSecondary;
-              }}
+              className="px-2 py-1 rounded-lg bg-transparent border border-gray-200 dark:border-dark-border text-gray-500 dark:text-dark-text-secondary text-[11px] font-medium cursor-pointer transition-all duration-200 hover:border-viber-purple hover:text-viber-purple"
             >
               {isClosing ? 'Closing...' : 'Close Poll'}
             </button>
