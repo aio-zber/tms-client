@@ -1,6 +1,9 @@
 #claude
 .claude
 
+# Documentation (may contain credentials/private info)
+docs/
+
 # Dependencies
 /node_modules
 /.pnp

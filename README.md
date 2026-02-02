@@ -138,7 +138,7 @@ This app follows the Viber UI/UX design system:
 - **Desktop**: Sidebar (320px) + Chat Area
 - **Mobile**: Full-screen with bottom navigation
 
-See `TMA.md` for complete design specifications.
+See `docs/TMA.md` for complete design specifications (internal only).
 
 ## 🏗️ Architecture
 
@@ -232,9 +232,8 @@ __tests__/
 
 ## 📚 Documentation
 
-- **Full Specification**: See `TMA.md` for complete feature specs
 - **Code Guidelines**: See `CLAUDE.md` for development guidelines
-- **API Docs**: Backend at `http://localhost:8000/docs`
+- **API Docs**: Backend at `/docs` endpoint when running locally
 
 ## 🤝 Contributing
 
