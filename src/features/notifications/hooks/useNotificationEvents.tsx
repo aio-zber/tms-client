@@ -251,19 +251,53 @@ export function useNotificationEvents() {
 
     log.notification.info('Socket ready, attaching notification listeners');
 
+    /**
+     * Resolve sender name from WebSocket payload or user store cache
+     */
+    const resolveSenderName = (senderId: string, payloadName?: string): string => {
+      if (payloadName) return payloadName;
+      const userStore = useUserStore.getState();
+      const cached = userStore.getCachedUser(senderId);
+      return cached?.displayName || cached?.name || cached?.username || 'Someone';
+    };
+
+    /**
+     * Resolve conversation name from WebSocket payload or TanStack Query cache
+     */
+    const resolveConversationName = (conversationId: string, payloadName?: string): string => {
+      if (payloadName) return payloadName;
+      // Look up from TanStack Query conversation cache
+      const convData = queryClient.getQueryData<{ pages: Array<{ data: Array<{ id: string; name?: string; type: string; members: Array<{ userId: string; user?: { name?: string } }> }> }> }>(
+        queryKeys.conversations.list({ limit: 20, offset: 0 })
+      );
+      if (convData?.pages) {
+        for (const page of convData.pages) {
+          const conv = page.data.find(c => c.id === conversationId);
+          if (conv) {
+            if (conv.type === 'group') return conv.name || 'Group Chat';
+            // For DM, find the other member's name
+            const otherMember = conv.members.find(m => m.userId !== currentUser?.id);
+            return otherMember?.user?.name || 'Direct Message';
+          }
+        }
+      }
+      return 'Conversation';
+    };
+
     // Handle new messages
     const handleNewMessage = (data: Record<string, unknown>) => {
-      const message = data as {
-        id: string;
-        conversation_id: string;
-        conversation_name: string;
-        sender_id: string;
-        sender_name: string;
-        sender_avatar?: string;
-        content: string;
-        type?: string;
-        created_at: string;
-        metadata?: {
+      // Handle both snake_case (server) and camelCase field names
+      const message = {
+        id: data.id as string,
+        conversation_id: (data.conversation_id || data.conversationId) as string,
+        conversation_name: (data.conversation_name || data.conversationName) as string | undefined,
+        sender_id: (data.sender_id || data.senderId) as string,
+        sender_name: (data.sender_name || data.senderName) as string | undefined,
+        sender_avatar: (data.sender_avatar || data.senderAvatar) as string | undefined,
+        content: data.content as string,
+        type: data.type as string | undefined,
+        created_at: (data.created_at || data.createdAt) as string,
+        metadata: (data.metadata_json || data.metadata) as {
           system?: {
             eventType: 'member_added' | 'member_removed' | 'member_left' | 'conversation_updated' | 'message_deleted';
             actorId: string;
@@ -273,7 +307,7 @@ export function useNotificationEvents() {
             addedMemberIds?: string[];
             addedMemberNames?: string[];
           };
-        };
+        } | undefined,
       };
 
       // Handle system messages differently
@@ -292,9 +326,9 @@ export function useNotificationEvents() {
             id: `notif-${message.id}`,
             type: 'member_activity',
             conversationId: message.conversation_id,
-            conversationName: message.conversation_name,
+            conversationName: resolveConversationName(message.conversation_id, message.conversation_name),
             senderId: systemEvent.actorId,
-            senderName: systemEvent.actorName,
+            senderName: resolveSenderName(systemEvent.actorId, systemEvent.actorName),
             content: `${addedNames} was added to the conversation`,
             timestamp: message.created_at,
             isRead: false,
@@ -307,9 +341,9 @@ export function useNotificationEvents() {
             id: `notif-${message.id}`,
             type: 'member_activity',
             conversationId: message.conversation_id,
-            conversationName: message.conversation_name,
+            conversationName: resolveConversationName(message.conversation_id, message.conversation_name),
             senderId: systemEvent.actorId,
-            senderName: systemEvent.actorName,
+            senderName: resolveSenderName(systemEvent.actorId, systemEvent.actorName),
             content: `${systemEvent.targetUserName || 'A member'} was removed from the conversation`,
             timestamp: message.created_at,
             isRead: false,
@@ -322,10 +356,10 @@ export function useNotificationEvents() {
             id: `notif-${message.id}`,
             type: 'member_activity',
             conversationId: message.conversation_id,
-            conversationName: message.conversation_name,
+            conversationName: resolveConversationName(message.conversation_id, message.conversation_name),
             senderId: systemEvent.actorId,
-            senderName: systemEvent.actorName,
-            content: `${systemEvent.actorName} left the conversation`,
+            senderName: resolveSenderName(systemEvent.actorId, systemEvent.actorName),
+            content: `${resolveSenderName(systemEvent.actorId, systemEvent.actorName)} left the conversation`,
             timestamp: message.created_at,
             isRead: false,
             priority: 'low',
@@ -337,9 +371,9 @@ export function useNotificationEvents() {
             id: `notif-${message.id}`,
             type: 'conversation_update',
             conversationId: message.conversation_id,
-            conversationName: message.conversation_name,
+            conversationName: resolveConversationName(message.conversation_id, message.conversation_name),
             senderId: systemEvent.actorId,
-            senderName: systemEvent.actorName,
+            senderName: resolveSenderName(systemEvent.actorId, systemEvent.actorName),
             content: `Conversation settings were updated`,
             timestamp: message.created_at,
             isRead: false,
@@ -374,9 +408,9 @@ export function useNotificationEvents() {
         id: `notif-${message.id}`,
         type: isMentioned ? 'mention' : 'message',
         conversationId: message.conversation_id,
-        conversationName: message.conversation_name,
+        conversationName: resolveConversationName(message.conversation_id, message.conversation_name),
         senderId: message.sender_id,
-        senderName: message.sender_name,
+        senderName: resolveSenderName(message.sender_id, message.sender_name),
         senderAvatar: message.sender_avatar,
         content: message.content.slice(0, 100), // Truncate preview
         timestamp: message.created_at,
@@ -444,7 +478,7 @@ export function useNotificationEvents() {
         id: `notif-reaction-${payload.message_id}-${Date.now()}`,
         type: 'reaction',
         conversationId: foundMessage.conversationId,
-        conversationName: '', // Will use conversation lookup in toast if needed
+        conversationName: resolveConversationName(foundMessage.conversationId),
         senderId: reactorId,
         senderName: reactorName,
         senderAvatar: reactorUser?.image,
@@ -483,9 +517,9 @@ export function useNotificationEvents() {
         id: `notif-conversation-updated-${conversationData.conversation_id}-${Date.now()}`,
         type: 'conversation_update',
         conversationId: conversationData.conversation_id,
-        conversationName: conversationData.conversation_name,
+        conversationName: resolveConversationName(conversationData.conversation_id, conversationData.conversation_name),
         senderId: conversationData.updated_by_id,
-        senderName: conversationData.updated_by_name,
+        senderName: resolveSenderName(conversationData.updated_by_id, conversationData.updated_by_name),
         content: `Conversation settings were updated`,
         timestamp: new Date().toISOString(),
         isRead: false,

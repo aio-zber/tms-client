@@ -72,7 +72,7 @@ const MessageItem = memo(function MessageItem({
   return (
     <div
       className={`transition-all duration-300 ${
-        isHighlighted ? 'bg-yellow-100 rounded-lg p-2 -m-2 animate-pulse' : ''
+        isHighlighted ? 'relative rounded-lg p-2 -m-2 before:absolute before:inset-0 before:bg-yellow-200 dark:before:bg-yellow-400/20 before:rounded-lg before:animate-highlight-flash' : ''
       }`}
     >
       <MessageBubble

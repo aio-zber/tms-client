@@ -54,7 +54,7 @@ export const MessageBubble = memo(function MessageBubble({
   onReact,
   getUserName,
   searchQuery,
-  isHighlighted = false,
+  isHighlighted: _isHighlighted = false,
   isSearchHighlighted = false,
 }: MessageBubbleProps) {
   const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null);
@@ -439,9 +439,7 @@ export const MessageBubble = memo(function MessageBubble({
         )}
 
         <div className={`flex items-end gap-2 ${
-          isHighlighted ? 'animate-pulse' : ''
-        } ${
-          isSearchHighlighted ? 'ring-2 ring-yellow-400 rounded-lg p-1 -m-1' : ''
+          isSearchHighlighted ? 'ring-2 ring-yellow-400 dark:ring-yellow-500/60 rounded-lg p-1 -m-1' : ''
         }`}>
           {/* Message Bubble */}
           {/* Deleted Message - Show placeholder for ALL message types when deleted */}
@@ -663,7 +661,7 @@ export const MessageBubble = memo(function MessageBubble({
                   ? 'bg-viber-purple text-white rounded-br-sm order-1'
                   : 'bg-gray-100 dark:bg-dark-received-bubble text-gray-900 dark:text-dark-text rounded-bl-sm order-2'
               } ${message.status === 'failed' ? 'opacity-60' : ''} ${
-                isSearchHighlighted ? 'ring-2 ring-yellow-400 bg-yellow-50' : ''
+                isSearchHighlighted ? 'ring-2 ring-yellow-400 dark:ring-yellow-500/60 bg-yellow-50 dark:bg-yellow-400/10' : ''
               } transition-all`}
             >
               <div className={`text-sm md:text-[15px] leading-relaxed break-words whitespace-pre-wrap ${

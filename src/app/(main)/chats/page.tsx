@@ -18,15 +18,15 @@ function ChatsContent() {
         </div>
 
         {/* Desktop: Show empty state (sidebar already visible) */}
-        <div className="hidden lg:flex h-full items-center justify-center bg-gray-50">
+        <div className="hidden lg:flex h-full items-center justify-center bg-gray-50 dark:bg-dark-bg">
           <div className="text-center">
             <div className="mb-4">
-              <div className="w-16 h-16 mx-auto bg-viber-purple-bg rounded-full flex items-center justify-center">
+              <div className="w-16 h-16 mx-auto bg-viber-purple-bg dark:bg-viber-purple/10 rounded-full flex items-center justify-center">
                 <span className="text-3xl">💬</span>
               </div>
             </div>
-            <p className="text-gray-500 text-lg mb-2">Select a conversation to start messaging</p>
-            <p className="text-gray-400 text-sm">Choose from your conversations on the left</p>
+            <p className="text-gray-500 dark:text-dark-text-secondary text-lg mb-2">Select a conversation to start messaging</p>
+            <p className="text-gray-400 dark:text-dark-text-secondary text-sm">Choose from your conversations on the left</p>
           </div>
         </div>
       </>

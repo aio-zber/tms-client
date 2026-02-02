@@ -137,7 +137,7 @@ export function NotificationSettings() {
       <Card className="p-6 flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin text-viber-purple mx-auto mb-2" />
-          <p className="text-sm text-gray-600">Loading notification settings...</p>
+          <p className="text-sm text-gray-600 dark:text-dark-text-secondary">Loading notification settings...</p>
         </div>
       </Card>
     );
@@ -145,11 +145,11 @@ export function NotificationSettings() {
 
   return (
     <Card className="p-6">
-      <h3 className="text-lg font-semibold mb-4">Notification Settings</h3>
+      <h3 className="text-lg font-semibold mb-4 dark:text-dark-text">Notification Settings</h3>
 
       {/* Sound Section */}
       <div className="space-y-4 mb-6">
-        <Label className="text-sm font-medium text-gray-700">Sound</Label>
+        <Label className="text-sm font-medium text-gray-700 dark:text-dark-text-secondary">Sound</Label>
 
         {/* Enable Sound */}
         <div className="flex items-center justify-between">
@@ -157,11 +157,11 @@ export function NotificationSettings() {
             {localPreferences.soundEnabled ? (
               <Volume2 className="w-5 h-5 text-viber-purple" />
             ) : (
-              <VolumeX className="w-5 h-5 text-gray-400" />
+              <VolumeX className="w-5 h-5 text-gray-400 dark:text-dark-text-secondary" />
             )}
             <div>
-              <p className="text-sm font-medium">Enable Sound</p>
-              <p className="text-xs text-gray-500">Play notification sounds</p>
+              <p className="text-sm font-medium dark:text-dark-text">Enable Sound</p>
+              <p className="text-xs text-gray-500 dark:text-dark-text-secondary">Play notification sounds</p>
             </div>
           </div>
           <Button
@@ -179,7 +179,7 @@ export function NotificationSettings() {
         {localPreferences.soundEnabled && (
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label className="text-xs text-gray-600">Volume</Label>
+              <Label className="text-xs text-gray-600 dark:text-dark-text-secondary">Volume</Label>
               <span className="text-xs font-medium text-viber-purple">{localPreferences.soundVolume}%</span>
             </div>
             <input
@@ -191,7 +191,7 @@ export function NotificationSettings() {
               onMouseUp={(e) => handleVolumeChangeComplete(Number((e.target as HTMLInputElement).value))}
               onTouchEnd={(e) => handleVolumeChangeComplete(Number((e.target as HTMLInputElement).value))}
               disabled={isUpdatingPreferences}
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer
+              className="w-full h-2 bg-gray-200 dark:bg-dark-border rounded-lg appearance-none cursor-pointer
                 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4
                 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full
                 [&::-webkit-slider-thumb]:bg-viber-purple [&::-webkit-slider-thumb]:cursor-pointer
@@ -208,18 +208,18 @@ export function NotificationSettings() {
 
       {/* Browser Notifications Section */}
       <div className="space-y-4 mb-6">
-        <Label className="text-sm font-medium text-gray-700">Browser Notifications</Label>
+        <Label className="text-sm font-medium text-gray-700 dark:text-dark-text-secondary">Browser Notifications</Label>
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             {localPreferences.browserNotificationsEnabled ? (
               <Bell className="w-5 h-5 text-viber-purple" />
             ) : (
-              <BellOff className="w-5 h-5 text-gray-400" />
+              <BellOff className="w-5 h-5 text-gray-400 dark:text-dark-text-secondary" />
             )}
             <div>
-              <p className="text-sm font-medium">Enable Browser Notifications</p>
-              <p className="text-xs text-gray-500">Show desktop notifications when app is in background</p>
+              <p className="text-sm font-medium dark:text-dark-text">Enable Browser Notifications</p>
+              <p className="text-xs text-gray-500 dark:text-dark-text-secondary">Show desktop notifications when app is in background</p>
             </div>
           </div>
           <Button
@@ -238,23 +238,23 @@ export function NotificationSettings() {
 
       {/* Notification Types Section */}
       <div className="space-y-4 mb-6">
-        <Label className="text-sm font-medium text-gray-700">Notification Types</Label>
+        <Label className="text-sm font-medium text-gray-700 dark:text-dark-text-secondary">Notification Types</Label>
 
         {/* Messages */}
         <button
           onClick={() => handleNotificationTypeToggle('enableMessageNotifications')}
           disabled={isUpdatingPreferences}
-          className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition disabled:opacity-50"
+          className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-border transition disabled:opacity-50"
         >
           <div className="flex items-center gap-3">
             {localPreferences.enableMessageNotifications ? (
               <CheckSquare className="w-5 h-5 text-viber-purple" />
             ) : (
-              <Square className="w-5 h-5 text-gray-400" />
+              <Square className="w-5 h-5 text-gray-400 dark:text-dark-text-secondary" />
             )}
             <div className="text-left">
-              <p className="text-sm font-medium">New Messages</p>
-              <p className="text-xs text-gray-500">Notify when you receive new messages</p>
+              <p className="text-sm font-medium dark:text-dark-text">New Messages</p>
+              <p className="text-xs text-gray-500 dark:text-dark-text-secondary">Notify when you receive new messages</p>
             </div>
           </div>
         </button>
@@ -263,17 +263,17 @@ export function NotificationSettings() {
         <button
           onClick={() => handleNotificationTypeToggle('enableMentionNotifications')}
           disabled={isUpdatingPreferences}
-          className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition disabled:opacity-50"
+          className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-border transition disabled:opacity-50"
         >
           <div className="flex items-center gap-3">
             {localPreferences.enableMentionNotifications ? (
               <CheckSquare className="w-5 h-5 text-viber-purple" />
             ) : (
-              <Square className="w-5 h-5 text-gray-400" />
+              <Square className="w-5 h-5 text-gray-400 dark:text-dark-text-secondary" />
             )}
             <div className="text-left">
-              <p className="text-sm font-medium">@Mentions</p>
-              <p className="text-xs text-gray-500">Notify when someone mentions you</p>
+              <p className="text-sm font-medium dark:text-dark-text">@Mentions</p>
+              <p className="text-xs text-gray-500 dark:text-dark-text-secondary">Notify when someone mentions you</p>
             </div>
           </div>
         </button>
@@ -282,17 +282,17 @@ export function NotificationSettings() {
         <button
           onClick={() => handleNotificationTypeToggle('enableReactionNotifications')}
           disabled={isUpdatingPreferences}
-          className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition disabled:opacity-50"
+          className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-border transition disabled:opacity-50"
         >
           <div className="flex items-center gap-3">
             {localPreferences.enableReactionNotifications ? (
               <CheckSquare className="w-5 h-5 text-viber-purple" />
             ) : (
-              <Square className="w-5 h-5 text-gray-400" />
+              <Square className="w-5 h-5 text-gray-400 dark:text-dark-text-secondary" />
             )}
             <div className="text-left">
-              <p className="text-sm font-medium">Reactions</p>
-              <p className="text-xs text-gray-500">Notify when someone reacts to your messages</p>
+              <p className="text-sm font-medium dark:text-dark-text">Reactions</p>
+              <p className="text-xs text-gray-500 dark:text-dark-text-secondary">Notify when someone reacts to your messages</p>
             </div>
           </div>
         </button>
@@ -301,17 +301,17 @@ export function NotificationSettings() {
         <button
           onClick={() => handleNotificationTypeToggle('enableMemberActivityNotifications')}
           disabled={isUpdatingPreferences}
-          className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition disabled:opacity-50"
+          className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-border transition disabled:opacity-50"
         >
           <div className="flex items-center gap-3">
             {localPreferences.enableMemberActivityNotifications ? (
               <CheckSquare className="w-5 h-5 text-viber-purple" />
             ) : (
-              <Square className="w-5 h-5 text-gray-400" />
+              <Square className="w-5 h-5 text-gray-400 dark:text-dark-text-secondary" />
             )}
             <div className="text-left">
-              <p className="text-sm font-medium">Member Activity</p>
-              <p className="text-xs text-gray-500">Notify when members join or leave</p>
+              <p className="text-sm font-medium dark:text-dark-text">Member Activity</p>
+              <p className="text-xs text-gray-500 dark:text-dark-text-secondary">Notify when members join or leave</p>
             </div>
           </div>
         </button>
@@ -321,15 +321,15 @@ export function NotificationSettings() {
 
       {/* Do Not Disturb Section */}
       <div className="space-y-4 mb-6">
-        <Label className="text-sm font-medium text-gray-700">Do Not Disturb</Label>
+        <Label className="text-sm font-medium text-gray-700 dark:text-dark-text-secondary">Do Not Disturb</Label>
 
         {/* Enable DND */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Moon className={`w-5 h-5 ${localPreferences.dndEnabled ? 'text-viber-purple' : 'text-gray-400'}`} />
             <div>
-              <p className="text-sm font-medium">Enable Do Not Disturb</p>
-              <p className="text-xs text-gray-500">Silence notifications during specified hours (except @mentions)</p>
+              <p className="text-sm font-medium dark:text-dark-text">Enable Do Not Disturb</p>
+              <p className="text-xs text-gray-500 dark:text-dark-text-secondary">Silence notifications during specified hours (except @mentions)</p>
             </div>
           </div>
           <Button
@@ -347,7 +347,7 @@ export function NotificationSettings() {
         {localPreferences.dndEnabled && (
           <div className="grid grid-cols-2 gap-4 pl-8">
             <div className="space-y-2">
-              <Label className="text-xs text-gray-600">Start Time</Label>
+              <Label className="text-xs text-gray-600 dark:text-dark-text-secondary">Start Time</Label>
               <Input
                 type="time"
                 value={localPreferences.dndStart || '22:00'}
@@ -357,7 +357,7 @@ export function NotificationSettings() {
               />
             </div>
             <div className="space-y-2">
-              <Label className="text-xs text-gray-600">End Time</Label>
+              <Label className="text-xs text-gray-600 dark:text-dark-text-secondary">End Time</Label>
               <Input
                 type="time"
                 value={localPreferences.dndEnd || '08:00'}
@@ -374,7 +374,7 @@ export function NotificationSettings() {
 
       {/* Muted Conversations Section */}
       <div className="space-y-4">
-        <Label className="text-sm font-medium text-gray-700">
+        <Label className="text-sm font-medium text-gray-700 dark:text-dark-text-secondary">
           Muted Conversations ({mutedConversations?.length || 0})
         </Label>
 
@@ -383,9 +383,9 @@ export function NotificationSettings() {
             {mutedConversations.map((conversationId) => (
               <div
                 key={conversationId}
-                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                className="flex items-center justify-between p-3 bg-gray-50 dark:bg-dark-border rounded-lg"
               >
-                <p className="text-sm text-gray-700 font-mono text-xs">{conversationId}</p>
+                <p className="text-sm text-gray-700 dark:text-dark-text-secondary font-mono text-xs">{conversationId}</p>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -400,12 +400,12 @@ export function NotificationSettings() {
             ))}
           </div>
         ) : (
-          <p className="text-sm text-gray-500 italic">No muted conversations</p>
+          <p className="text-sm text-gray-500 dark:text-dark-text-secondary italic">No muted conversations</p>
         )}
       </div>
 
       {isUpdatingPreferences && (
-        <p className="text-xs text-gray-500 text-center mt-4">Saving changes...</p>
+        <p className="text-xs text-gray-500 dark:text-dark-text-secondary text-center mt-4">Saving changes...</p>
       )}
     </Card>
   );

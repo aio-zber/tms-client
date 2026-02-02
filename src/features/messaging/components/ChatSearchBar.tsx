@@ -135,7 +135,7 @@ export default function ChatSearchBar({
         size="sm"
         variant="ghost"
         onClick={onClose}
-        className="h-7 w-7 p-0 hover:bg-gray-100 flex-shrink-0"
+        className="h-7 w-7 p-0 hover:bg-gray-100 dark:hover:bg-dark-border flex-shrink-0"
         title="Close (Esc)"
       >
         <X className="w-4 h-4" />
