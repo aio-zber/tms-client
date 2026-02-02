@@ -12,12 +12,6 @@ import type { Poll } from '@/types/message';
 import PollOption from './PollOption';
 import toast from 'react-hot-toast';
 
-const VIBER_COLORS = {
-  primary: '#7360F2',
-  accent: '#A18CFF',
-  voted: '#00C853',
-};
-
 interface PollDisplayProps {
   poll: Poll;
   onVote: (optionIds: string[]) => Promise<void>;
