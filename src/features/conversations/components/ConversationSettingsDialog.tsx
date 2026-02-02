@@ -392,7 +392,7 @@ export default function ConversationSettingsDialog({
                       Add Members
                     </Button>
                   ) : (
-                <div className="space-y-3 p-3 bg-gray-50 rounded-lg">
+                <div className="space-y-3 p-3 bg-gray-50 dark:bg-dark-bg rounded-lg">
                   <div className="flex items-center justify-between">
                     <Label>Add Members</Label>
                     <Button
@@ -416,7 +416,7 @@ export default function ConversationSettingsDialog({
                         .map((user) => (
                           <div
                             key={user.tmsUserId}
-                            className="bg-white border rounded-full px-3 py-1 text-sm flex items-center gap-2"
+                            className="bg-white dark:bg-dark-surface border dark:border-dark-border rounded-full px-3 py-1 text-sm flex items-center gap-2"
                           >
                             {user.name || user.email}
                             <button onClick={() => handleUserToggle(user.tmsUserId)}>
@@ -435,7 +435,7 @@ export default function ConversationSettingsDialog({
                   />
 
                   {/* Search Results */}
-                  <ScrollArea className="h-40 border rounded-lg bg-white">
+                  <ScrollArea className="h-40 border dark:border-dark-border rounded-lg bg-white dark:bg-dark-surface">
                     {isSearching ? (
                       <div className="flex items-center justify-center h-full">
                         <div className="text-sm text-gray-500">Searching...</div>
@@ -448,7 +448,7 @@ export default function ConversationSettingsDialog({
                             <button
                               key={user.tmsUserId}
                               onClick={() => handleUserToggle(user.tmsUserId)}
-                              className={`w-full flex items-center gap-3 p-2 rounded hover:bg-gray-50 ${
+                              className={`w-full flex items-center gap-3 p-2 rounded hover:bg-gray-50 dark:hover:bg-dark-border ${
                                 selectedUsers.includes(user.tmsUserId) ? 'bg-viber-purple-bg' : ''
                               }`}
                             >
@@ -501,7 +501,7 @@ export default function ConversationSettingsDialog({
                       return (
                         <div
                           key={member.userId}
-                          className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition"
+                          className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-border transition"
                         >
                           <div
                             className="flex items-center gap-3 flex-1 cursor-pointer"

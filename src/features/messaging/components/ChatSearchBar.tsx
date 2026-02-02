@@ -71,9 +71,9 @@ export default function ChatSearchBar({
   if (!isOpen) return null;
 
   return (
-    <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-200 bg-white">
+    <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-200 dark:border-dark-border bg-white dark:bg-dark-surface">
       {/* Search Icon */}
-      <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
+      <Search className="w-4 h-4 text-gray-400 dark:text-dark-text-secondary flex-shrink-0" />
 
       {/* Search Input */}
       <div className="flex-1 min-w-0">
@@ -98,7 +98,7 @@ export default function ChatSearchBar({
           ) : totalResults > 0 ? (
             <>
               {/* Counter */}
-              <span className="text-xs text-gray-600 font-medium min-w-[60px] text-center">
+              <span className="text-xs text-gray-600 dark:text-dark-text-secondary font-medium min-w-[60px] text-center">
                 {currentIndex} of {totalResults}
               </span>
 
@@ -108,7 +108,7 @@ export default function ChatSearchBar({
                   size="sm"
                   variant="ghost"
                   onClick={goToPrevious}
-                  className="h-7 w-7 p-0 hover:bg-gray-100"
+                  className="h-7 w-7 p-0 hover:bg-gray-100 dark:hover:bg-dark-border"
                   title="Previous (Shift+Enter)"
                 >
                   <ChevronUp className="w-4 h-4" />
@@ -117,7 +117,7 @@ export default function ChatSearchBar({
                   size="sm"
                   variant="ghost"
                   onClick={goToNext}
-                  className="h-7 w-7 p-0 hover:bg-gray-100"
+                  className="h-7 w-7 p-0 hover:bg-gray-100 dark:hover:bg-dark-border"
                   title="Next (Enter)"
                 >
                   <ChevronDown className="w-4 h-4" />

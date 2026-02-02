@@ -109,10 +109,10 @@ export function NotificationCenter() {
         <ScrollArea className="flex-1 max-h-[calc(80vh-120px)]">
           {notifications.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
-              <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+              <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-dark-border flex items-center justify-center mb-4">
                 <X className="w-8 h-8 text-gray-400" />
               </div>
-              <h3 className="text-sm font-medium text-gray-900 mb-1">
+              <h3 className="text-sm font-medium text-gray-900 dark:text-dark-text mb-1">
                 No notifications
               </h3>
               <p className="text-sm text-gray-500">
@@ -125,7 +125,7 @@ export function NotificationCenter() {
                 <div
                   key={notification.id}
                   className={cn(
-                    'px-6 py-4 hover:bg-gray-50 cursor-pointer transition-colors',
+                    'px-6 py-4 hover:bg-gray-50 dark:hover:bg-dark-border cursor-pointer transition-colors',
                     !notification.isRead && 'bg-viber-purple-bg/30'
                   )}
                   onClick={() =>
@@ -147,7 +147,7 @@ export function NotificationCenter() {
                     {/* Content */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-sm font-semibold text-gray-900 truncate">
+                        <span className="text-sm font-semibold text-gray-900 dark:text-dark-text truncate">
                           {notification.senderName || 'Unknown'}
                         </span>
                         <span className="text-lg leading-none">
@@ -161,11 +161,11 @@ export function NotificationCenter() {
                         )}
                       </div>
 
-                      <p className="text-sm text-gray-700 line-clamp-2 mb-1">
+                      <p className="text-sm text-gray-700 dark:text-dark-text-secondary line-clamp-2 mb-1">
                         {notification.content || 'New notification'}
                       </p>
 
-                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-dark-text-secondary">
                         <span>{notification.conversationName || 'Unknown conversation'}</span>
                         <span>•</span>
                         <span>
@@ -180,7 +180,7 @@ export function NotificationCenter() {
                         e.stopPropagation();
                         removeNotification(notification.id);
                       }}
-                      className="p-1 rounded hover:bg-gray-200 transition-colors flex-shrink-0"
+                      className="p-1 rounded hover:bg-gray-200 dark:hover:bg-dark-border transition-colors flex-shrink-0"
                       aria-label="Remove notification"
                     >
                       <X className="w-4 h-4 text-gray-500" />

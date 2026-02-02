@@ -9,6 +9,7 @@ import { NotificationCenter } from '@/features/notifications';
 import { useNotificationEvents } from '@/features/notifications';
 import { ConnectionStatus } from '@/components/ConnectionStatus';
 import { usePresenceInit } from '@/hooks/usePresence';
+import { useTheme } from '@/hooks/useTheme';
 import { SocketProvider } from '@/components/providers/SocketProvider';
 
 export default function MainLayout({
@@ -20,6 +21,9 @@ export default function MainLayout({
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuthStore();
   const isChatsRoute = pathname.startsWith('/chats');
+
+  // Initialize theme (applies 'dark' class to <html> based on stored preference)
+  useTheme();
 
   // Initialize notification event listeners
   useNotificationEvents();
