@@ -251,14 +251,81 @@ export function useNotificationEvents() {
 
     log.notification.info('Socket ready, attaching notification listeners');
 
+    // Shared type for conversation cache lookup
+    type CachedConversation = {
+      id: string;
+      name?: string;
+      type: string;
+      members: Array<{
+        userId: string;
+        user?: {
+          id?: string;
+          name?: string;
+          firstName?: string;
+          lastName?: string;
+          email?: string;
+        };
+      }>;
+    };
+
     /**
-     * Resolve sender name from WebSocket payload or user store cache
+     * Find a conversation in the TanStack Query cache (list pages)
      */
-    const resolveSenderName = (senderId: string, payloadName?: string): string => {
+    const findCachedConversation = (conversationId: string): CachedConversation | null => {
+      const convData = queryClient.getQueryData<{
+        pages: Array<{ data: CachedConversation[] }>;
+      }>(queryKeys.conversations.list({ limit: 20, offset: 0 }));
+
+      if (convData?.pages) {
+        for (const page of convData.pages) {
+          const conv = page.data.find(c => c.id === conversationId);
+          if (conv) return conv;
+        }
+      }
+      return null;
+    };
+
+    /**
+     * Get a display name from a conversation member's user object
+     */
+    const getMemberDisplayName = (member: CachedConversation['members'][number]): string | null => {
+      const u = member.user;
+      if (!u) return null;
+      if (u.name) return u.name;
+      if (u.firstName && u.lastName) return `${u.firstName} ${u.lastName}`;
+      if (u.firstName) return u.firstName;
+      return null;
+    };
+
+    /**
+     * Resolve sender name from WebSocket payload, user store, or conversation member cache
+     */
+    const resolveSenderName = (senderId: string, payloadName?: string, conversationId?: string): string => {
       if (payloadName) return payloadName;
+
+      // 1. Check Zustand user store cache
       const userStore = useUserStore.getState();
       const cached = userStore.getCachedUser(senderId);
-      return cached?.displayName || cached?.name || cached?.username || 'Someone';
+      if (cached?.displayName) return cached.displayName;
+      if (cached?.name) return cached.name;
+      if (cached?.username) return cached.username;
+
+      // 2. Check conversation members cache (TanStack Query)
+      if (conversationId) {
+        const conv = findCachedConversation(conversationId);
+        if (conv) {
+          const member = conv.members.find(m => m.userId === senderId);
+          if (member) {
+            const name = getMemberDisplayName(member);
+            if (name) return name;
+          }
+        }
+      }
+
+      // 3. Trigger async fetch so future notifications have the name cached
+      userStore.fetchUserById(senderId).catch(() => {});
+
+      return 'Someone';
     };
 
     /**
@@ -266,20 +333,17 @@ export function useNotificationEvents() {
      */
     const resolveConversationName = (conversationId: string, payloadName?: string): string => {
       if (payloadName) return payloadName;
-      // Look up from TanStack Query conversation cache
-      const convData = queryClient.getQueryData<{ pages: Array<{ data: Array<{ id: string; name?: string; type: string; members: Array<{ userId: string; user?: { name?: string } }> }> }> }>(
-        queryKeys.conversations.list({ limit: 20, offset: 0 })
-      );
-      if (convData?.pages) {
-        for (const page of convData.pages) {
-          const conv = page.data.find(c => c.id === conversationId);
-          if (conv) {
-            if (conv.type === 'group') return conv.name || 'Group Chat';
-            // For DM, find the other member's name
-            const otherMember = conv.members.find(m => m.userId !== currentUser?.id);
-            return otherMember?.user?.name || 'Direct Message';
-          }
+
+      const conv = findCachedConversation(conversationId);
+      if (conv) {
+        if (conv.type === 'group') return conv.name || 'Group Chat';
+        // For DM, find the other member's name
+        const otherMember = conv.members.find(m => m.userId !== currentUser?.id);
+        if (otherMember) {
+          const name = getMemberDisplayName(otherMember);
+          if (name) return name;
         }
+        return 'Direct Message';
       }
       return 'Conversation';
     };
@@ -328,7 +392,7 @@ export function useNotificationEvents() {
             conversationId: message.conversation_id,
             conversationName: resolveConversationName(message.conversation_id, message.conversation_name),
             senderId: systemEvent.actorId,
-            senderName: resolveSenderName(systemEvent.actorId, systemEvent.actorName),
+            senderName: resolveSenderName(systemEvent.actorId, systemEvent.actorName, message.conversation_id),
             content: `${addedNames} was added to the conversation`,
             timestamp: message.created_at,
             isRead: false,
@@ -343,7 +407,7 @@ export function useNotificationEvents() {
             conversationId: message.conversation_id,
             conversationName: resolveConversationName(message.conversation_id, message.conversation_name),
             senderId: systemEvent.actorId,
-            senderName: resolveSenderName(systemEvent.actorId, systemEvent.actorName),
+            senderName: resolveSenderName(systemEvent.actorId, systemEvent.actorName, message.conversation_id),
             content: `${systemEvent.targetUserName || 'A member'} was removed from the conversation`,
             timestamp: message.created_at,
             isRead: false,
@@ -358,8 +422,8 @@ export function useNotificationEvents() {
             conversationId: message.conversation_id,
             conversationName: resolveConversationName(message.conversation_id, message.conversation_name),
             senderId: systemEvent.actorId,
-            senderName: resolveSenderName(systemEvent.actorId, systemEvent.actorName),
-            content: `${resolveSenderName(systemEvent.actorId, systemEvent.actorName)} left the conversation`,
+            senderName: resolveSenderName(systemEvent.actorId, systemEvent.actorName, message.conversation_id),
+            content: `${resolveSenderName(systemEvent.actorId, systemEvent.actorName, message.conversation_id)} left the conversation`,
             timestamp: message.created_at,
             isRead: false,
             priority: 'low',
@@ -373,7 +437,7 @@ export function useNotificationEvents() {
             conversationId: message.conversation_id,
             conversationName: resolveConversationName(message.conversation_id, message.conversation_name),
             senderId: systemEvent.actorId,
-            senderName: resolveSenderName(systemEvent.actorId, systemEvent.actorName),
+            senderName: resolveSenderName(systemEvent.actorId, systemEvent.actorName, message.conversation_id),
             content: `Conversation settings were updated`,
             timestamp: message.created_at,
             isRead: false,
@@ -410,7 +474,7 @@ export function useNotificationEvents() {
         conversationId: message.conversation_id,
         conversationName: resolveConversationName(message.conversation_id, message.conversation_name),
         senderId: message.sender_id,
-        senderName: resolveSenderName(message.sender_id, message.sender_name),
+        senderName: resolveSenderName(message.sender_id, message.sender_name, message.conversation_id),
         senderAvatar: message.sender_avatar,
         content: message.content.slice(0, 100), // Truncate preview
         timestamp: message.created_at,
@@ -469,10 +533,9 @@ export function useNotificationEvents() {
         return;
       }
 
-      // Look up reactor's display name from user store cache
-      const userStore = useUserStore.getState();
-      const reactorUser = userStore.getCachedUser(reactorId);
-      const reactorName = reactorUser?.name || reactorUser?.username || 'Someone';
+      // Resolve reactor name using the shared resolution chain
+      const reactorName = resolveSenderName(reactorId, undefined, foundMessage.conversationId);
+      const reactorUser = useUserStore.getState().getCachedUser(reactorId);
 
       const notification: Notification = {
         id: `notif-reaction-${payload.message_id}-${Date.now()}`,
@@ -519,7 +582,7 @@ export function useNotificationEvents() {
         conversationId: conversationData.conversation_id,
         conversationName: resolveConversationName(conversationData.conversation_id, conversationData.conversation_name),
         senderId: conversationData.updated_by_id,
-        senderName: resolveSenderName(conversationData.updated_by_id, conversationData.updated_by_name),
+        senderName: resolveSenderName(conversationData.updated_by_id, conversationData.updated_by_name, conversationData.conversation_id),
         content: `Conversation settings were updated`,
         timestamp: new Date().toISOString(),
         isRead: false,

@@ -190,26 +190,26 @@ export const MessageBubble = memo(function MessageBubble({
     if (!message.content) return message.content;
 
     // Highlight @mentions + search query
-    // Greedy regex: matches @all, @everyone, or @Word Word... (multi-word display names)
-    const mentionRegex = /(@(?:all|everyone|\w+(?:\s\w+)*))/gi;
-    const searchRegex = searchQuery?.trim()
-      ? new RegExp(`(${searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
+    // Mention pattern (non-capturing inner groups): @all, @everyone, or @Word Word...
+    const mentionSource = '@(?:all|everyone|\\w+(?:\\s\\w+)*)';
+    const escapedSearch = searchQuery?.trim()
+      ? searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
       : null;
 
-    // Combined regex: match @mentions first, then search term
-    const combinedPattern = searchRegex
-      ? new RegExp(`(${mentionRegex.source}|${searchRegex.source})`, 'gi')
-      : mentionRegex;
+    // Build a single regex with ONE capture group to split on
+    // split() includes captured text in results, so exactly one group is needed
+    const patternSource = escapedSearch
+      ? `(${mentionSource}|${escapedSearch})`
+      : `(${mentionSource})`;
+    const splitRegex = new RegExp(patternSource, 'gi');
 
-    const parts = message.content.split(combinedPattern);
-
-    // Check if any part needs highlighting
-    const hasMentions = mentionRegex.test(message.content);
-    const hasSearchMatch = searchRegex ? searchRegex.test(message.content) : false;
-
-    if (!hasMentions && !hasSearchMatch) {
+    // Quick check: does content have anything to highlight?
+    const testRegex = new RegExp(patternSource, 'gi');
+    if (!testRegex.test(message.content)) {
       return message.content;
     }
+
+    const parts = message.content.split(splitRegex);
 
     return (
       <>
@@ -217,7 +217,7 @@ export const MessageBubble = memo(function MessageBubble({
           if (!part) return null;
 
           // Check if this part is a @mention
-          if (/^@(?:all|everyone|\w+(?:\s\w+)*)$/i.test(part)) {
+          if (new RegExp(`^${mentionSource}$`, 'i').test(part)) {
             const isAllMention = /^@(?:all|everyone)$/i.test(part);
             return (
               <span
@@ -236,7 +236,7 @@ export const MessageBubble = memo(function MessageBubble({
           }
 
           // Check if this part matches search query
-          if (searchQuery && part.toLowerCase() === searchQuery.toLowerCase()) {
+          if (escapedSearch && part.toLowerCase() === searchQuery!.trim().toLowerCase()) {
             return (
               <mark key={index} className="bg-yellow-200 text-gray-900 rounded px-0.5">
                 {part}
@@ -438,9 +438,7 @@ export const MessageBubble = memo(function MessageBubble({
           </div>
         )}
 
-        <div className={`flex items-end gap-2 ${
-          isSearchHighlighted ? 'ring-2 ring-yellow-400 dark:ring-yellow-500/60 rounded-lg p-1 -m-1' : ''
-        }`}>
+        <div className="flex items-end gap-2">
           {/* Message Bubble */}
           {/* Deleted Message - Show placeholder for ALL message types when deleted */}
           {message.deletedAt ? (
