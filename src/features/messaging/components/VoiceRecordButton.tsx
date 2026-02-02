@@ -178,7 +178,7 @@ export function VoiceRecordButton({
   // Preview state: show waveform player with send/discard buttons
   if (audioBlob && audioUrl) {
     return (
-      <div className="flex items-center gap-2 bg-gray-100 rounded-2xl px-3 py-2 relative">
+      <div className="flex items-center gap-2 bg-gray-100 dark:bg-dark-bg rounded-2xl px-3 py-2 relative">
         {/* Hidden audio element */}
         <audio
           ref={audioRef}
@@ -213,7 +213,7 @@ export function VoiceRecordButton({
         </div>
 
         {/* Duration */}
-        <span className="text-xs text-gray-500 min-w-[36px] text-right">
+        <span className="text-xs text-gray-500 dark:text-dark-text-secondary min-w-[36px] text-right">
           {formatDuration(duration)}
         </span>
 
@@ -224,7 +224,7 @@ export function VoiceRecordButton({
           size="icon"
           onClick={handleDiscardPreview}
           disabled={isUploading}
-          className="h-7 w-7 text-red-500 hover:text-red-600 hover:bg-red-50"
+          className="h-7 w-7 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
           aria-label="Discard voice message"
           title="Discard"
         >
@@ -251,7 +251,7 @@ export function VoiceRecordButton({
 
         {/* Upload progress indicator */}
         {isUploading && uploadProgress > 0 && (
-          <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-200 rounded-full overflow-hidden">
+          <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-200 dark:bg-dark-border rounded-full overflow-hidden">
             <div
               className="h-full bg-viber-purple transition-all"
               style={{ width: `${uploadProgress}%` }}
@@ -265,11 +265,11 @@ export function VoiceRecordButton({
   // Recording state: show recording indicator with stop/cancel buttons
   if (isRecording) {
     return (
-      <div className="flex items-center gap-2 bg-red-50 rounded-full px-3 py-1.5">
+      <div className="flex items-center gap-2 bg-red-50 dark:bg-red-950/30 rounded-full px-3 py-1.5">
         {/* Recording indicator */}
         <div className="flex items-center gap-2">
           <div className="h-2.5 w-2.5 bg-red-500 rounded-full animate-pulse" />
-          <span className="text-sm text-red-600 font-medium min-w-[40px]">
+          <span className="text-sm text-red-600 dark:text-red-400 font-medium min-w-[40px]">
             {formatDuration(duration)}
           </span>
         </div>
@@ -280,7 +280,7 @@ export function VoiceRecordButton({
           variant="ghost"
           size="icon"
           onClick={handleCancelRecording}
-          className="h-8 w-8 text-gray-500 hover:text-gray-600 hover:bg-gray-100"
+          className="h-8 w-8 text-gray-500 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-dark-border"
           aria-label="Cancel recording"
           title="Cancel"
         >
@@ -293,7 +293,7 @@ export function VoiceRecordButton({
           variant="ghost"
           size="icon"
           onClick={handleStopRecording}
-          className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-100"
+          className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-100 dark:hover:bg-red-950/30"
           aria-label="Stop recording"
           title="Stop"
         >

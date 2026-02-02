@@ -38,7 +38,7 @@ export function ConnectionStatus() {
   // Show connecting state
   if (isConnecting) {
     return (
-      <div className="fixed top-4 right-4 z-50 flex items-center gap-2 bg-yellow-50 border border-yellow-200 text-yellow-800 px-3 py-2 rounded-lg shadow-lg">
+      <div className="fixed top-4 right-4 z-50 flex items-center gap-2 bg-yellow-50 dark:bg-yellow-950/50 border border-yellow-200 dark:border-yellow-800 text-yellow-800 dark:text-yellow-300 px-3 py-2 rounded-lg shadow-lg">
         <div className="relative">
           <Wifi className="w-4 h-4" />
           <div className="absolute inset-0 bg-yellow-400 rounded-full animate-ping opacity-25" />
@@ -51,7 +51,7 @@ export function ConnectionStatus() {
   // Show disconnected state (only after 2 seconds)
   if (showDisconnected) {
     return (
-      <div className="fixed top-4 right-4 z-50 flex items-center gap-2 bg-red-50 border border-red-200 text-red-800 px-3 py-2 rounded-lg shadow-lg">
+      <div className="fixed top-4 right-4 z-50 flex items-center gap-2 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300 px-3 py-2 rounded-lg shadow-lg">
         <WifiOff className="w-4 h-4" />
         <span className="text-sm font-medium">Connection lost. Reconnecting...</span>
       </div>

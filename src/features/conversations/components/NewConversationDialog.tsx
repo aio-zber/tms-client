@@ -313,7 +313,7 @@ export default function NewConversationDialog({
                 className={`flex-1 text-sm md:text-base transition ${
                   effectiveType === 'dm'
                     ? 'bg-viber-purple text-white hover:bg-viber-purple-dark'
-                    : 'bg-white text-gray-900 border border-gray-300 hover:bg-viber-purple-bg'
+                    : 'bg-white dark:bg-dark-surface text-gray-900 dark:text-dark-text border border-gray-300 dark:border-dark-border hover:bg-viber-purple-bg dark:hover:bg-dark-border'
                 }`}
               >
                 <MessageCircle className="h-4 w-4 mr-2" />
@@ -326,7 +326,7 @@ export default function NewConversationDialog({
                 className={`flex-1 text-sm md:text-base transition ${
                   effectiveType === 'group'
                     ? 'bg-viber-purple text-white hover:bg-viber-purple-dark'
-                    : 'bg-white text-gray-900 border border-gray-300 hover:bg-viber-purple-bg'
+                    : 'bg-white dark:bg-dark-surface text-gray-900 dark:text-dark-text border border-gray-300 dark:border-dark-border hover:bg-viber-purple-bg dark:hover:bg-dark-border'
                 }`}
               >
                 <Users className="h-4 w-4 mr-2" />
@@ -370,10 +370,10 @@ export default function NewConversationDialog({
                       onChange={(e) => setGroupName(e.target.value)}
                       className="text-sm md:text-base"
                     />
-                    <p className="text-xs text-gray-500 mt-1">Click the avatar to add a group photo</p>
+                    <p className="text-xs text-gray-500 dark:text-dark-text-secondary mt-1">Click the avatar to add a group photo</p>
                   </div>
                 </div>
-                <div className="text-xs text-gray-600 bg-blue-50 p-2 rounded flex items-start gap-2">
+                <div className="text-xs text-gray-600 dark:text-dark-text-secondary bg-blue-50 dark:bg-blue-950/30 p-2 rounded flex items-start gap-2">
                   <span className="text-blue-600 font-semibold">ℹ️</span>
                   <span>You&apos;ll be added as the group admin automatically</span>
                 </div>
@@ -382,7 +382,7 @@ export default function NewConversationDialog({
 
             {/* Selected Users */}
             {selectedUsers.length > 0 && (
-              <div className="flex flex-wrap gap-2 p-3 bg-gray-50 rounded-lg max-h-24 overflow-y-auto">
+              <div className="flex flex-wrap gap-2 p-3 bg-gray-50 dark:bg-dark-bg rounded-lg max-h-24 overflow-y-auto">
                 {selectedUserDetails.map((user) => (
                   <Badge
                     key={user.tmsUserId}
@@ -394,7 +394,7 @@ export default function NewConversationDialog({
                     </span>
                     <button
                       onClick={() => handleUserToggle(user.tmsUserId, user)}
-                      className="ml-1 hover:bg-gray-300 rounded-full p-0.5"
+                      className="ml-1 hover:bg-gray-300 dark:hover:bg-dark-border rounded-full p-0.5"
                     >
                       <X className="h-3 w-3" />
                     </button>
@@ -405,7 +405,7 @@ export default function NewConversationDialog({
 
             {/* Search Input */}
             <div className="relative">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 md:h-5 md:w-5 text-gray-400" />
+              <Search className="absolute left-3 top-2.5 h-4 w-4 md:h-5 md:w-5 text-gray-400 dark:text-dark-text-secondary" />
               <Input
                 placeholder="Search users by name, email, or department..."
                 className="pl-9 md:pl-10 text-sm md:text-base"
@@ -428,7 +428,7 @@ export default function NewConversationDialog({
               <div className="flex items-center justify-center h-40">
                 <div className="text-center">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-viber-purple mx-auto mb-2"></div>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-gray-500 dark:text-dark-text-secondary">
                     {loadingInitial ? 'Loading users...' : 'Searching users...'}
                   </p>
                 </div>
@@ -436,9 +436,9 @@ export default function NewConversationDialog({
             ) : displayUsers.length === 0 && query ? (
               <div className="flex items-center justify-center h-40">
                 <div className="text-center">
-                  <Users className="h-12 w-12 text-gray-300 mx-auto mb-2" />
-                  <p className="text-sm text-gray-500">No users found</p>
-                  <p className="text-xs text-gray-400 mt-1">
+                  <Users className="h-12 w-12 text-gray-300 dark:text-dark-text-secondary mx-auto mb-2" />
+                  <p className="text-sm text-gray-500 dark:text-dark-text-secondary">No users found</p>
+                  <p className="text-xs text-gray-400 dark:text-dark-text-secondary mt-1">
                     Try a different search term
                   </p>
                 </div>
@@ -446,8 +446,8 @@ export default function NewConversationDialog({
             ) : displayUsers.length === 0 ? (
               <div className="flex items-center justify-center h-40">
                 <div className="text-center">
-                  <Users className="h-12 w-12 text-gray-300 mx-auto mb-2" />
-                  <p className="text-sm text-gray-500">No users available</p>
+                  <Users className="h-12 w-12 text-gray-300 dark:text-dark-text-secondary mx-auto mb-2" />
+                  <p className="text-sm text-gray-500 dark:text-dark-text-secondary">No users available</p>
                 </div>
               </div>
             ) : (
@@ -462,7 +462,7 @@ export default function NewConversationDialog({
                       className={`w-full flex items-center space-x-3 p-3 rounded-lg transition-colors ${
                         isSelected
                           ? 'bg-viber-purple/10 border-2 border-viber-purple'
-                          : 'border border-transparent hover:bg-gray-50'
+                          : 'border border-transparent hover:bg-gray-50 dark:hover:bg-dark-border'
                       }`}
                     >
                       <Avatar className="w-10 h-10">
@@ -473,14 +473,14 @@ export default function NewConversationDialog({
                       </Avatar>
 
                       <div className="flex-1 text-left min-w-0">
-                        <div className="font-medium text-gray-900 truncate text-sm md:text-base">
+                        <div className="font-medium text-gray-900 dark:text-dark-text truncate text-sm md:text-base">
                           {user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email}
                         </div>
-                        <div className="text-xs md:text-sm text-gray-500 truncate">
+                        <div className="text-xs md:text-sm text-gray-500 dark:text-dark-text-secondary truncate">
                           {user.email}
                         </div>
                         {user.department && (
-                          <div className="text-xs text-gray-400 truncate">
+                          <div className="text-xs text-gray-400 dark:text-dark-text-secondary truncate">
                             {user.division} • {user.department}
                           </div>
                         )}
@@ -511,7 +511,7 @@ export default function NewConversationDialog({
           </ScrollArea>
 
             {/* Action Buttons */}
-            <div className="flex gap-2 justify-end pt-4 border-t mt-4">
+            <div className="flex gap-2 justify-end pt-4 border-t dark:border-dark-border mt-4">
               <Button 
                 variant="outline" 
                 onClick={handleClose} 

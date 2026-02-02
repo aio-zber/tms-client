@@ -274,7 +274,7 @@ export default function ConversationSettingsDialog({
                       )}
                     </button>
                   </div>
-                  <div className="text-sm text-gray-500">
+                  <div className="text-sm text-gray-500 dark:text-dark-text-secondary">
                     <p>Click to change the group avatar</p>
                     <p className="text-xs">JPEG, PNG, GIF, or WebP (max 5MB)</p>
                   </div>
@@ -313,30 +313,30 @@ export default function ConversationSettingsDialog({
             {/* Conversation Info */}
             <div className="space-y-2">
               <Label>Type</Label>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-gray-600 dark:text-dark-text-secondary">
                 {isGroup ? 'Group Conversation' : 'Direct Message'}
               </p>
             </div>
 
             <div className="space-y-2">
               <Label>Created</Label>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-gray-600 dark:text-dark-text-secondary">
                 {new Date(conversation.createdAt).toLocaleDateString()}
               </p>
             </div>
 
             {/* Mute Notifications (Messenger-style) */}
-            <div className="pt-4 border-t">
+            <div className="pt-4 border-t dark:border-dark-border">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   {isMuted ? (
-                    <BellOff className="w-5 h-5 text-gray-400" />
+                    <BellOff className="w-5 h-5 text-gray-400 dark:text-dark-text-secondary" />
                   ) : (
                     <Bell className="w-5 h-5 text-viber-purple" />
                   )}
                   <div>
                     <p className="text-sm font-medium">Mute Notifications</p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-gray-500 dark:text-dark-text-secondary">
                       {isMuted
                         ? 'You won\'t be notified except for @mentions'
                         : 'Receive all notifications for this conversation'}
@@ -346,8 +346,9 @@ export default function ConversationSettingsDialog({
                 <button
                   onClick={handleToggleMute}
                   disabled={isMutingConversation || isUnmutingConversation}
-                  className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-viber-purple focus:ring-offset-2 disabled:opacity-50"
-                  style={{ backgroundColor: isMuted ? '#7360F2' : '#D1D5DB' }}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-viber-purple focus:ring-offset-2 disabled:opacity-50 ${
+                    isMuted ? 'bg-viber-purple' : 'bg-gray-300 dark:bg-dark-border'
+                  }`}
                   role="switch"
                   aria-checked={isMuted}
                   aria-label="Mute notifications"
@@ -363,7 +364,7 @@ export default function ConversationSettingsDialog({
 
             {/* Leave Conversation Button */}
             {isGroup && currentUserIsMember && (
-              <div className="pt-4 border-t">
+              <div className="pt-4 border-t dark:border-dark-border">
                 <Button
                   variant="destructive"
                   onClick={handleLeaveConversation}
@@ -438,7 +439,7 @@ export default function ConversationSettingsDialog({
                   <ScrollArea className="h-40 border dark:border-dark-border rounded-lg bg-white dark:bg-dark-surface">
                     {isSearching ? (
                       <div className="flex items-center justify-center h-full">
-                        <div className="text-sm text-gray-500">Searching...</div>
+                        <div className="text-sm text-gray-500 dark:text-dark-text-secondary">Searching...</div>
                       </div>
                     ) : results.length > 0 ? (
                       <div className="p-2">
@@ -460,7 +461,7 @@ export default function ConversationSettingsDialog({
                               </Avatar>
                               <div className="flex-1 text-left text-sm">
                                 <div className="font-medium">{user.name || user.email}</div>
-                                <div className="text-xs text-gray-500">{user.email}</div>
+                                <div className="text-xs text-gray-500 dark:text-dark-text-secondary">{user.email}</div>
                               </div>
                               {selectedUsers.includes(user.tmsUserId) && (
                                 <div className="text-viber-purple">✓</div>
@@ -469,7 +470,7 @@ export default function ConversationSettingsDialog({
                           ))}
                       </div>
                     ) : query ? (
-                      <div className="flex items-center justify-center h-full text-sm text-gray-500">
+                      <div className="flex items-center justify-center h-full text-sm text-gray-500 dark:text-dark-text-secondary">
                         No users found
                       </div>
                     ) : null}
@@ -522,7 +523,7 @@ export default function ConversationSettingsDialog({
                                 {displayName}
                                 {isCurrentUser && ' (You)'}
                               </div>
-                              <div className="text-xs text-gray-500 capitalize">
+                              <div className="text-xs text-gray-500 dark:text-dark-text-secondary capitalize">
                                 {member.role || 'member'}
                               </div>
                             </div>
@@ -537,7 +538,7 @@ export default function ConversationSettingsDialog({
                                 handleRemoveMember(member.userId, displayName);
                               }}
                               disabled={isRemovingMember}
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
                             >
                               <UserMinus className="h-4 w-4" />
                             </Button>

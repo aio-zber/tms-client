@@ -24,8 +24,8 @@ const VIBER_COLORS = {
   accent: '#A18CFF',
   background: '#F5F4F8',
   border: '#E4E3EB',
-  textPrimary: '#2D2C3C',
-  textSecondary: '#8B8A97',
+  textPrimary: '', // Handled via Tailwind classes for dark mode support
+  textSecondary: '', // Handled via Tailwind classes for dark mode support
 };
 
 interface PollCreatorProps {
@@ -121,14 +121,10 @@ export default function PollCreator({
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent
-        className="max-w-md"
-        style={{
-          borderRadius: '16px',
-          border: `1px solid ${VIBER_COLORS.border}`,
-        }}
+        className="max-w-md rounded-2xl border border-gray-200 dark:border-dark-border"
       >
         <DialogHeader>
-          <DialogTitle style={{ color: VIBER_COLORS.textPrimary }}>
+          <DialogTitle className="text-gray-900 dark:text-dark-text">
             Create Poll
           </DialogTitle>
         </DialogHeader>
@@ -136,7 +132,7 @@ export default function PollCreator({
         <div className="space-y-4">
           {/* Question Input */}
           <div>
-            <Label htmlFor="question" style={{ color: VIBER_COLORS.textPrimary }}>
+            <Label htmlFor="question" className="text-gray-900 dark:text-dark-text">
               Question
             </Label>
             <Input
@@ -154,14 +150,14 @@ export default function PollCreator({
             {errors.question && (
               <p className="text-sm text-red-500 mt-1">{errors.question}</p>
             )}
-            <p className="text-xs mt-1" style={{ color: VIBER_COLORS.textSecondary }}>
+            <p className="text-xs mt-1 text-gray-500 dark:text-dark-text-secondary">
               {question.length}/255 characters
             </p>
           </div>
 
           {/* Options */}
           <div>
-            <Label style={{ color: VIBER_COLORS.textPrimary }}>
+            <Label className="text-gray-900 dark:text-dark-text">
               Options (2-10)
             </Label>
             <div className="space-y-2 mt-2">
@@ -185,7 +181,7 @@ export default function PollCreator({
                       size="icon"
                       onClick={() => removeOption(index)}
                       disabled={isCreating}
-                      style={{ color: VIBER_COLORS.textSecondary }}
+                      className="text-gray-500 dark:text-dark-text-secondary"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -231,8 +227,7 @@ export default function PollCreator({
             />
             <Label
               htmlFor="multipleChoice"
-              className="cursor-pointer"
-              style={{ color: VIBER_COLORS.textPrimary }}
+              className="cursor-pointer text-gray-900 dark:text-dark-text"
             >
               Allow multiple answers
             </Label>

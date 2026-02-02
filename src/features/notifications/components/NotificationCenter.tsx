@@ -73,7 +73,7 @@ export function NotificationCenter() {
             <DialogTitle className="text-lg font-semibold">
               Notifications
               {unreadCount > 0 && (
-                <span className="ml-2 text-sm font-normal text-gray-500">
+                <span className="ml-2 text-sm font-normal text-gray-500 dark:text-dark-text-secondary">
                   ({unreadCount} unread)
                 </span>
               )}
@@ -94,7 +94,7 @@ export function NotificationCenter() {
                     variant="ghost"
                     size="sm"
                     onClick={clearAll}
-                    className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                    className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
                   >
                     <Trash2 className="w-4 h-4 mr-1" />
                     Clear all
@@ -110,12 +110,12 @@ export function NotificationCenter() {
           {notifications.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
               <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-dark-border flex items-center justify-center mb-4">
-                <X className="w-8 h-8 text-gray-400" />
+                <X className="w-8 h-8 text-gray-400 dark:text-dark-text-secondary" />
               </div>
               <h3 className="text-sm font-medium text-gray-900 dark:text-dark-text mb-1">
                 No notifications
               </h3>
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-gray-500 dark:text-dark-text-secondary">
                 You&apos;re all caught up!
               </p>
             </div>
@@ -183,7 +183,7 @@ export function NotificationCenter() {
                       className="p-1 rounded hover:bg-gray-200 dark:hover:bg-dark-border transition-colors flex-shrink-0"
                       aria-label="Remove notification"
                     >
-                      <X className="w-4 h-4 text-gray-500" />
+                      <X className="w-4 h-4 text-gray-500 dark:text-dark-text-secondary" />
                     </button>
                   </div>
                 </div>

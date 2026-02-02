@@ -67,7 +67,7 @@ export function ProfileSettingsForm() {
 
       {/* Theme Section */}
       <div className="space-y-3 mb-6">
-        <Label className="text-sm font-medium text-gray-700">Theme</Label>
+        <Label className="text-sm font-medium text-gray-700 dark:text-dark-text-secondary">Theme</Label>
         <div className="grid grid-cols-3 gap-2">
           {themeOptions.map(({ value, label, icon: Icon }) => (
             <button
@@ -76,8 +76,8 @@ export function ProfileSettingsForm() {
               disabled={isUpdating}
               className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all ${
                 localSettings.theme === value
-                  ? 'border-viber-purple bg-viber-purple-bg text-viber-purple'
-                  : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                  ? 'border-viber-purple bg-viber-purple-bg dark:bg-viber-purple/10 text-viber-purple'
+                  : 'border-gray-200 dark:border-dark-border hover:border-gray-300 dark:hover:border-dark-text-secondary text-gray-600 dark:text-dark-text-secondary'
               } disabled:opacity-50`}
             >
               <Icon className="w-5 h-5" />
@@ -91,7 +91,7 @@ export function ProfileSettingsForm() {
 
       {/* Notifications Section */}
       <div className="space-y-4 mb-6">
-        <Label className="text-sm font-medium text-gray-700">Notifications</Label>
+        <Label className="text-sm font-medium text-gray-700 dark:text-dark-text-secondary">Notifications</Label>
 
         {/* Enable Notifications */}
         <div className="flex items-center justify-between">
@@ -99,11 +99,11 @@ export function ProfileSettingsForm() {
             {localSettings.notifications.enabled ? (
               <Bell className="w-5 h-5 text-viber-purple" />
             ) : (
-              <BellOff className="w-5 h-5 text-gray-400" />
+              <BellOff className="w-5 h-5 text-gray-400 dark:text-dark-text-secondary" />
             )}
             <div>
               <p className="text-sm font-medium">Enable Notifications</p>
-              <p className="text-xs text-gray-500">Receive message notifications</p>
+              <p className="text-xs text-gray-500 dark:text-dark-text-secondary">Receive message notifications</p>
             </div>
           </div>
           <Button
@@ -123,11 +123,11 @@ export function ProfileSettingsForm() {
             {localSettings.notifications.sound ? (
               <Volume2 className="w-5 h-5 text-viber-purple" />
             ) : (
-              <VolumeX className="w-5 h-5 text-gray-400" />
+              <VolumeX className="w-5 h-5 text-gray-400 dark:text-dark-text-secondary" />
             )}
             <div>
               <p className="text-sm font-medium">Enable Sound</p>
-              <p className="text-xs text-gray-500">Play notification sounds</p>
+              <p className="text-xs text-gray-500 dark:text-dark-text-secondary">Play notification sounds</p>
             </div>
           </div>
           <Button
@@ -146,7 +146,7 @@ export function ProfileSettingsForm() {
 
       {/* Privacy Section */}
       <div className="space-y-4">
-        <Label className="text-sm font-medium text-gray-700">Privacy</Label>
+        <Label className="text-sm font-medium text-gray-700 dark:text-dark-text-secondary">Privacy</Label>
 
         {/* Show Last Seen */}
         <div className="flex items-center justify-between">
@@ -154,11 +154,11 @@ export function ProfileSettingsForm() {
             {localSettings.privacy.lastSeen ? (
               <Eye className="w-5 h-5 text-viber-purple" />
             ) : (
-              <EyeOff className="w-5 h-5 text-gray-400" />
+              <EyeOff className="w-5 h-5 text-gray-400 dark:text-dark-text-secondary" />
             )}
             <div>
               <p className="text-sm font-medium">Show Last Seen</p>
-              <p className="text-xs text-gray-500">Display your last active time</p>
+              <p className="text-xs text-gray-500 dark:text-dark-text-secondary">Display your last active time</p>
             </div>
           </div>
           <Button
@@ -178,11 +178,11 @@ export function ProfileSettingsForm() {
             {localSettings.privacy.readReceipts ? (
               <Eye className="w-5 h-5 text-viber-purple" />
             ) : (
-              <EyeOff className="w-5 h-5 text-gray-400" />
+              <EyeOff className="w-5 h-5 text-gray-400 dark:text-dark-text-secondary" />
             )}
             <div>
               <p className="text-sm font-medium">Show Read Receipts</p>
-              <p className="text-xs text-gray-500">Send read confirmations</p>
+              <p className="text-xs text-gray-500 dark:text-dark-text-secondary">Send read confirmations</p>
             </div>
           </div>
           <Button
@@ -198,7 +198,7 @@ export function ProfileSettingsForm() {
       </div>
 
       {isUpdating && (
-        <p className="text-xs text-gray-500 text-center mt-4">Saving changes...</p>
+        <p className="text-xs text-gray-500 dark:text-dark-text-secondary text-center mt-4">Saving changes...</p>
       )}
     </Card>
   );

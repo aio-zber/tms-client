@@ -82,14 +82,14 @@ export function UserProfileDialog({
           {loading && (
             <div className="flex flex-col items-center justify-center py-12">
               <Loader2 className="w-8 h-8 animate-spin text-viber-purple mb-3" />
-              <p className="text-sm text-gray-600">Loading profile...</p>
+              <p className="text-sm text-gray-600 dark:text-dark-text-secondary">Loading profile...</p>
             </div>
           )}
 
           {/* Error State */}
           {error && !loading && (
             <div className="flex flex-col items-center justify-center py-12">
-              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-3">
+              <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-950/30 flex items-center justify-center mb-3">
                 <X className="w-6 h-6 text-red-600" />
               </div>
               <p className="text-sm text-red-600 text-center">{error}</p>
@@ -126,7 +126,7 @@ export function UserProfileDialog({
           {/* No User State */}
           {!userId && !loading && (
             <div className="flex flex-col items-center justify-center py-12">
-              <p className="text-sm text-gray-600">No user selected</p>
+              <p className="text-sm text-gray-600 dark:text-dark-text-secondary">No user selected</p>
             </div>
           )}
         </div>

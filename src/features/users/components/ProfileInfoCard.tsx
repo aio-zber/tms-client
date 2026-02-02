@@ -66,7 +66,7 @@ export function ProfileInfoCard({
           <div className="flex-1 min-w-0">
             <h3 className="font-semibold text-base truncate">{displayName}</h3>
             {user.email && (
-              <p className="text-sm text-gray-600 truncate">{user.email}</p>
+              <p className="text-sm text-gray-600 dark:text-dark-text-secondary truncate">{user.email}</p>
             )}
           </div>
 
@@ -89,10 +89,10 @@ export function ProfileInfoCard({
           </AvatarFallback>
         </Avatar>
 
-        <h2 className="text-2xl font-bold text-gray-900 mb-1">{displayName}</h2>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-dark-text mb-1">{displayName}</h2>
 
         {user.positionTitle && (
-          <p className="text-sm text-gray-600 mb-2">{user.positionTitle}</p>
+          <p className="text-sm text-gray-600 dark:text-dark-text-secondary mb-2">{user.positionTitle}</p>
         )}
 
         <div className="flex items-center gap-2">
@@ -111,40 +111,40 @@ export function ProfileInfoCard({
       <div className="space-y-3">
         {user.email && (
           <div className="flex items-start gap-3">
-            <Mail className="w-5 h-5 text-gray-400 mt-0.5" />
+            <Mail className="w-5 h-5 text-gray-400 dark:text-dark-text-secondary mt-0.5" />
             <div className="flex-1 min-w-0">
-              <p className="text-xs text-gray-500 mb-0.5">Email</p>
-              <p className="text-sm text-gray-900 break-all">{user.email}</p>
+              <p className="text-xs text-gray-500 dark:text-dark-text-secondary mb-0.5">Email</p>
+              <p className="text-sm text-gray-900 dark:text-dark-text break-all">{user.email}</p>
             </div>
           </div>
         )}
 
         {user.positionTitle && (
           <div className="flex items-start gap-3">
-            <Briefcase className="w-5 h-5 text-gray-400 mt-0.5" />
+            <Briefcase className="w-5 h-5 text-gray-400 dark:text-dark-text-secondary mt-0.5" />
             <div className="flex-1 min-w-0">
-              <p className="text-xs text-gray-500 mb-0.5">Position</p>
-              <p className="text-sm text-gray-900">{user.positionTitle}</p>
+              <p className="text-xs text-gray-500 dark:text-dark-text-secondary mb-0.5">Position</p>
+              <p className="text-sm text-gray-900 dark:text-dark-text">{user.positionTitle}</p>
             </div>
           </div>
         )}
 
         {showOrganization && orgPath && (
           <div className="flex items-start gap-3">
-            <Building2 className="w-5 h-5 text-gray-400 mt-0.5" />
+            <Building2 className="w-5 h-5 text-gray-400 dark:text-dark-text-secondary mt-0.5" />
             <div className="flex-1 min-w-0">
-              <p className="text-xs text-gray-500 mb-0.5">Organization</p>
-              <p className="text-sm text-gray-900">{orgPath}</p>
+              <p className="text-xs text-gray-500 dark:text-dark-text-secondary mb-0.5">Organization</p>
+              <p className="text-sm text-gray-900 dark:text-dark-text">{orgPath}</p>
             </div>
           </div>
         )}
 
         {(user.username || user.tmsUserId) && (
           <div className="flex items-start gap-3">
-            <UserIcon className="w-5 h-5 text-gray-400 mt-0.5" />
+            <UserIcon className="w-5 h-5 text-gray-400 dark:text-dark-text-secondary mt-0.5" />
             <div className="flex-1 min-w-0">
-              <p className="text-xs text-gray-500 mb-0.5">Username</p>
-              <p className="text-sm text-gray-900">
+              <p className="text-xs text-gray-500 dark:text-dark-text-secondary mb-0.5">Username</p>
+              <p className="text-sm text-gray-900 dark:text-dark-text">
                 {user.username || `@${user.tmsUserId}`}
               </p>
             </div>

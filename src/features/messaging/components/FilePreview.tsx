@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 // Simple progress bar component
 function ProgressBar({ value, className }: { value: number; className?: string }) {
   return (
-    <div className={cn('w-full bg-gray-200 rounded-full overflow-hidden', className)}>
+    <div className={cn('w-full bg-gray-200 dark:bg-dark-border rounded-full overflow-hidden', className)}>
       <div
         className="bg-viber-purple h-full transition-all duration-300"
         style={{ width: `${Math.min(100, Math.max(0, value))}%` }}

@@ -314,20 +314,20 @@ export function MessageInput({
       <div className="max-w-4xl mx-auto">
         {/* Edit Preview */}
         {editingMessage && (
-          <div className="mb-2 md:mb-3 flex items-center gap-2 p-3 bg-amber-50 rounded-lg border-l-4 border-amber-500">
+          <div className="mb-2 md:mb-3 flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border-l-4 border-amber-500">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs md:text-sm font-semibold text-amber-700">Edit message</span>
+                <span className="text-xs md:text-sm font-semibold text-amber-700 dark:text-amber-400">Edit message</span>
               </div>
-              <p className="text-sm md:text-base text-gray-700 truncate">{editingMessage.content}</p>
+              <p className="text-sm md:text-base text-gray-700 dark:text-dark-text-secondary truncate">{editingMessage.content}</p>
             </div>
             {onCancelEdit && (
               <button
                 onClick={onCancelEdit}
-                className="p-1 hover:bg-amber-100 rounded-full transition shrink-0"
+                className="p-1 hover:bg-amber-100 dark:hover:bg-amber-900/30 rounded-full transition shrink-0"
                 type="button"
               >
-                <X className="w-4 h-4 md:w-5 md:h-5 text-amber-700" />
+                <X className="w-4 h-4 md:w-5 md:h-5 text-amber-700 dark:text-amber-400" />
               </button>
             )}
           </div>
@@ -335,7 +335,7 @@ export function MessageInput({
 
         {/* Reply Preview - Matching the image design */}
         {replyTo && !editingMessage && (
-          <div className="mb-2 md:mb-3 flex items-center gap-2 p-3 bg-gray-50 rounded-lg border-l-4 border-viber-purple">
+          <div className="mb-2 md:mb-3 flex items-center gap-2 p-3 bg-gray-50 dark:bg-dark-bg rounded-lg border-l-4 border-viber-purple">
             <div className="flex-1 min-w-0">
               {/* Sender name in purple */}
               <div className="flex items-center gap-2 mb-1">
@@ -345,15 +345,15 @@ export function MessageInput({
                 </span>
               </div>
               {/* Message content in gray */}
-              <p className="text-sm md:text-base text-gray-700 truncate">{replyTo.content}</p>
+              <p className="text-sm md:text-base text-gray-700 dark:text-dark-text-secondary truncate">{replyTo.content}</p>
             </div>
             {onCancelReply && (
               <button
                 onClick={onCancelReply}
-                className="p-1 hover:bg-gray-200 rounded-full transition shrink-0"
+                className="p-1 hover:bg-gray-200 dark:hover:bg-dark-border rounded-full transition shrink-0"
                 type="button"
               >
-                <X className="w-4 h-4 md:w-5 md:h-5 text-gray-500" />
+                <X className="w-4 h-4 md:w-5 md:h-5 text-gray-500 dark:text-dark-text-secondary" />
               </button>
             )}
           </div>
@@ -399,19 +399,19 @@ export function MessageInput({
           {/* Poll Button */}
           <button
             type="button"
-            className="p-2 md:p-2.5 hover:bg-gray-100 rounded-full transition mb-1"
+            className="p-2 md:p-2.5 hover:bg-gray-100 dark:hover:bg-dark-border rounded-full transition mb-1"
             disabled={disabled || editingMessage !== undefined || isUploading || isVoiceRecording}
             title="Create poll"
             onClick={() => setShowPollCreator(true)}
           >
-            <BarChart3 className="w-5 h-5 md:w-6 md:h-6 text-gray-400" />
+            <BarChart3 className="w-5 h-5 md:w-6 md:h-6 text-gray-400 dark:text-dark-text-secondary" />
           </button>
 
           {/* Emoji Button */}
           <div className="mb-1">
             <EmojiPickerButton
               onEmojiSelect={handleEmojiSelect}
-              triggerClassName="p-2 md:p-2.5 hover:bg-gray-100 rounded-full transition"
+              triggerClassName="p-2 md:p-2.5 hover:bg-gray-100 dark:hover:bg-dark-border rounded-full transition"
               side="top"
               align="center"
               ariaLabel="Add emoji"
