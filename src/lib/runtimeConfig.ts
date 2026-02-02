@@ -5,7 +5,7 @@
  * to avoid Next.js NEXT_PUBLIC_ variable replacement issues.
  *
  * This ensures the correct backend URL is used regardless of when/where
- * the app was built, making it more reliable for Railway deployments.
+ * the app was built.
  */
 
 import { log } from './logger';
@@ -15,7 +15,7 @@ let apiUrlCache: string | null = null;
 /**
  * Get API base URL based on runtime hostname detection
  *
- * @returns API base URL (e.g., "https://tms-server-staging.up.railway.app/api/v1")
+ * @returns API base URL (e.g., "https://tms-chat-staging.example.com/api/v1")
  */
 export const getApiUrl = (): string => {
   // Log every call for debugging
@@ -53,13 +53,6 @@ export const getApiUrl = (): string => {
       return apiUrlCache;
     }
 
-    // Railway deployment (staging) - Legacy fallback
-    if (hostname.includes('railway.app')) {
-      apiUrlCache = 'https://tms-server-staging.up.railway.app/api/v1';
-      log.debug('[Runtime Config] ✅ Detected Railway deployment, setting cache to:', apiUrlCache);
-      return apiUrlCache;
-    }
-
     // Unknown domain - use Alibaba Cloud staging as fallback
     apiUrlCache = 'https://tms-chat-staging.example.com/api/v1';
     log.debug('[Runtime Config] ⚠️ Unknown hostname, using Alibaba Cloud staging as default:', apiUrlCache);
@@ -93,11 +86,6 @@ export const getWebSocketUrl = (): string => {
     // Alibaba Cloud Staging
     if (hostname === 'tms-chat-staging.example.com') {
       return 'wss://tms-chat-staging.example.com';
-    }
-
-    // Railway deployment (staging) - Legacy fallback
-    if (hostname.includes('railway.app')) {
-      return 'wss://tms-server-staging.up.railway.app';
     }
 
     // Unknown domain - use Alibaba Cloud staging as fallback

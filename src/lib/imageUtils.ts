@@ -18,7 +18,7 @@ import { GCGC_FILE_URL } from './constants';
  * @example
  * // Relative path
  * getUserImageUrl('/uploads/profiles/user-123.jpg')
- * // Returns: 'https://gcgc-team-management-system-staging.up.railway.app/uploads/profiles/user-123.jpg'
+ * // Returns: '{TMS_API_URL}/uploads/profiles/user-123.jpg'
  *
  * // Already absolute
  * getUserImageUrl('https://example.com/image.jpg')
