@@ -245,4 +245,4 @@ __tests__/
 
 ## 📝 License
 
-Private/Internal Project - GCG Team
+Proprietary - GCG Team. All rights reserved.

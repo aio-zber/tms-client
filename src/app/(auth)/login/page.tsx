@@ -50,8 +50,7 @@ export default function LoginPage() {
     } else {
       // No GCGC session, redirect to GCGC login
       const redirectToGCGC = () => {
-        const gcgcLoginUrl = process.env.NEXT_PUBLIC_GCGC_LOGIN_URL ||
-                            'https://tms-staging.example.com/auth/signin';
+        const gcgcLoginUrl = process.env.NEXT_PUBLIC_GCGC_LOGIN_URL || '';
         window.location.href = `${gcgcLoginUrl}?callbackUrl=${encodeURIComponent(window.location.origin)}`;
       };
 

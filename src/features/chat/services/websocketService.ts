@@ -60,13 +60,13 @@ class WebSocketService {
     this.socket = io(WS_URL, {
       path: '/socket.io',  // FIXED: Socket.IO default path (server wraps FastAPI with socketio.ASGIApp)
       auth: { token },
-      transports: ['websocket'],  // WebSocket-only for Railway (polling doesn't work well)
-      upgrade: false,  // Don't upgrade from polling to WebSocket
+      transports: ['websocket'],  // WebSocket-only (polling unreliable in some environments)
+      upgrade: false,
       reconnection: true,
       reconnectionAttempts: this.maxReconnectAttempts,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
-      timeout: 20000,  // Increased timeout for Railway
+      timeout: 20000,
       autoConnect: true,
     });
 

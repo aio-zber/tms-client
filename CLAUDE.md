@@ -13,7 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Frontend**: Next.js 14 (App Router) + TypeScript + TailwindCSS + shadcn/ui + Zustand + Socket.io-client
 - **Real-time**: WebSocket messaging via Socket.io for instant communication
 - **Authentication**: TMS SSO integration - all user identity managed by external TMS system
-- **Deployment**: Railway for both services, Cloudinary for media storage
+- **Deployment**: Cloudinary for media storage
 
 ### Critical: Client-Server Communication
 
@@ -358,55 +358,8 @@ messages = db.query(Message).filter(
 
 ## Environment Configuration
 
-### Backend `.env`
-
-```bash
-DATABASE_URL=postgresql://user:pass@localhost:5432/chatflow
-REDIS_URL=redis://localhost:6379
-TMS_API_URL=https://tms.example.com
-TMS_API_KEY=your-tms-api-key
-JWT_SECRET=your-secret-min-32-chars
-ALLOWED_ORIGINS=http://localhost:3000
-CLOUDINARY_URL=cloudinary://key:secret@cloud_name
-MAX_UPLOAD_SIZE=10485760  # 10MB
-ENVIRONMENT=development
-DEBUG=true
-```
-
-### Frontend `.env.local`
-
-```bash
-NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
-NEXT_PUBLIC_WS_URL=ws://localhost:8000
-NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=your-cloud-name
-NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET=your-preset
-NEXT_PUBLIC_ENVIRONMENT=development
-```
-
----
-
-## Database Schema (Key Tables)
-
-```sql
--- User reference (TMS sync)
-users (id, tms_user_id, settings_json, last_synced_at, created_at)
-
--- Conversations
-conversations (id, type, name, avatar_url, created_by, created_at)
-
--- Conversation members
-conversation_members (conversation_id, user_id, role, joined_at, last_read_at)
-
--- Messages
-messages (id, conversation_id, sender_id, content, type, metadata_json,
-         reply_to_id, created_at, updated_at, deleted_at, is_edited)
-
--- Message status
-message_status (message_id, user_id, status, timestamp)
-
--- Calls
-calls (id, conversation_id, type, status, started_by, started_at, ended_at)
-```
+See `.env.example` or `.env.local.example` for required environment variables.
+Backend and frontend each need their own `.env` file configured before running.
 
 ---
 

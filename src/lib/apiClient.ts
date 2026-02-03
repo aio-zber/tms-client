@@ -27,7 +27,7 @@ class ApiClient {
 
   /**
    * Get base URL dynamically at runtime to ensure correct HTTPS usage.
-   * This prevents build-time env var issues in Railway deployments.
+   * This prevents build-time env var issues in containerized deployments.
    */
   private getBaseURL(): string {
     return getApiBaseUrl();

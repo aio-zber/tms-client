@@ -7,7 +7,7 @@ import { useAuthStore } from '@/store/authStore';
 import { socketClient } from '@/lib/socket';
 
 const TMS_SERVER_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') ||
-                       'https://tms-chat-staging.example.com';
+                       'http://localhost:8000';
 
 function AuthCallbackContent() {
   const router = useRouter();

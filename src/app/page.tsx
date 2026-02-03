@@ -9,11 +9,10 @@ import { authService } from '@/features/auth/services/authService';
 import { socketClient } from '@/lib/socket';
 
 const TMS_SERVER_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') ||
-                       'https://tms-chat-staging.example.com';
-const GCGC_URL = process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL ||
-                 'https://tms-staging.example.com';
+                       'http://localhost:8000';
+const GCGC_URL = process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL || '';
 const TMS_CLIENT_URL = process.env.NEXT_PUBLIC_TMS_CLIENT_URL ||
-                       'https://tms-chat-staging.example.com';
+                       (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
 
 function HomePageContent() {
   const router = useRouter();

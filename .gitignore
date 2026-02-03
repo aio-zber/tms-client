@@ -48,3 +48,9 @@ next-env.d.ts
 *.swp
 *.swo
 *~
+*.code-workspace
+
+# Stray files
+test_api.sh
+reference/
+*:Zone.Identifier

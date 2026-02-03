@@ -15,13 +15,11 @@ let apiUrlCache: string | null = null;
 /**
  * Get API base URL based on runtime hostname detection
  *
- * @returns API base URL (e.g., "https://tms-chat-staging.example.com/api/v1")
+ * @returns API base URL (e.g., "https://your-domain.com/api/v1")
  */
 export const getApiUrl = (): string => {
-  // Log every call for debugging
   log.debug('[Runtime Config] getApiUrl() called, current cache:', apiUrlCache);
 
-  // Return cached value if already determined
   if (apiUrlCache) {
     log.debug('[Runtime Config] Returning cached URL:', apiUrlCache);
     return apiUrlCache;
@@ -35,39 +33,29 @@ export const getApiUrl = (): string => {
     // Local development
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
       apiUrlCache = 'http://localhost:8000/api/v1';
-      log.debug('[Runtime Config] ✅ Detected localhost, setting cache to:', apiUrlCache);
+      log.debug('[Runtime Config] Detected localhost, setting cache to:', apiUrlCache);
       return apiUrlCache;
     }
 
-    // Alibaba Cloud Production (example.com)
-    if (hostname === 'tms-chat.example.com') {
-      apiUrlCache = 'https://tms-chat.example.com/api/v1';
-      log.debug('[Runtime Config] ✅ Detected Alibaba Cloud Production, setting cache to:', apiUrlCache);
-      return apiUrlCache;
-    }
-
-    // Alibaba Cloud Staging
-    if (hostname === 'tms-chat-staging.example.com') {
-      apiUrlCache = 'https://tms-chat-staging.example.com/api/v1';
-      log.debug('[Runtime Config] ✅ Detected Alibaba Cloud Staging, setting cache to:', apiUrlCache);
-      return apiUrlCache;
-    }
-
-    // Unknown domain - use Alibaba Cloud staging as fallback
-    apiUrlCache = 'https://tms-chat-staging.example.com/api/v1';
-    log.debug('[Runtime Config] ⚠️ Unknown hostname, using Alibaba Cloud staging as default:', apiUrlCache);
+    // Production/staging: derive API URL from current hostname
+    // The app uses same-origin reverse proxy (nginx forwards /api/v1 to backend)
+    const protocol = window.location.protocol;
+    apiUrlCache = `${protocol}//${hostname}/api/v1`;
+    log.debug('[Runtime Config] Detected deployment hostname, setting cache to:', apiUrlCache);
     return apiUrlCache;
   }
 
-  // Server-side rendering fallback - use Alibaba Cloud staging
-  log.debug('[Runtime Config] SSR fallback, returning Alibaba Cloud staging');
-  return 'https://tms-chat-staging.example.com/api/v1';
+  // Server-side rendering fallback
+  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (envUrl) return envUrl;
+
+  return 'http://localhost:8000/api/v1';
 };
 
 /**
  * Get WebSocket base URL based on runtime hostname detection
  *
- * @returns WebSocket base URL (e.g., "wss://tms-chat-staging.example.com")
+ * @returns WebSocket base URL (e.g., "wss://your-domain.com")
  */
 export const getWebSocketUrl = (): string => {
   if (typeof window !== 'undefined') {
@@ -78,20 +66,14 @@ export const getWebSocketUrl = (): string => {
       return 'ws://localhost:8000';
     }
 
-    // Alibaba Cloud Production
-    if (hostname === 'tms-chat.example.com') {
-      return 'wss://tms-chat.example.com';
-    }
-
-    // Alibaba Cloud Staging
-    if (hostname === 'tms-chat-staging.example.com') {
-      return 'wss://tms-chat-staging.example.com';
-    }
-
-    // Unknown domain - use Alibaba Cloud staging as fallback
-    return 'wss://tms-chat-staging.example.com';
+    // Production/staging: derive WSS URL from current hostname
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${wsProtocol}//${hostname}`;
   }
 
   // Server-side fallback
+  const envWsUrl = process.env.NEXT_PUBLIC_WS_URL;
+  if (envWsUrl) return envWsUrl;
+
   return 'ws://localhost:8000';
 };

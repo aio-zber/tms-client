@@ -20,7 +20,7 @@ import { getUserInitials, getUserDisplayName, User } from '@/types';
 import { useState, useEffect } from 'react';
 import { authService } from '@/features/auth/services/authService';
 import { useTheme } from '@/hooks/useTheme';
-import { STORAGE_KEYS } from '@/lib/constants';
+import { STORAGE_KEYS, getApiBaseUrl } from '@/lib/constants';
 import {
   Sun,
   Moon,
@@ -54,7 +54,7 @@ export function AppHeader() {
         }
 
         // Get user data from TMS Server using JWT Bearer token
-        const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://tms-chat-staging.example.com/api/v1';
+        const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || getApiBaseUrl();
         const response = await fetch(`${apiBaseUrl}/users/me`, {
           headers: {
             'Authorization': `Bearer ${jwtToken}`,

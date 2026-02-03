@@ -10,16 +10,13 @@ import { startKeepaliveWorker, stopKeepaliveWorker } from './keepaliveWorker';
 
 /**
  * Get Socket.IO URL dynamically at runtime
- * Uses hostname detection to support Alibaba Cloud deployment
+ * Uses hostname detection for deployment environments
  */
 const getSocketUrl = (): string => {
-  // SSR safety check
   if (typeof window === 'undefined') {
-    // Server-side fallback (won't be used since socket only connects client-side)
-    return 'https://tms-chat-staging.example.com';
+    return process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:8000';
   }
 
-  // Use runtime detection (detects Alibaba Cloud hostname dynamically)
   return getWebSocketUrl();
 };
 
@@ -51,14 +48,14 @@ class SocketClient {
       auth: {
         token,
       },
-      // WebSocket-only transport for Railway (polling unreliable)
+      // WebSocket-only transport (polling unreliable in some environments)
       transports: ['websocket'],
-      upgrade: false,  // Don't upgrade from polling
+      upgrade: false,
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       reconnectionAttempts: this.maxReconnectAttempts,
-      timeout: 20000,  // Increased timeout for Railway
+      timeout: 20000,
       autoConnect: true,
       forceNew: false,
     });
