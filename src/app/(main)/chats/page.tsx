@@ -1,0 +1,49 @@
+'use client';
+
+import { Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
+import ConversationList from '@/features/chat/components/ConversationList';
+import { Chat } from '@/features/chat/components/Chat';
+
+function ChatsContent() {
+  const searchParams = useSearchParams();
+  const conversationId = searchParams.get('id');
+
+  if (!conversationId) {
+    return (
+      <>
+        {/* Mobile: Show conversation list */}
+        <div className="h-full lg:hidden">
+          <ConversationList />
+        </div>
+
+        {/* Desktop: Show empty state (sidebar already visible) */}
+        <div className="hidden lg:flex h-full items-center justify-center bg-gray-50 dark:bg-dark-bg">
+          <div className="text-center">
+            <div className="mb-4">
+              <div className="w-16 h-16 mx-auto bg-viber-purple-bg dark:bg-viber-purple/10 rounded-full flex items-center justify-center">
+                <span className="text-3xl">💬</span>
+              </div>
+            </div>
+            <p className="text-gray-500 dark:text-dark-text-secondary text-lg mb-2">Select a conversation to start messaging</p>
+            <p className="text-gray-400 dark:text-dark-text-secondary text-sm">Choose from your conversations on the left</p>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  return <Chat conversationId={conversationId} />;
+}
+
+export default function ChatsPage() {
+  return (
+    <Suspense fallback={
+      <div className="h-full flex items-center justify-center">
+        <div className="animate-spin w-8 h-8 border-2 border-viber-purple border-t-transparent rounded-full"></div>
+      </div>
+    }>
+      <ChatsContent />
+    </Suspense>
+  );
+}
