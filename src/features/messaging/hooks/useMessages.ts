@@ -8,6 +8,10 @@
  * - Waits for socket connection before attaching listeners
  * - Re-attaches listeners on reconnection
  * - Auto-joins conversation room when socket connects
+ *
+ * E2EE Support:
+ * - Decrypts messages on receive when encrypted flag is set
+ * - Caches decrypted content to avoid re-decryption
  */
 
 import { useEffect, useCallback, useRef } from 'react';
@@ -20,8 +24,78 @@ import { isRecentlySentMessage } from './useSendMessage';
 import { nowUTC } from '@/lib/dateUtils';
 import { useUserStore } from '@/store/userStore';
 import { markMessagesAsDelivered } from '../services/messageService';
-import type { Message, MessageReaction } from '@/types/message';
+import type { Message, MessageReaction, EncryptionMetadata } from '@/types/message';
 import { log } from '@/lib/logger';
+
+// Cache for decrypted message content (prevents re-decryption)
+const decryptedContentCache = new Map<string, string>();
+
+/**
+ * Decrypt message content if encrypted
+ * Uses cache to avoid re-decryption
+ */
+async function decryptMessageContent(
+  message: Message,
+  isGroup: boolean
+): Promise<string> {
+  // Return cached decryption if available
+  if (decryptedContentCache.has(message.id)) {
+    return decryptedContentCache.get(message.id)!;
+  }
+
+  // If not encrypted, return original content
+  if (!message.encrypted) {
+    return message.content;
+  }
+
+  try {
+    const { encryptionService } = await import('@/features/encryption');
+
+    // Initialize if needed
+    if (!encryptionService.isInitialized()) {
+      await encryptionService.initialize();
+    }
+
+    let decryptedContent: string;
+    const encryptionMetadata = message.metadata?.encryption;
+
+    if (isGroup) {
+      decryptedContent = await encryptionService.decryptGroupMessageContent(
+        message.conversationId,
+        message.senderId,
+        message.content
+      );
+    } else {
+      // Parse X3DH header if present (for first message)
+      const x3dhHeader = encryptionMetadata?.x3dhHeader
+        ? encryptionService.deserializeX3DHHeader(encryptionMetadata.x3dhHeader)
+        : undefined;
+
+      decryptedContent = await encryptionService.decryptDirectMessage(
+        message.conversationId,
+        message.senderId,
+        message.content,
+        x3dhHeader
+      );
+    }
+
+    // Cache decrypted content
+    decryptedContentCache.set(message.id, decryptedContent);
+
+    return decryptedContent;
+  } catch (error) {
+    log.message.error(`[useMessages] Failed to decrypt message ${message.id}:`, error);
+    // Return placeholder for failed decryption
+    return '[Unable to decrypt message]';
+  }
+}
+
+/**
+ * Clear decryption cache (call on logout)
+ */
+export function clearDecryptionCache(): void {
+  decryptedContentCache.clear();
+}
 
 /**
  * Transform server message (snake_case) to client format (camelCase)
@@ -57,7 +131,36 @@ export function transformServerMessage(wsMessage: Record<string, unknown>): Mess
     createdAt: (wsMessage.created_at || wsMessage.createdAt) as string,
     updatedAt: (wsMessage.updated_at || wsMessage.updatedAt) as string | undefined,
     deletedAt: (wsMessage.deleted_at || wsMessage.deletedAt) as string | undefined,
+    // E2EE fields
+    encrypted: (wsMessage.encrypted as boolean) || false,
+    encryptionVersion: (wsMessage.encryption_version || wsMessage.encryptionVersion) as number | undefined,
+    senderKeyId: (wsMessage.sender_key_id || wsMessage.senderKeyId) as string | undefined,
   };
+}
+
+/**
+ * Transform and optionally decrypt a message
+ * For encrypted messages, attempts decryption asynchronously
+ */
+export async function transformAndDecryptMessage(
+  wsMessage: Record<string, unknown>,
+  isGroup: boolean = false
+): Promise<Message> {
+  const message = transformServerMessage(wsMessage);
+
+  // If encrypted, attempt decryption
+  if (message.encrypted) {
+    try {
+      const decryptedContent = await decryptMessageContent(message, isGroup);
+      return { ...message, content: decryptedContent };
+    } catch (error) {
+      log.message.error(`[useMessages] Decryption failed for message ${message.id}:`, error);
+      // Return message with placeholder content
+      return { ...message, content: '[Encrypted message - unable to decrypt]' };
+    }
+  }
+
+  return message;
 }
 
 interface UseMessagesOptions {

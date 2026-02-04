@@ -320,6 +320,80 @@ class SocketClient {
     }
   }
 
+  // ==================== E2EE Key Exchange Events ====================
+
+  /**
+   * Request a user's key bundle for establishing E2EE session
+   */
+  requestKeyBundle(userId: string) {
+    if (!this.socket?.connected) {
+      log.ws.warn('Cannot request key bundle - socket not connected');
+      return;
+    }
+    this.socket.emit('key_bundle_request', { user_id: userId });
+  }
+
+  /**
+   * Listen for key bundle responses
+   */
+  onKeyBundleResponse(callback: (data: Record<string, unknown>) => void) {
+    if (this.socket) {
+      this.socket.on('key_bundle_response', callback);
+    } else {
+      log.ws.error('Cannot attach key_bundle_response listener - socket not initialized');
+    }
+  }
+
+  /**
+   * Distribute sender key to group members
+   */
+  distributeSenderKey(conversationId: string, distribution: Record<string, unknown>) {
+    if (!this.socket?.connected) {
+      log.ws.warn('Cannot distribute sender key - socket not connected');
+      return;
+    }
+    this.socket.emit('sender_key_distribution', {
+      conversation_id: conversationId,
+      distribution,
+    });
+  }
+
+  /**
+   * Listen for sender key distribution events
+   */
+  onSenderKeyDistribution(callback: (data: Record<string, unknown>) => void) {
+    if (this.socket) {
+      this.socket.on('sender_key_distribution', callback);
+    } else {
+      log.ws.error('Cannot attach sender_key_distribution listener - socket not initialized');
+    }
+  }
+
+  /**
+   * Request sender keys from group members
+   */
+  requestSenderKeys(conversationId: string, memberIds: string[]) {
+    if (!this.socket?.connected) {
+      log.ws.warn('Cannot request sender keys - socket not connected');
+      return;
+    }
+    this.socket.emit('sender_key_request', {
+      conversation_id: conversationId,
+      member_ids: memberIds,
+    });
+  }
+
+  /**
+   * Listen for sender key requests
+   */
+  onSenderKeyRequest(callback: (data: Record<string, unknown>) => void) {
+    if (this.socket) {
+      this.socket.on('sender_key_request', callback);
+    } else {
+      log.ws.error('Cannot attach sender_key_request listener - socket not initialized');
+    }
+  }
+
   /**
    * Remove event listener
    */

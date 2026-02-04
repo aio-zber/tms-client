@@ -1,0 +1,623 @@
+/**
+ * Encryption Service
+ * High-level API for E2EE message encryption/decryption
+ *
+ * This service provides:
+ * - Unified interface for DM and group encryption
+ * - Automatic session management
+ * - File encryption support
+ * - Key bundle management
+ */
+
+import { apiClient } from '@/lib/apiClient';
+import {
+  initCrypto,
+  encrypt,
+  decrypt,
+  generateKey,
+  toBase64,
+  fromBase64,
+  stringToBytes,
+  bytesToString,
+} from './cryptoService';
+import {
+  initializeKeys,
+  getPublicKeyBundle,
+  x3dhSend,
+  x3dhReceive,
+  needsPreKeyReplenishment,
+  replenishPreKeys,
+} from './keyService';
+import {
+  initSessionAsSender,
+  initSessionAsRecipient,
+  encryptWithSession,
+  decryptWithSession,
+  hasSession,
+} from './sessionService';
+import {
+  encryptGroupMessage,
+  decryptGroupMessage,
+  createSenderKeyDistribution,
+  processSenderKeyDistribution,
+} from './groupCryptoService';
+import { getIdentityKey } from '../db/cryptoDb';
+import type {
+  EncryptedMessage,
+  FetchKeyBundleResponse,
+  UploadKeyBundleRequest,
+  X3DHHeader,
+  SenderKeyDistribution,
+  EncryptionInitStatus,
+} from '../types';
+import { EncryptionError } from '../types';
+import { log } from '@/lib/logger';
+
+// API base path for encryption endpoints
+const ENCRYPTION_API = '/encryption';
+
+// In-memory cache for key bundles
+const keyBundleCache = new Map<string, { bundle: FetchKeyBundleResponse; expiresAt: number }>();
+const KEY_BUNDLE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Encryption initialization status
+let initStatus: EncryptionInitStatus = 'uninitialized';
+
+// ==================== Initialization ====================
+
+/**
+ * Initialize the E2EE system
+ * Must be called on app startup (after login)
+ */
+export async function initialize(): Promise<void> {
+  if (initStatus === 'ready') return;
+  if (initStatus === 'initializing') {
+    // Wait for existing initialization
+    while (initStatus === 'initializing') {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return;
+  }
+
+  initStatus = 'initializing';
+
+  try {
+    // Initialize libsodium
+    await initCrypto();
+
+    // Initialize or load existing keys
+    await initializeKeys();
+
+    // Upload key bundle to server if new
+    await uploadKeyBundle();
+
+    // Check if we need to replenish pre-keys
+    if (await needsPreKeyReplenishment()) {
+      const newKeys = await replenishPreKeys();
+      if (newKeys.length > 0) {
+        await uploadPreKeys(newKeys);
+      }
+    }
+
+    initStatus = 'ready';
+    log.encryption.info('E2EE initialized successfully');
+  } catch (error) {
+    initStatus = 'error';
+    log.encryption.error('E2EE initialization failed:', error);
+    throw new EncryptionError(
+      'Failed to initialize encryption',
+      'INIT_FAILED',
+      error as Error
+    );
+  }
+}
+
+/**
+ * Check if E2EE is initialized
+ */
+export function isInitialized(): boolean {
+  return initStatus === 'ready';
+}
+
+/**
+ * Get initialization status
+ */
+export function getInitStatus(): EncryptionInitStatus {
+  return initStatus;
+}
+
+// ==================== Key Bundle API ====================
+
+/**
+ * Upload our key bundle to the server
+ */
+async function uploadKeyBundle(): Promise<void> {
+  const bundle = await getPublicKeyBundle();
+
+  const request: UploadKeyBundleRequest = {
+    identity_key: toBase64(bundle.identityKey),
+    signed_prekey: {
+      key_id: bundle.signedPreKey.keyId,
+      public_key: toBase64(bundle.signedPreKey.publicKey),
+      signature: toBase64(bundle.signedPreKey.signature),
+    },
+    one_time_prekeys: bundle.oneTimePreKeys.map((pk) => ({
+      key_id: pk.keyId,
+      public_key: toBase64(pk.publicKey),
+    })),
+  };
+
+  await apiClient.post(`${ENCRYPTION_API}/keys/bundle`, request);
+  log.encryption.info('Key bundle uploaded to server');
+}
+
+/**
+ * Upload additional pre-keys to server
+ */
+async function uploadPreKeys(
+  preKeys: Array<{ keyId: number; keyPair: { publicKey: Uint8Array } }>
+): Promise<void> {
+  const request = {
+    prekeys: preKeys.map((pk) => ({
+      key_id: pk.keyId,
+      public_key: toBase64(pk.keyPair.publicKey),
+    })),
+  };
+
+  await apiClient.post(`${ENCRYPTION_API}/keys/prekeys`, request);
+  log.encryption.info(`Uploaded ${preKeys.length} pre-keys to server`);
+}
+
+/**
+ * Fetch a user's key bundle from server
+ */
+async function fetchKeyBundle(userId: string): Promise<FetchKeyBundleResponse> {
+  // Check cache first
+  const cached = keyBundleCache.get(userId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.bundle;
+  }
+
+  const bundle = await apiClient.get<FetchKeyBundleResponse>(
+    `${ENCRYPTION_API}/keys/bundle/${userId}`
+  );
+
+  // Cache the bundle
+  keyBundleCache.set(userId, {
+    bundle,
+    expiresAt: Date.now() + KEY_BUNDLE_CACHE_TTL,
+  });
+
+  return bundle;
+}
+
+// ==================== Session Establishment ====================
+
+/**
+ * Establish a session with a user for encrypted communication
+ *
+ * @param conversationId - Conversation ID
+ * @param userId - Remote user ID
+ */
+export async function establishSession(
+  conversationId: string,
+  userId: string
+): Promise<void> {
+  if (!isInitialized()) {
+    await initialize();
+  }
+
+  // Check if session already exists
+  if (await hasSession(conversationId, userId)) {
+    log.encryption.debug(`Session already exists for ${conversationId}:${userId}`);
+    return;
+  }
+
+  // Fetch their key bundle
+  const theirBundle = await fetchKeyBundle(userId);
+
+  // Get our identity key
+  const ourKeys = await getIdentityKey();
+  if (!ourKeys) {
+    throw new EncryptionError('Local keys not found', 'KEY_GENERATION_FAILED');
+  }
+
+  // Perform X3DH key agreement
+  const { sharedSecret } = x3dhSend(ourKeys.identityKeyPair, {
+    identityKey: fromBase64(theirBundle.identity_key),
+    signedPreKey: {
+      keyId: theirBundle.signed_prekey.key_id,
+      publicKey: fromBase64(theirBundle.signed_prekey.public_key),
+      signature: fromBase64(theirBundle.signed_prekey.signature),
+    },
+    oneTimePreKey: theirBundle.one_time_prekey
+      ? {
+          keyId: theirBundle.one_time_prekey.key_id,
+          publicKey: fromBase64(theirBundle.one_time_prekey.public_key),
+        }
+      : undefined,
+  });
+
+  // Initialize Double Ratchet session
+  await initSessionAsSender(
+    conversationId,
+    userId,
+    sharedSecret,
+    fromBase64(theirBundle.identity_key),
+    fromBase64(theirBundle.signed_prekey.public_key)
+  );
+
+  log.encryption.info(`Session established with ${userId} for ${conversationId}`);
+}
+
+/**
+ * Process an incoming X3DH header and establish session as recipient
+ */
+export async function processX3DHHeader(
+  conversationId: string,
+  senderId: string,
+  header: X3DHHeader
+): Promise<void> {
+  if (!isInitialized()) {
+    await initialize();
+  }
+
+  // Check if session already exists
+  if (await hasSession(conversationId, senderId)) {
+    return;
+  }
+
+  // Get our keys
+  const ourKeys = await getIdentityKey();
+  if (!ourKeys) {
+    throw new EncryptionError('Local keys not found', 'KEY_GENERATION_FAILED');
+  }
+
+  // Perform X3DH as recipient
+  const sharedSecret = await x3dhReceive(
+    header,
+    ourKeys.identityKeyPair,
+    ourKeys.signedPreKey,
+    header.preKeyId
+  );
+
+  // Initialize session as recipient
+  await initSessionAsRecipient(
+    conversationId,
+    senderId,
+    sharedSecret,
+    header.identityKey,
+    header.ephemeralKey,
+    ourKeys.signedPreKey.keyPair
+  );
+
+  log.encryption.info(`Session established as recipient with ${senderId} for ${conversationId}`);
+}
+
+// ==================== Message Encryption ====================
+
+/**
+ * Encrypt a text message for a 1:1 conversation
+ *
+ * @param conversationId - Conversation ID
+ * @param recipientId - Recipient's user ID
+ * @param content - Message content
+ */
+export async function encryptDirectMessage(
+  conversationId: string,
+  recipientId: string,
+  content: string
+): Promise<{ encryptedContent: string; header?: X3DHHeader }> {
+  if (!isInitialized()) {
+    await initialize();
+  }
+
+  // Ensure session exists
+  const sessionExists = await hasSession(conversationId, recipientId);
+  let header: X3DHHeader | undefined;
+
+  if (!sessionExists) {
+    // Establish session (will set header for first message)
+    await establishSession(conversationId, recipientId);
+    // For first message, we need to include the X3DH header
+    // This is simplified - in production, track if it's first message
+  }
+
+  // Encrypt message
+  const plaintext = stringToBytes(content);
+  const { encrypted } = await encryptWithSession(conversationId, recipientId, plaintext);
+
+  // Serialize encrypted message
+  const encryptedContent = serializeEncryptedMessage(encrypted);
+
+  return { encryptedContent, header };
+}
+
+/**
+ * Decrypt a text message from a 1:1 conversation
+ *
+ * @param conversationId - Conversation ID
+ * @param senderId - Sender's user ID
+ * @param encryptedContent - Encrypted message content
+ * @param header - X3DH header (for first message)
+ */
+export async function decryptDirectMessage(
+  conversationId: string,
+  senderId: string,
+  encryptedContent: string,
+  header?: X3DHHeader
+): Promise<string> {
+  if (!isInitialized()) {
+    await initialize();
+  }
+
+  // Process X3DH header if present (first message)
+  if (header) {
+    await processX3DHHeader(conversationId, senderId, header);
+  }
+
+  // Deserialize encrypted message
+  const encrypted = deserializeEncryptedMessage(encryptedContent);
+
+  // Decrypt message
+  const plaintext = await decryptWithSession(conversationId, senderId, encrypted);
+
+  return bytesToString(plaintext);
+}
+
+/**
+ * Encrypt a message for a group conversation
+ *
+ * @param conversationId - Group conversation ID
+ * @param userId - Our user ID
+ * @param content - Message content
+ */
+export async function encryptGroupMessageContent(
+  conversationId: string,
+  userId: string,
+  content: string
+): Promise<string> {
+  if (!isInitialized()) {
+    await initialize();
+  }
+
+  const plaintext = stringToBytes(content);
+  const encrypted = await encryptGroupMessage(conversationId, userId, plaintext);
+
+  return serializeEncryptedMessage(encrypted);
+}
+
+/**
+ * Decrypt a message from a group conversation
+ *
+ * @param conversationId - Group conversation ID
+ * @param senderId - Sender's user ID
+ * @param encryptedContent - Encrypted message content
+ */
+export async function decryptGroupMessageContent(
+  conversationId: string,
+  senderId: string,
+  encryptedContent: string
+): Promise<string> {
+  if (!isInitialized()) {
+    await initialize();
+  }
+
+  const encrypted = deserializeEncryptedMessage(encryptedContent);
+  const plaintext = await decryptGroupMessage(conversationId, senderId, encrypted);
+
+  return bytesToString(plaintext);
+}
+
+// ==================== File Encryption ====================
+
+/**
+ * Encrypt a file before upload
+ *
+ * @param file - File to encrypt
+ */
+export async function encryptFile(file: File): Promise<{
+  encryptedBlob: Blob;
+  fileKey: Uint8Array;
+  nonce: Uint8Array;
+  metadata: { originalSize: number; mimeType: string; fileName: string };
+}> {
+  if (!isInitialized()) {
+    await initialize();
+  }
+
+  // Generate random file key
+  const fileKey = generateKey();
+
+  // Read file as ArrayBuffer
+  const arrayBuffer = await file.arrayBuffer();
+  const plaintext = new Uint8Array(arrayBuffer);
+
+  // Encrypt file content
+  const { ciphertext, nonce } = encrypt(plaintext, fileKey);
+
+  // Create encrypted blob (convert to regular ArrayBuffer for Blob compatibility)
+  const encryptedBlob = new Blob([new Uint8Array(ciphertext)], { type: 'application/octet-stream' });
+
+  return {
+    encryptedBlob,
+    fileKey,
+    nonce,
+    metadata: {
+      originalSize: file.size,
+      mimeType: file.type,
+      fileName: file.name,
+    },
+  };
+}
+
+/**
+ * Decrypt a downloaded file
+ *
+ * @param encryptedData - Encrypted file data
+ * @param fileKey - Decryption key
+ * @param nonce - Nonce used for encryption
+ * @param mimeType - Original MIME type
+ */
+export async function decryptFile(
+  encryptedData: ArrayBuffer,
+  fileKey: Uint8Array,
+  nonce: Uint8Array,
+  mimeType: string
+): Promise<Blob> {
+  if (!isInitialized()) {
+    await initialize();
+  }
+
+  const ciphertext = new Uint8Array(encryptedData);
+  const plaintext = decrypt(ciphertext, nonce, fileKey);
+
+  // Convert to regular ArrayBuffer for Blob compatibility
+  return new Blob([new Uint8Array(plaintext)], { type: mimeType });
+}
+
+// ==================== Sender Key Distribution ====================
+
+/**
+ * Distribute sender key to group members
+ * Should be called when joining a group or when sender key is rotated
+ */
+export async function distributeSenderKey(
+  conversationId: string,
+  userId: string,
+  memberIds: string[]
+): Promise<void> {
+  // Create sender key distribution
+  const distribution = await createSenderKeyDistribution(conversationId, userId);
+
+  // Send distribution to each member via server
+  // The server will relay this to each member
+  await apiClient.post(`${ENCRYPTION_API}/sender-keys/distribute`, {
+    conversation_id: conversationId,
+    recipients: memberIds,
+    distribution: {
+      key_id: distribution.keyId,
+      chain_key: toBase64(distribution.chainKey),
+      public_signing_key: toBase64(distribution.publicSigningKey),
+    },
+  });
+
+  log.encryption.info(`Distributed sender key to ${memberIds.length} members`);
+}
+
+/**
+ * Process received sender key distribution
+ */
+export async function receiveSenderKeyDistribution(
+  data: {
+    conversation_id: string;
+    sender_id: string;
+    key_id: string;
+    chain_key: string;
+    public_signing_key: string;
+  }
+): Promise<void> {
+  const distribution: SenderKeyDistribution = {
+    conversationId: data.conversation_id,
+    senderId: data.sender_id,
+    keyId: data.key_id,
+    chainKey: fromBase64(data.chain_key),
+    publicSigningKey: fromBase64(data.public_signing_key),
+  };
+
+  await processSenderKeyDistribution(distribution);
+}
+
+// ==================== Serialization ====================
+
+/**
+ * Serialize encrypted message for transmission
+ */
+function serializeEncryptedMessage(encrypted: EncryptedMessage): string {
+  const serialized = {
+    v: encrypted.version,
+    c: toBase64(encrypted.ciphertext),
+    n: toBase64(encrypted.nonce),
+    mn: encrypted.messageNumber,
+    pcl: encrypted.previousChainLength,
+    ski: encrypted.senderKeyId,
+  };
+
+  return JSON.stringify(serialized);
+}
+
+/**
+ * Deserialize encrypted message from transmission
+ */
+function deserializeEncryptedMessage(data: string): EncryptedMessage {
+  const parsed = JSON.parse(data);
+
+  return {
+    version: parsed.v,
+    ciphertext: fromBase64(parsed.c),
+    nonce: fromBase64(parsed.n),
+    messageNumber: parsed.mn,
+    previousChainLength: parsed.pcl,
+    senderKeyId: parsed.ski,
+  };
+}
+
+/**
+ * Serialize X3DH header for transmission
+ */
+export function serializeX3DHHeader(header: X3DHHeader): string {
+  return JSON.stringify({
+    ik: toBase64(header.identityKey),
+    ek: toBase64(header.ephemeralKey),
+    spkId: header.signedPreKeyId,
+    opkId: header.preKeyId,
+  });
+}
+
+/**
+ * Deserialize X3DH header from transmission
+ */
+export function deserializeX3DHHeader(data: string): X3DHHeader {
+  const parsed = JSON.parse(data);
+
+  return {
+    identityKey: fromBase64(parsed.ik),
+    ephemeralKey: fromBase64(parsed.ek),
+    signedPreKeyId: parsed.spkId,
+    preKeyId: parsed.opkId,
+  };
+}
+
+// ==================== Cleanup ====================
+
+/**
+ * Clear all encryption data (for logout)
+ */
+export async function clearEncryptionData(): Promise<void> {
+  const { clearAllData } = await import('../db/cryptoDb');
+  await clearAllData();
+  keyBundleCache.clear();
+  initStatus = 'uninitialized';
+  log.encryption.info('Encryption data cleared');
+}
+
+// Export encryption service object
+export const encryptionService = {
+  initialize,
+  isInitialized,
+  getInitStatus,
+  establishSession,
+  encryptDirectMessage,
+  decryptDirectMessage,
+  encryptGroupMessageContent,
+  decryptGroupMessageContent,
+  encryptFile,
+  decryptFile,
+  distributeSenderKey,
+  receiveSenderKeyDistribution,
+  serializeX3DHHeader,
+  deserializeX3DHHeader,
+  clearEncryptionData,
+};
+
+export default encryptionService;

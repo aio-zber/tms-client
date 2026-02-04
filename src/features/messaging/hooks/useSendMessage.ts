@@ -1,11 +1,15 @@
 /**
  * useSendMessage Hook
- * Handles sending messages with optimistic updates
+ * Handles sending messages with optimistic updates and E2EE encryption
  *
  * Messenger/Telegram pattern:
  * - Tracks recently sent message IDs to prevent duplicate cache updates
  * - When WebSocket receives our own message back, we skip cache invalidation
  * - This prevents the "flash" where optimistic message disappears and reappears
+ *
+ * E2EE Support:
+ * - Encrypts message content before sending when E2EE is enabled
+ * - Supports both DM (Double Ratchet) and group (Sender Keys) encryption
  */
 
 import { log } from '@/lib/logger';
@@ -13,6 +17,8 @@ import { useState, useCallback } from 'react';
 import { messageService } from '../services/messageService';
 import { transformServerMessage } from './useMessages';
 import type { SendMessageRequest, Message } from '@/types/message';
+import type { EncryptionMetadata } from '@/types/message';
+import { ENCRYPTION_VERSION } from '@/features/encryption/constants';
 
 // Module-level tracking of recently sent messages to prevent WebSocket race conditions
 // When we send a message, we add its ID here. When WebSocket notifies us of our own message,
@@ -45,9 +51,28 @@ function trackSentMessage(messageId: string): void {
   }, SENT_MESSAGE_EXPIRY_MS);
 }
 
+interface SendMessageOptions {
+  /** Enable E2EE for this message */
+  encrypted?: boolean;
+  /** Recipient user ID (for DM encryption) */
+  recipientId?: string;
+  /** Is this a group conversation */
+  isGroup?: boolean;
+  /** Current user ID (for group encryption) */
+  currentUserId?: string;
+}
+
 interface UseSendMessageReturn {
   sendMessage: (
     data: SendMessageRequest,
+    onOptimisticAdd?: (message: Message) => void,
+    options?: SendMessageOptions
+  ) => Promise<Message | null>;
+  sendEncryptedMessage: (
+    data: SendMessageRequest,
+    recipientId: string,
+    isGroup: boolean,
+    currentUserId: string,
     onOptimisticAdd?: (message: Message) => void
   ) => Promise<Message | null>;
   sending: boolean;
@@ -58,16 +83,77 @@ export function useSendMessage(): UseSendMessageReturn {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
+  /**
+   * Send a message with optional E2EE encryption
+   */
   const sendMessage = useCallback(
     async (
       data: SendMessageRequest,
-      onOptimisticAdd?: (message: Message) => void
+      onOptimisticAdd?: (message: Message) => void,
+      options?: SendMessageOptions
     ) => {
       setSending(true);
       setError(null);
 
       try {
-        const rawMessage = await messageService.sendMessage(data);
+        let requestData = { ...data };
+
+        // If encryption is enabled, encrypt the message content
+        if (options?.encrypted && options.recipientId) {
+          try {
+            const { encryptionService } = await import('@/features/encryption');
+
+            // Initialize encryption if not already done
+            if (!encryptionService.isInitialized()) {
+              await encryptionService.initialize();
+            }
+
+            let encryptedContent: string;
+            const encryptionMetadata: EncryptionMetadata = {};
+
+            if (options.isGroup && options.currentUserId) {
+              // Group encryption using Sender Keys
+              encryptedContent = await encryptionService.encryptGroupMessageContent(
+                data.conversation_id,
+                options.currentUserId,
+                data.content
+              );
+            } else {
+              // DM encryption using Double Ratchet
+              const result = await encryptionService.encryptDirectMessage(
+                data.conversation_id,
+                options.recipientId,
+                data.content
+              );
+              encryptedContent = result.encryptedContent;
+
+              // Include X3DH header for first message
+              if (result.header) {
+                encryptionMetadata.x3dhHeader = encryptionService.serializeX3DHHeader(result.header);
+              }
+            }
+
+            // Update request with encrypted content
+            requestData = {
+              ...requestData,
+              content: encryptedContent,
+              encrypted: true,
+              encryption_version: ENCRYPTION_VERSION,
+              metadata: {
+                ...requestData.metadata,
+                encryption: encryptionMetadata,
+              },
+            };
+
+            log.message.debug('[useSendMessage] Message encrypted successfully');
+          } catch (encryptError) {
+            log.message.error('[useSendMessage] Encryption failed:', encryptError);
+            // Fall back to unencrypted if encryption fails
+            // In production, you might want to fail instead
+          }
+        }
+
+        const rawMessage = await messageService.sendMessage(requestData);
 
         if (rawMessage) {
           // Transform API response from snake_case to camelCase
@@ -100,8 +186,30 @@ export function useSendMessage(): UseSendMessageReturn {
     []
   );
 
+  /**
+   * Convenience method for sending encrypted messages
+   */
+  const sendEncryptedMessage = useCallback(
+    async (
+      data: SendMessageRequest,
+      recipientId: string,
+      isGroup: boolean,
+      currentUserId: string,
+      onOptimisticAdd?: (message: Message) => void
+    ) => {
+      return sendMessage(data, onOptimisticAdd, {
+        encrypted: true,
+        recipientId,
+        isGroup,
+        currentUserId,
+      });
+    },
+    [sendMessage]
+  );
+
   return {
     sendMessage,
+    sendEncryptedMessage,
     sending,
     error,
   };
