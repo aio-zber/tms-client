@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { UserMinus, LogOut, X, UserPlus, Camera, Bell, BellOff } from 'lucide-react';
 import {
   Dialog,
@@ -31,6 +31,7 @@ import { uploadConversationAvatar } from '../services/conversationService';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queryClient';
 import type { Conversation, ConversationMember } from '@/types/conversation';
+import type { UserSearchResult } from '@/types/user';
 import toast from 'react-hot-toast';
 
 interface ConversationSettingsDialogProps {
@@ -53,6 +54,7 @@ export default function ConversationSettingsDialog({
   const [conversationName, setConversationName] = useState(conversation.name || '');
   const [showAddMembers, setShowAddMembers] = useState(false);
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [selectedUserData, setSelectedUserData] = useState<Map<string, UserSearchResult>>(new Map());
   const [selectedMemberProfile, setSelectedMemberProfile] = useState<string | undefined>(undefined);
   const [selectedMemberData, setSelectedMemberData] = useState<ConversationMember['user'] | undefined>(undefined);
   const [showProfileDialog, setShowProfileDialog] = useState(false);
@@ -140,6 +142,7 @@ export default function ConversationSettingsDialog({
     addMembers(conversation.id, selectedUsers);
 
     setSelectedUsers([]);
+    setSelectedUserData(new Map());
     setShowAddMembers(false);
     clearSearch();
     onUpdate();
@@ -164,15 +167,23 @@ export default function ConversationSettingsDialog({
     onLeave?.();
   };
 
-  const handleUserToggle = (tmsUserId: string) => {
+  const handleUserToggle = useCallback((tmsUserId: string, user?: UserSearchResult) => {
     setSelectedUsers((prev) => {
       if (prev.includes(tmsUserId)) {
+        setSelectedUserData((prevData) => {
+          const newData = new Map(prevData);
+          newData.delete(tmsUserId);
+          return newData;
+        });
         return prev.filter((id) => id !== tmsUserId);
       } else {
+        if (user) {
+          setSelectedUserData((prevData) => new Map(prevData).set(tmsUserId, user));
+        }
         return [...prev, tmsUserId];
       }
     });
-  };
+  }, []);
 
   const handleAvatarClick = () => {
     avatarInputRef.current?.click();
@@ -403,6 +414,7 @@ export default function ConversationSettingsDialog({
                       onClick={() => {
                         setShowAddMembers(false);
                         setSelectedUsers([]);
+                        setSelectedUserData(new Map());
                         clearSearch();
                       }}
                     >
@@ -413,19 +425,21 @@ export default function ConversationSettingsDialog({
                   {/* Selected Users */}
                   {selectedUsers.length > 0 && (
                     <div className="flex flex-wrap gap-2">
-                      {results
-                        .filter((u) => selectedUsers.includes(u.tmsUserId))
-                        .map((user) => (
+                      {selectedUsers.map((userId) => {
+                        const user = selectedUserData.get(userId);
+                        if (!user) return null;
+                        return (
                           <div
-                            key={user.tmsUserId}
-                            className="bg-white dark:bg-dark-surface border dark:border-dark-border rounded-full px-3 py-1 text-sm flex items-center gap-2"
+                            key={userId}
+                            className="bg-viber-purple/10 border border-viber-purple rounded-full px-3 py-1 text-sm flex items-center gap-2"
                           >
                             {user.name || user.email}
-                            <button onClick={() => handleUserToggle(user.tmsUserId)}>
+                            <button onClick={() => handleUserToggle(userId)}>
                               <X className="h-3 w-3" />
                             </button>
                           </div>
-                        ))}
+                        );
+                      })}
                     </div>
                   )}
 
@@ -446,35 +460,44 @@ export default function ConversationSettingsDialog({
                       <div className="p-2">
                         {results
                           .filter((u) => !members.some((m: ConversationMember) => m.userId === u.tmsUserId))
-                          .map((user) => (
-                            <button
-                              key={user.tmsUserId}
-                              onClick={() => handleUserToggle(user.tmsUserId)}
-                              className={`w-full flex items-center gap-3 p-2 rounded hover:bg-gray-50 dark:hover:bg-dark-border ${
-                                selectedUsers.includes(user.tmsUserId) ? 'bg-viber-purple-bg' : ''
-                              }`}
-                            >
-                              <Avatar className="w-8 h-8">
-                                <AvatarImage src={user.image} />
-                                <AvatarFallback className="bg-viber-purple text-white text-xs">
-                                  {getInitials(user.name || user.email)}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="flex-1 text-left text-sm">
-                                <div className="font-medium">{user.name || user.email}</div>
-                                <div className="text-xs text-gray-500 dark:text-dark-text-secondary">{user.email}</div>
-                              </div>
-                              {selectedUsers.includes(user.tmsUserId) && (
-                                <div className="text-viber-purple">✓</div>
-                              )}
-                            </button>
-                          ))}
+                          .map((user) => {
+                            const isSelected = selectedUsers.includes(user.tmsUserId);
+                            return (
+                              <button
+                                key={user.tmsUserId}
+                                onClick={() => handleUserToggle(user.tmsUserId, user)}
+                                className={`w-full flex items-center gap-3 p-2 rounded transition-colors ${
+                                  isSelected
+                                    ? 'bg-viber-purple/10 border border-viber-purple'
+                                    : 'border border-transparent hover:bg-gray-50 dark:hover:bg-dark-border'
+                                }`}
+                              >
+                                <Avatar className="w-8 h-8">
+                                  <AvatarImage src={user.image} />
+                                  <AvatarFallback className="bg-viber-purple text-white text-xs">
+                                    {getInitials(user.name || user.email)}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className="flex-1 text-left text-sm">
+                                  <div className="font-medium">{user.name || user.email}</div>
+                                  <div className="text-xs text-gray-500 dark:text-dark-text-secondary">{user.email}</div>
+                                </div>
+                                {isSelected && (
+                                  <div className="text-viber-purple">✓</div>
+                                )}
+                              </button>
+                            );
+                          })}
                       </div>
                     ) : query ? (
                       <div className="flex items-center justify-center h-full text-sm text-gray-500 dark:text-dark-text-secondary">
                         No users found
                       </div>
-                    ) : null}
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-sm text-gray-500 dark:text-dark-text-secondary">
+                        Type to search users
+                      </div>
+                    )}
                   </ScrollArea>
 
                   {/* Add Button */}
