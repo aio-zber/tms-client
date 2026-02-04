@@ -24,7 +24,7 @@ import { isRecentlySentMessage } from './useSendMessage';
 import { nowUTC } from '@/lib/dateUtils';
 import { useUserStore } from '@/store/userStore';
 import { markMessagesAsDelivered } from '../services/messageService';
-import type { Message, MessageReaction, EncryptionMetadata } from '@/types/message';
+import type { Message, MessageReaction } from '@/types/message';
 import { log } from '@/lib/logger';
 
 // Cache for decrypted message content (prevents re-decryption)
