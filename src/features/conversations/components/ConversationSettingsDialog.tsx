@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { UserMinus, LogOut, X, UserPlus, Camera, Bell, BellOff } from 'lucide-react';
 import {
   Dialog,
@@ -74,6 +74,50 @@ export default function ConversationSettingsDialog({
   } = useConversationActions();
 
   const { query, results, isSearching, search, clearSearch } = useUserSearch();
+
+  // Load all users when Add Members is opened (same pattern as NewConversationDialog)
+  const [allUsers, setAllUsers] = useState<UserSearchResult[]>([]);
+  const [loadingInitial, setLoadingInitial] = useState(false);
+
+  const loadAllUsers = useCallback(async () => {
+    setLoadingInitial(true);
+    try {
+      const { tmsApi } = await import('@/lib/tmsApi');
+      const tmsUsers = await tmsApi.searchUsers('', 100);
+      const transformedUsers: UserSearchResult[] = tmsUsers.map((user) => ({
+        id: user.id,
+        tmsUserId: user.tmsUserId || user.id,
+        name: user.name,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        username: user.username,
+        image: user.image,
+        positionTitle: user.positionTitle,
+        division: user.division,
+        department: user.department,
+        section: user.section,
+        customTeam: user.customTeam,
+        isActive: user.isActive,
+      }));
+      setAllUsers(transformedUsers);
+    } catch {
+      search('a');
+    } finally {
+      setLoadingInitial(false);
+    }
+  }, [search]);
+
+  useEffect(() => {
+    if (showAddMembers && allUsers.length === 0) {
+      loadAllUsers();
+    }
+  }, [showAddMembers, allUsers.length, loadAllUsers]);
+
+  // Show search results when searching, all users otherwise
+  const displayUsers = useMemo(() => {
+    return query ? results : allUsers;
+  }, [query, results, allUsers]);
 
   // Mute conversation (Messenger pattern)
   const { muteConversation, unmuteConversation, isMutingConversation, isUnmutingConversation } = useNotificationPreferences();
@@ -399,7 +443,7 @@ export default function ConversationSettingsDialog({
                   {!showAddMembers ? (
                     <Button
                       onClick={() => setShowAddMembers(true)}
-                      className="w-full bg-viber-purple hover:bg-viber-purple-dark"
+                      className="w-full bg-viber-purple hover:bg-viber-purple-dark text-white"
                     >
                       <UserPlus className="h-4 w-4 mr-2" />
                       Add Members
@@ -450,15 +494,17 @@ export default function ConversationSettingsDialog({
                     onChange={(e) => search(e.target.value)}
                   />
 
-                  {/* Search Results */}
+                  {/* Search Results / All Users */}
                   <ScrollArea className="h-40 border dark:border-dark-border rounded-lg bg-white dark:bg-dark-surface">
-                    {isSearching ? (
+                    {isSearching || loadingInitial ? (
                       <div className="flex items-center justify-center h-full">
-                        <div className="text-sm text-gray-500 dark:text-dark-text-secondary">Searching...</div>
+                        <div className="text-sm text-gray-500 dark:text-dark-text-secondary">
+                          {loadingInitial ? 'Loading users...' : 'Searching...'}
+                        </div>
                       </div>
-                    ) : results.length > 0 ? (
+                    ) : displayUsers.filter((u) => !members.some((m: ConversationMember) => m.userId === u.tmsUserId)).length > 0 ? (
                       <div className="p-2">
-                        {results
+                        {displayUsers
                           .filter((u) => !members.some((m: ConversationMember) => m.userId === u.tmsUserId))
                           .map((user) => {
                             const isSelected = selectedUsers.includes(user.tmsUserId);
@@ -493,11 +539,7 @@ export default function ConversationSettingsDialog({
                       <div className="flex items-center justify-center h-full text-sm text-gray-500 dark:text-dark-text-secondary">
                         No users found
                       </div>
-                    ) : (
-                      <div className="flex items-center justify-center h-full text-sm text-gray-500 dark:text-dark-text-secondary">
-                        Type to search users
-                      </div>
-                    )}
+                    ) : null}
                   </ScrollArea>
 
                   {/* Add Button */}
