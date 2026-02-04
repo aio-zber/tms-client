@@ -303,6 +303,7 @@ export default function ConversationSettingsDialog({
                   <Button
                     onClick={handleUpdateName}
                     disabled={isUpdating || !conversationName.trim() || conversationName === conversation.name}
+                    className="bg-viber-purple hover:bg-viber-purple-dark text-white"
                   >
                     Update
                   </Button>
@@ -480,7 +481,7 @@ export default function ConversationSettingsDialog({
                   <Button
                     onClick={handleAddMembers}
                     disabled={selectedUsers.length === 0 || isAddingMembers}
-                    className="w-full"
+                    className="w-full bg-viber-purple hover:bg-viber-purple-dark text-white"
                   >
                     Add Selected Members
                   </Button>
@@ -492,7 +493,7 @@ export default function ConversationSettingsDialog({
               {/* Members List */}
               <div className="space-y-2">
                 <Label>Members</Label>
-                <ScrollArea className="h-60 border rounded-lg">
+                <ScrollArea className="h-60 border dark:border-dark-border rounded-lg">
                   <div className="p-2">
                     {members.map((member: ConversationMember) => {
                       const isCurrentUser = member.userId === currentUserId;

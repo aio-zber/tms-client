@@ -204,7 +204,7 @@ function ConversationListContent() {
         <div className="p-3 border-b border-gray-200 dark:border-dark-border space-y-3">
           <Button
             onClick={() => setShowNewConversationDialog(true)}
-            className="w-full bg-viber-purple hover:bg-viber-purple-dark"
+            className="w-full bg-viber-purple hover:bg-viber-purple-dark text-white"
           >
             <Plus className="h-4 w-4 mr-2" />
             New Conversation
