@@ -27,6 +27,8 @@ export {
   selectIsInitializing,
   selectConversationEncryption,
   selectIsConversationEncrypted,
+  selectIdentityKeyChanged,
+  selectHasBackup,
 } from './stores/keyStore';
 
 // Types
@@ -47,9 +49,20 @@ export type {
   SessionStatus,
   ConversationEncryptionState,
   EncryptionErrorCode,
+  KeyBackupStatus,
+  VerificationStatus,
 } from './types';
 
 export { EncryptionError } from './types';
+
+// Backup & Verification Services
+export { backupService } from './services/backupService';
+export { verificationService } from './services/verificationService';
+
+// UI Components
+export { SecurityTab } from './components/SecurityTab';
+export { KeyBackupDialog } from './components/KeyBackupDialog';
+export { KeyChangeBanner } from './components/KeyChangeBanner';
 
 // Constants
 export {

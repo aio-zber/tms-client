@@ -272,11 +272,36 @@ export function MessageInput({
     setUploadProgress(0);
 
     try {
+      let fileToUpload = selectedFile;
+      let encryptionMetadata: Record<string, string> | undefined;
+      let encrypted = false;
+
+      // E2EE: Encrypt file before upload if encryption is initialized
+      try {
+        const { encryptionService } = await import('@/features/encryption');
+        if (encryptionService.isInitialized()) {
+          const { encryptedBlob, fileKey, nonce, metadata } = await encryptionService.encryptFile(selectedFile);
+          const { toBase64 } = await import('@/features/encryption/services/cryptoService');
+          fileToUpload = new File([encryptedBlob], selectedFile.name, { type: 'application/octet-stream' });
+          encryptionMetadata = {
+            fileKey: toBase64(fileKey),
+            fileNonce: toBase64(nonce),
+            originalMimeType: metadata.mimeType,
+            originalSize: String(metadata.originalSize),
+          };
+          encrypted = true;
+        }
+      } catch (encErr) {
+        log.error('[MessageInput] File encryption failed, sending unencrypted:', encErr);
+      }
+
       const rawMessage = await messageService.sendFileMessage({
         conversationId,
-        file: selectedFile,
+        file: fileToUpload,
         replyToId: replyTo?.id,
         onProgress: (progress) => setUploadProgress(progress),
+        encrypted,
+        encryptionMetadata,
       });
 
       // Transform and add to UI immediately (Messenger/Telegram pattern)

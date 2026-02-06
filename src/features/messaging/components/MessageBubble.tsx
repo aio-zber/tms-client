@@ -64,9 +64,41 @@ export const MessageBubble = memo(function MessageBubble({
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [videoLightboxOpen, setVideoLightboxOpen] = useState(false);
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
+  const [decryptedFileUrl, setDecryptedFileUrl] = useState<string | null>(null);
+  const [isDecryptingFile, setIsDecryptingFile] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const { voteOnPoll, closePoll } = usePollActions();
+
+  // E2EE: Decrypt encrypted file content for display
+  useEffect(() => {
+    const encMeta = message.metadata?.encryption;
+    if (!encMeta?.fileKey || !encMeta?.fileNonce || !message.metadata?.fileUrl) return;
+
+    let objectUrl: string | null = null;
+    const decryptFileContent = async () => {
+      setIsDecryptingFile(true);
+      try {
+        const response = await fetch(message.metadata!.fileUrl!);
+        const encryptedData = await response.arrayBuffer();
+        const { encryptionService } = await import('@/features/encryption');
+        const { fromBase64 } = await import('@/features/encryption/services/cryptoService');
+        const mimeType = encMeta.originalMimeType || message.metadata!.mimeType || 'application/octet-stream';
+        const decryptedBlob = await encryptionService.decryptFile(
+          encryptedData, fromBase64(encMeta.fileKey!), fromBase64(encMeta.fileNonce!), mimeType
+        );
+        objectUrl = URL.createObjectURL(decryptedBlob);
+        setDecryptedFileUrl(objectUrl);
+      } catch (err) {
+        log.message.error('[MessageBubble] File decryption failed:', err);
+      } finally {
+        setIsDecryptingFile(false);
+      }
+    };
+    decryptFileContent();
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [message.id, message.metadata?.encryption?.fileKey]);
 
   // Helper function to format file size
   const formatFileSize = (bytes?: number): string => {
@@ -478,20 +510,26 @@ export const MessageBubble = memo(function MessageBubble({
                   ? 'bg-viber-purple rounded-br-sm order-1'
                   : 'bg-gray-100 dark:bg-dark-received-bubble rounded-bl-sm order-2'
               } overflow-hidden cursor-pointer transition-all hover:opacity-90`}
-              onClick={() => setLightboxOpen(true)}
+              onClick={() => !isDecryptingFile && setLightboxOpen(true)}
             >
+              {isDecryptingFile && !decryptedFileUrl ? (
+                <div className="max-w-xs md:max-w-sm h-48 flex items-center justify-center">
+                  <div className="w-8 h-8 border-2 border-viber-purple border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : (
               <img
-                src={thumbnailFailed ? message.metadata.fileUrl : (message.metadata.thumbnailUrl || message.metadata.fileUrl)}
+                src={decryptedFileUrl || (thumbnailFailed ? message.metadata.fileUrl : (message.metadata.thumbnailUrl || message.metadata.fileUrl))}
                 alt={message.metadata.fileName || 'Image'}
                 className="max-w-xs md:max-w-sm max-h-64 md:max-h-80 object-cover"
                 loading="lazy"
                 onError={(e) => {
                   // If thumbnail fails, fall back to main file URL
-                  if (!thumbnailFailed && message.metadata?.thumbnailUrl && e.currentTarget.src !== message.metadata.fileUrl) {
+                  if (!decryptedFileUrl && !thumbnailFailed && message.metadata?.thumbnailUrl && e.currentTarget.src !== message.metadata.fileUrl) {
                     setThumbnailFailed(true);
                   }
                 }}
               />
+              )}
               {/* Caption if present */}
               {message.content && message.content !== message.metadata.fileName && (
                 <div className={`px-3 py-2 text-sm ${isSent ? 'text-white' : 'text-gray-900'}`}>
@@ -515,9 +553,9 @@ export const MessageBubble = memo(function MessageBubble({
               } overflow-hidden`}
             >
               <VideoPlayer
-                src={message.metadata.fileUrl}
-                thumbnailUrl={message.metadata.thumbnailUrl}
-                mimeType={message.metadata.mimeType}
+                src={decryptedFileUrl || message.metadata.fileUrl}
+                thumbnailUrl={decryptedFileUrl ? undefined : message.metadata.thumbnailUrl}
+                mimeType={message.metadata.encryption?.originalMimeType || message.metadata.mimeType}
                 fileName={message.metadata.fileName}
                 isSent={isSent}
                 onExpandClick={() => setVideoLightboxOpen(true)}
@@ -556,7 +594,7 @@ export const MessageBubble = memo(function MessageBubble({
                   onClick={(e) => {
                     e.stopPropagation();
                     // Open file in new tab - browser handles viewing (PDFs show inline, others download)
-                    window.open(message.metadata?.fileUrl, '_blank', 'noopener,noreferrer');
+                    window.open(decryptedFileUrl || message.metadata?.fileUrl, '_blank', 'noopener,noreferrer');
                   }}
                   onContextMenu={(e) => {
                     e.stopPropagation();
@@ -588,7 +626,8 @@ export const MessageBubble = memo(function MessageBubble({
                   onClick={async (e) => {
                     e.stopPropagation();
                     try {
-                      const response = await fetch(message.metadata?.fileUrl || '');
+                      const downloadUrl = decryptedFileUrl || message.metadata?.fileUrl || '';
+                      const response = await fetch(downloadUrl);
                       const blob = await response.blob();
                       const url = window.URL.createObjectURL(blob);
                       const link = document.createElement('a');
@@ -634,7 +673,7 @@ export const MessageBubble = memo(function MessageBubble({
               } transition-all`}
             >
               <VoiceMessagePlayer
-                src={message.metadata.fileUrl}
+                src={decryptedFileUrl || message.metadata.fileUrl}
                 duration={message.metadata.duration}
                 isSent={isSent}
               />
@@ -687,8 +726,8 @@ export const MessageBubble = memo(function MessageBubble({
         {lightboxOpen && message.type === 'IMAGE' && message.metadata?.fileUrl && (
           <ImageLightbox
             images={[{
-              url: message.metadata.fileUrl,
-              thumbnailUrl: message.metadata.thumbnailUrl,
+              url: decryptedFileUrl || message.metadata.fileUrl,
+              thumbnailUrl: decryptedFileUrl ? undefined : message.metadata.thumbnailUrl,
               fileName: message.metadata.fileName,
               caption: message.content !== message.metadata.fileName ? message.content : undefined,
             }]}
@@ -698,12 +737,12 @@ export const MessageBubble = memo(function MessageBubble({
         )}
 
         {/* Video Lightbox */}
-        {videoLightboxOpen && message.type === 'FILE' && message.metadata?.fileUrl && message.metadata?.mimeType?.startsWith('video/') && (
+        {videoLightboxOpen && message.type === 'FILE' && message.metadata?.fileUrl && (message.metadata?.mimeType?.startsWith('video/') || message.metadata?.encryption?.originalMimeType?.startsWith('video/')) && (
           <VideoLightbox
-            src={message.metadata.fileUrl}
-            mimeType={message.metadata.mimeType}
+            src={decryptedFileUrl || message.metadata.fileUrl}
+            mimeType={message.metadata.encryption?.originalMimeType || message.metadata.mimeType}
             fileName={message.metadata.fileName}
-            thumbnailUrl={message.metadata.thumbnailUrl}
+            thumbnailUrl={decryptedFileUrl ? undefined : message.metadata.thumbnailUrl}
             onClose={() => setVideoLightboxOpen(false)}
           />
         )}

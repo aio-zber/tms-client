@@ -10,6 +10,7 @@ import { messageService } from '../services/messageService';
 import { queryKeys } from '@/lib/queryClient';
 import { parseTimestamp } from '@/lib/dateUtils';
 import type { Message } from '@/types/message';
+import { log } from '@/lib/logger';
 
 interface UseMessagesQueryOptions {
   conversationId: string;
@@ -32,9 +33,44 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
         cursor: pageParam ? (pageParam as string) : undefined,
       });
 
+      // Decrypt any encrypted messages
+      const decryptedMessages = await Promise.all(
+        response.data.map(async (msg) => {
+          if (!msg.encrypted) return msg;
+          try {
+            const { encryptionService } = await import('@/features/encryption');
+            if (!encryptionService.isInitialized()) return msg;
+
+            const msgMeta = msg.metadata as Record<string, unknown> | undefined;
+            const encMeta = msgMeta?.encryption as Record<string, unknown> | undefined;
+            const isGroup = !!encMeta?.isGroup;
+            let decryptedContent: string;
+
+            if (isGroup) {
+              decryptedContent = await encryptionService.decryptGroupMessageContent(
+                msg.conversationId, msg.senderId, msg.content
+              );
+            } else {
+              const encMeta = (msg.metadata as Record<string, unknown>)?.encryption as Record<string, unknown> | undefined;
+              const x3dhHeader = encMeta?.x3dhHeader
+                ? encryptionService.deserializeX3DHHeader(encMeta.x3dhHeader as string)
+                : undefined;
+              decryptedContent = await encryptionService.decryptDirectMessage(
+                msg.conversationId, msg.senderId, msg.content, x3dhHeader
+              );
+            }
+
+            return { ...msg, content: decryptedContent };
+          } catch (err) {
+            log.message.error(`[useMessagesQuery] Failed to decrypt message ${msg.id}:`, err);
+            return { ...msg, content: '[Unable to decrypt message]' };
+          }
+        })
+      );
+
       // Sort messages by sequence number (primary) and timestamp (fallback)
       // Sequence number ensures deterministic ordering even with timestamp collisions
-      const sortedMessages = response.data.sort((a, b) => {
+      const sortedMessages = decryptedMessages.sort((a, b) => {
         // Primary: sequence number (ascending - oldest first for display)
         if (a.sequenceNumber !== undefined && b.sequenceNumber !== undefined) {
           if (a.sequenceNumber !== b.sequenceNumber) {

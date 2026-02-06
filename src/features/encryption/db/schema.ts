@@ -65,6 +65,15 @@ export interface MessageKeyStoreValue {
   expiresAt: number;
 }
 
+export interface KnownKeyStoreValue {
+  userId: string;
+  identityKey: string; // Base64
+  verificationStatus: 'unverified' | 'verified' | 'key_changed';
+  firstSeen: number;
+  lastSeen: number;
+  verifiedAt?: number;
+}
+
 /**
  * IndexedDB schema for E2EE key storage
  * Using explicit types instead of DBSchema to avoid index type issues
@@ -111,4 +120,5 @@ export const STORES = {
   SESSION: 'sessions' as const,
   SENDER_KEY: 'senderKeys' as const,
   MESSAGE_KEY: 'messageKeys' as const,
+  KNOWN_KEYS: 'knownIdentityKeys' as const,
 };

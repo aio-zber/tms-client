@@ -12,7 +12,9 @@ import type {
   OneTimePreKey,
   SessionState,
   SenderKey,
+  VerificationStatus,
 } from '../types';
+import type { KnownKeyStoreValue } from './schema';
 import { log } from '@/lib/logger';
 
 // Use any for DB type to avoid complex generics with custom schema
@@ -62,6 +64,13 @@ export async function getDb(): Promise<IDBPDatabase<any>> {
         messageKeyStore.createIndex('bySession', 'sessionId');
         messageKeyStore.createIndex('byExpiry', 'expiresAt');
       }
+
+      // v2: Create known identity keys store for verification
+      if (oldVersion < 2) {
+        if (!db.objectStoreNames.contains(STORES.KNOWN_KEYS)) {
+          db.createObjectStore(STORES.KNOWN_KEYS, { keyPath: 'userId' });
+        }
+      }
     },
     blocked() {
       log.encryption.warn('Crypto DB upgrade blocked - close other tabs');
@@ -91,17 +100,14 @@ export async function closeDb(): Promise<void> {
  */
 export async function clearAllData(): Promise<void> {
   const db = await getDb();
-  const tx = db.transaction(
-    [STORES.IDENTITY, STORES.PREKEY, STORES.SESSION, STORES.SENDER_KEY, STORES.MESSAGE_KEY],
-    'readwrite'
-  );
+  const storeNames = [
+    STORES.IDENTITY, STORES.PREKEY, STORES.SESSION,
+    STORES.SENDER_KEY, STORES.MESSAGE_KEY, STORES.KNOWN_KEYS,
+  ];
+  const tx = db.transaction(storeNames, 'readwrite');
 
   await Promise.all([
-    tx.objectStore(STORES.IDENTITY).clear(),
-    tx.objectStore(STORES.PREKEY).clear(),
-    tx.objectStore(STORES.SESSION).clear(),
-    tx.objectStore(STORES.SENDER_KEY).clear(),
-    tx.objectStore(STORES.MESSAGE_KEY).clear(),
+    ...storeNames.map((name) => tx.objectStore(name).clear()),
     tx.done,
   ]);
 
@@ -480,6 +486,63 @@ export async function deleteExpiredMessageKeys(): Promise<number> {
   ]);
 
   return expired.length;
+}
+
+// ==================== Known Identity Key Operations ====================
+
+/**
+ * Store or update a known identity key for a user
+ */
+export async function storeKnownIdentityKey(
+  userId: string,
+  identityKey: string,
+  status: VerificationStatus
+): Promise<void> {
+  const db = await getDb();
+  const now = Date.now();
+  const existing = await db.get(STORES.KNOWN_KEYS, userId);
+
+  const value: KnownKeyStoreValue = {
+    userId,
+    identityKey,
+    verificationStatus: status,
+    firstSeen: existing?.firstSeen ?? now,
+    lastSeen: now,
+    verifiedAt: status === 'verified' ? now : existing?.verifiedAt,
+  };
+
+  await db.put(STORES.KNOWN_KEYS, value);
+}
+
+/**
+ * Get a known identity key for a user
+ */
+export async function getKnownIdentityKey(
+  userId: string
+): Promise<KnownKeyStoreValue | null> {
+  const db = await getDb();
+  const stored = await db.get(STORES.KNOWN_KEYS, userId);
+  return stored ?? null;
+}
+
+/**
+ * Update verification status for a known key
+ */
+export async function setVerificationStatus(
+  userId: string,
+  status: VerificationStatus
+): Promise<void> {
+  const db = await getDb();
+  const existing = await db.get(STORES.KNOWN_KEYS, userId);
+  if (!existing) return;
+
+  existing.verificationStatus = status;
+  if (status === 'verified') {
+    existing.verifiedAt = Date.now();
+  }
+  existing.lastSeen = Date.now();
+
+  await db.put(STORES.KNOWN_KEYS, existing);
 }
 
 // ==================== Helper Functions ====================

@@ -27,8 +27,31 @@ import { markMessagesAsDelivered } from '../services/messageService';
 import type { Message, MessageReaction } from '@/types/message';
 import { log } from '@/lib/logger';
 
-// Cache for decrypted message content (prevents re-decryption)
+// Bounded LRU cache for decrypted message content (prevents re-decryption)
+// Viber/Messenger pattern: keep recent messages in memory, evict oldest when full
+const DECRYPTION_CACHE_MAX_SIZE = 1000;
 const decryptedContentCache = new Map<string, string>();
+
+/**
+ * Add to LRU cache with size limit
+ * Evicts oldest entries when cache exceeds max size
+ */
+function cacheDecryptedContent(messageId: string, content: string): void {
+  // If key exists, delete and re-add to move to end (most recent)
+  if (decryptedContentCache.has(messageId)) {
+    decryptedContentCache.delete(messageId);
+  }
+
+  // Evict oldest entries if cache is full
+  while (decryptedContentCache.size >= DECRYPTION_CACHE_MAX_SIZE) {
+    const oldestKey = decryptedContentCache.keys().next().value;
+    if (oldestKey) {
+      decryptedContentCache.delete(oldestKey);
+    }
+  }
+
+  decryptedContentCache.set(messageId, content);
+}
 
 /**
  * Decrypt message content if encrypted
@@ -79,8 +102,8 @@ async function decryptMessageContent(
       );
     }
 
-    // Cache decrypted content
-    decryptedContentCache.set(message.id, decryptedContent);
+    // Cache decrypted content (LRU bounded)
+    cacheDecryptedContent(message.id, decryptedContent);
 
     return decryptedContent;
   } catch (error) {
@@ -366,53 +389,69 @@ export function useMessages(
         return;
       }
 
-      // Add message directly to cache for instant updates
-      queryClient.setQueryData(
-        queryKeys.messages.list(conversationId, { limit }),
-        (oldData: unknown) => {
-          if (!oldData || typeof oldData !== 'object') {
-            // This shouldn't happen since we checked above, but be safe
-            log.message.warn('[useMessages] Unexpected: oldData is empty in setQueryData');
-            return oldData;
-          }
-
-          const data = oldData as { pages: Array<{ data: Message[] }>; pageParams: unknown[] };
-
-          // Validate pages array exists
-          if (!data.pages || data.pages.length === 0) {
-            log.message.warn('[useMessages] No pages in cache data');
-            return oldData;
-          }
-
-          // Check if message already exists in cache (prevent duplicates)
-          const messageExists = data.pages.some(page =>
-            page.data.some(m => m.id === transformedMessage.id)
-          );
-
-          if (messageExists) {
-            log.message.debug('[useMessages] Message already in cache, skipping:', transformedMessage.id);
-            return oldData;
-          }
-
-          // Add message to the last page (most recent messages)
-          const newPages = data.pages.map((page, index) => {
-            if (index === data.pages.length - 1) {
-              return {
-                ...page,
-                data: [...page.data, transformedMessage],
-              };
+      // Helper to add a message to the query cache
+      const addMessageToCache = (msg: Message) => {
+        queryClient.setQueryData(
+          queryKeys.messages.list(conversationId, { limit }),
+          (oldData: unknown) => {
+            if (!oldData || typeof oldData !== 'object') {
+              log.message.warn('[useMessages] Unexpected: oldData is empty in setQueryData');
+              return oldData;
             }
-            return page;
-          });
 
-          log.message.info('[useMessages] ✅ Added new message to cache:', transformedMessage.id, 'type:', transformedMessage.type);
+            const data = oldData as { pages: Array<{ data: Message[] }>; pageParams: unknown[] };
 
-          return {
-            ...data,
-            pages: newPages,
-          };
-        }
-      );
+            if (!data.pages || data.pages.length === 0) {
+              log.message.warn('[useMessages] No pages in cache data');
+              return oldData;
+            }
+
+            const messageExists = data.pages.some(page =>
+              page.data.some(m => m.id === msg.id)
+            );
+
+            if (messageExists) {
+              log.message.debug('[useMessages] Message already in cache, skipping:', msg.id);
+              return oldData;
+            }
+
+            const newPages = data.pages.map((page, index) => {
+              if (index === data.pages.length - 1) {
+                return {
+                  ...page,
+                  data: [...page.data, msg],
+                };
+              }
+              return page;
+            });
+
+            log.message.info('[useMessages] ✅ Added new message to cache:', msg.id, 'type:', msg.type);
+
+            return {
+              ...data,
+              pages: newPages,
+            };
+          }
+        );
+      };
+
+      // If encrypted, decrypt asynchronously then add to cache
+      if (transformedMessage.encrypted) {
+        // Determine if group based on conversation type from metadata
+        const metadataJson = wsMessage.metadata_json as Record<string, unknown> | undefined;
+        const encMeta = metadataJson?.encryption as Record<string, unknown> | undefined;
+        const isGroup = !!encMeta?.isGroup
+          || wsMessage.conversation_type === 'group';
+
+        transformAndDecryptMessage(wsMessage, isGroup).then((decryptedMsg) => {
+          addMessageToCache(decryptedMsg);
+        }).catch(() => {
+          // Fallback: add with placeholder content
+          addMessageToCache({ ...transformedMessage, content: '[Unable to decrypt message]' });
+        });
+      } else {
+        addMessageToCache(transformedMessage);
+      }
 
       // Messenger pattern: auto-mark as delivered when received via WebSocket
       // This ensures delivery status updates in real-time without page reload
@@ -447,6 +486,27 @@ export function useMessages(
           queryClient.invalidateQueries({
             queryKey: queryKeys.conversations.all,
           });
+
+          // E2EE: Rotate sender key when group membership changes
+          if (eventType === 'member_added' || eventType === 'member_removed' || eventType === 'member_left') {
+            import('@/features/encryption').then(async ({ encryptionService, groupCryptoService }) => {
+              if (!encryptionService.isInitialized()) return;
+              if (!currentUserId) return;
+              try {
+                await groupCryptoService.rotateSenderKey(conversationId, currentUserId);
+                setTimeout(async () => {
+                  try {
+                    const { getConversationById } = await import('@/features/conversations/services/conversationService');
+                    const conv = await getConversationById(conversationId);
+                    if (conv?.type === 'group') {
+                      const memberIds = conv.members.map((m: { userId: string }) => m.userId).filter((id: string) => id !== currentUserId);
+                      await encryptionService.distributeSenderKey(conversationId, currentUserId, memberIds);
+                    }
+                  } catch (err) { log.message.error('[useMessages] Sender key distribution failed:', err); }
+                }, 1000);
+              } catch (err) { log.message.error('[useMessages] Sender key rotation failed:', err); }
+            }).catch(() => {});
+          }
         }
       }
     };
@@ -807,6 +867,23 @@ export function useMessages(
     socketClient.onPollVote(handlePollVote);
     socketClient.onPollClosed(handlePollClosed);
 
+    // Listen for E2EE sender key distribution events
+    const handleSenderKeyDistribution = (data: Record<string, unknown>) => {
+      log.message.debug('[useMessages] Received sender key distribution:', data);
+      import('@/features/encryption').then(({ encryptionService }) => {
+        encryptionService.receiveSenderKeyDistribution(data as {
+          conversation_id: string;
+          sender_id: string;
+          key_id: string;
+          chain_key: string;
+          public_signing_key: string;
+        }).catch((err: unknown) => {
+          log.message.error('[useMessages] Failed to process sender key distribution:', err);
+        });
+      }).catch(() => { /* E2EE not available */ });
+    };
+    socketClient.onSenderKeyDistribution(handleSenderKeyDistribution);
+
     // Cleanup
     return () => {
       log.ws.info('[useMessages] Cleaning up socket listeners for conversation:', conversationId);
@@ -822,6 +899,7 @@ export function useMessages(
       socketClient.off('new_poll', handleNewPoll);
       socketClient.off('poll_vote_added', handlePollVote);
       socketClient.off('poll_closed', handlePollClosed);
+      socketClient.off('sender_key_distribution', handleSenderKeyDistribution);
       socket?.off('connect', handleConnect);
     };
   }, [conversationId, queryClient, limit, currentUserId]);

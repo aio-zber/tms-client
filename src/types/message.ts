@@ -101,6 +101,8 @@ export interface EncryptionMetadata {
   fileKey?: string; // Base64 encrypted file key
   fileKeyNonce?: string; // Base64 nonce for file key encryption
   fileNonce?: string; // Base64 nonce used for file encryption
+  originalMimeType?: string; // Original MIME type before encryption
+  originalSize?: string; // Original file size before encryption
 
   // Message key info (for out-of-order decryption)
   messageNumber?: number;
@@ -108,6 +110,9 @@ export interface EncryptionMetadata {
 
   // Sender's current ratchet public key (for DH ratchet)
   senderPublicKey?: string; // Base64
+
+  // Group encryption flag
+  isGroup?: boolean;
 }
 
 export interface MessageReaction {

@@ -77,6 +77,14 @@ export const useAuthStore = create<AuthState>()(
             log.auth.error('Failed to fetch user after login:', userError);
             // Continue anyway - user data will be fetched on next request
           }
+
+          // Initialize E2EE (non-blocking — app works without E2EE)
+          try {
+            const { encryptionService } = await import('@/features/encryption');
+            await encryptionService.initialize();
+          } catch (err) {
+            log.auth.error('E2EE init failed:', err);
+          }
         } catch (error) {
           log.auth.error('Login error:', error);
 
@@ -126,6 +134,14 @@ export const useAuthStore = create<AuthState>()(
             log.auth.error('SSO: Failed to fetch user after auto-login:', userError);
             // Continue anyway - user data will be fetched on next request
           }
+
+          // Initialize E2EE (non-blocking — app works without E2EE)
+          try {
+            const { encryptionService } = await import('@/features/encryption');
+            await encryptionService.initialize();
+          } catch (err) {
+            log.auth.error('SSO: E2EE init failed:', err);
+          }
         } catch (error) {
           log.auth.error('❌ SSO: Auto-login error:', error);
 
@@ -150,6 +166,14 @@ export const useAuthStore = create<AuthState>()(
        * Clears token, user data, and all caches.
        */
       logout: () => {
+        // Clear E2EE data and decryption cache before logout
+        import('@/features/encryption')
+          .then(({ encryptionService }) => encryptionService.clearEncryptionData())
+          .catch(() => { /* ignore */ });
+        import('@/features/messaging/hooks/useMessages')
+          .then(({ clearDecryptionCache }) => clearDecryptionCache())
+          .catch(() => { /* ignore */ });
+
         authService.logout();
         userService.clearCache();
 

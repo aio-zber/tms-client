@@ -5,8 +5,8 @@
 
 'use client';
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { UserMinus, LogOut, X, UserPlus, Camera, Bell, BellOff } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
+import { UserMinus, LogOut, X, UserPlus, Camera, Bell, BellOff, Shield } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -33,6 +33,9 @@ import { queryKeys } from '@/lib/queryClient';
 import type { Conversation, ConversationMember } from '@/types/conversation';
 import type { UserSearchResult } from '@/types/user';
 import toast from 'react-hot-toast';
+import { Loader2 } from 'lucide-react';
+
+const SecurityTab = lazy(() => import('@/features/encryption/components/SecurityTab'));
 
 interface ConversationSettingsDialogProps {
   open: boolean;
@@ -287,6 +290,18 @@ export default function ConversationSettingsDialog({
   const currentUserMember = members.find((m: ConversationMember) => m.userId === currentUserId);
   const currentUserIsAdmin = currentUserMember?.role === 'admin';
 
+  // Check if E2EE is initialized to show Security tab
+  const [isE2EEReady, setIsE2EEReady] = useState(false);
+  useEffect(() => {
+    import('@/features/encryption')
+      .then(({ encryptionService }) => {
+        setIsE2EEReady(encryptionService.isInitialized());
+      })
+      .catch(() => setIsE2EEReady(false));
+  }, [open]);
+  const showSecurityTab = isE2EEReady;
+  const tabCount = (isGroup ? 2 : 1) + (showSecurityTab ? 1 : 0);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[80vh]">
@@ -298,9 +313,15 @@ export default function ConversationSettingsDialog({
         </DialogHeader>
 
         <Tabs defaultValue="details" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className={`grid w-full grid-cols-${tabCount}`}>
             <TabsTrigger value="details">Details</TabsTrigger>
             {isGroup && <TabsTrigger value="members">Members ({members.length})</TabsTrigger>}
+            {showSecurityTab && (
+              <TabsTrigger value="security" className="flex items-center gap-1.5">
+                <Shield className="w-3.5 h-3.5" />
+                Security
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* Details Tab */}
@@ -615,6 +636,24 @@ export default function ConversationSettingsDialog({
                   </div>
                 </ScrollArea>
               </div>
+            </TabsContent>
+          )}
+
+          {/* Security Tab */}
+          {showSecurityTab && (
+            <TabsContent value="security">
+              <Suspense
+                fallback={
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-6 h-6 animate-spin text-viber-purple" />
+                  </div>
+                }
+              >
+                <SecurityTab
+                  conversation={currentConversation}
+                  currentUserId={currentUserId}
+                />
+              </Suspense>
             </TabsContent>
           )}
         </Tabs>

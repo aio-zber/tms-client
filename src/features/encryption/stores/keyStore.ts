@@ -26,6 +26,12 @@ interface EncryptionState {
   // Pending key exchanges (waiting for key bundle response)
   pendingKeyExchanges: Set<string>; // Set of userIds
 
+  // Key backup state
+  hasBackup: boolean | null; // null = unknown
+
+  // Identity key change tracking
+  identityKeyChanges: Map<string, boolean>; // userId → hasChanged
+
   // Actions
   setInitStatus: (status: EncryptionInitStatus, error?: string) => void;
   setConversationState: (conversationId: string, state: Partial<ConversationEncryptionState>) => void;
@@ -33,6 +39,9 @@ interface EncryptionState {
   addPendingKeyExchange: (userId: string) => void;
   removePendingKeyExchange: (userId: string) => void;
   isPendingKeyExchange: (userId: string) => boolean;
+  setHasBackup: (hasBackup: boolean) => void;
+  setIdentityKeyChanged: (userId: string, changed: boolean) => void;
+  clearIdentityKeyChanged: (userId: string) => void;
   reset: () => void;
 }
 
@@ -41,6 +50,8 @@ const initialState = {
   initError: null,
   conversationStates: new Map<string, ConversationEncryptionState>(),
   pendingKeyExchanges: new Set<string>(),
+  hasBackup: null as boolean | null,
+  identityKeyChanges: new Map<string, boolean>(),
 };
 
 export const useEncryptionStore = create<EncryptionState>((set, get) => ({
@@ -95,6 +106,26 @@ export const useEncryptionStore = create<EncryptionState>((set, get) => ({
     return get().pendingKeyExchanges.has(userId);
   },
 
+  setHasBackup: (hasBackup) => {
+    set({ hasBackup });
+  },
+
+  setIdentityKeyChanged: (userId, changed) => {
+    set((state) => {
+      const newMap = new Map(state.identityKeyChanges);
+      newMap.set(userId, changed);
+      return { identityKeyChanges: newMap };
+    });
+  },
+
+  clearIdentityKeyChanged: (userId) => {
+    set((state) => {
+      const newMap = new Map(state.identityKeyChanges);
+      newMap.delete(userId);
+      return { identityKeyChanges: newMap };
+    });
+  },
+
   reset: () => {
     set(initialState);
   },
@@ -114,3 +145,8 @@ export const selectIsConversationEncrypted = (conversationId: string) => (state:
 
 export const selectConversationSessionStatus = (conversationId: string) => (state: EncryptionState) =>
   state.conversationStates.get(conversationId)?.status ?? 'none';
+
+export const selectIdentityKeyChanged = (userId: string) => (state: EncryptionState) =>
+  state.identityKeyChanges.get(userId) ?? false;
+
+export const selectHasBackup = (state: EncryptionState) => state.hasBackup;

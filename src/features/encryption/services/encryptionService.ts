@@ -41,7 +41,8 @@ import {
   createSenderKeyDistribution,
   processSenderKeyDistribution,
 } from './groupCryptoService';
-import { getIdentityKey } from '../db/cryptoDb';
+import { getIdentityKey, hasIdentityKey } from '../db/cryptoDb';
+import { useEncryptionStore } from '../stores/keyStore';
 import type {
   EncryptedMessage,
   FetchKeyBundleResponse,
@@ -59,6 +60,10 @@ const ENCRYPTION_API = '/encryption';
 // In-memory cache for key bundles
 const keyBundleCache = new Map<string, { bundle: FetchKeyBundleResponse; expiresAt: number }>();
 const KEY_BUNDLE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Track sessions that need X3DH header on first message (Viber/Signal pattern)
+// Key: "conversationId:userId" → X3DH header to include in first message
+const pendingX3DHHeaders = new Map<string, X3DHHeader>();
 
 // Encryption initialization status
 let initStatus: EncryptionInitStatus = 'uninitialized';
@@ -85,6 +90,27 @@ export async function initialize(): Promise<void> {
     // Initialize libsodium
     await initCrypto();
 
+    // Check if we have local keys
+    const hasLocalKeys = await hasIdentityKey();
+
+    if (!hasLocalKeys) {
+      // No local keys — check if server has a backup
+      try {
+        const { getBackupStatus } = await import('./backupService');
+        const status = await getBackupStatus();
+        if (status.has_backup) {
+          useEncryptionStore.getState().setHasBackup(true);
+          initStatus = 'needs_restore';
+          useEncryptionStore.getState().setInitStatus('needs_restore');
+          log.encryption.info('Backup found — waiting for PIN to restore');
+          return;
+        }
+      } catch {
+        // Server unreachable — proceed with new key generation
+        log.encryption.debug('Could not check backup status, generating new keys');
+      }
+    }
+
     // Initialize or load existing keys
     await initializeKeys();
 
@@ -99,10 +125,21 @@ export async function initialize(): Promise<void> {
       }
     }
 
+    // Check backup status in background
+    try {
+      const { getBackupStatus } = await import('./backupService');
+      const status = await getBackupStatus();
+      useEncryptionStore.getState().setHasBackup(status.has_backup);
+    } catch {
+      // Non-critical
+    }
+
     initStatus = 'ready';
+    useEncryptionStore.getState().setInitStatus('ready');
     log.encryption.info('E2EE initialized successfully');
   } catch (error) {
     initStatus = 'error';
+    useEncryptionStore.getState().setInitStatus('error', (error as Error).message);
     log.encryption.error('E2EE initialization failed:', error);
     throw new EncryptionError(
       'Failed to initialize encryption',
@@ -188,6 +225,17 @@ async function fetchKeyBundle(userId: string): Promise<FetchKeyBundleResponse> {
     expiresAt: Date.now() + KEY_BUNDLE_CACHE_TTL,
   });
 
+  // Check if identity key changed (in background)
+  try {
+    const { checkIdentityKey } = await import('./verificationService');
+    const verifyStatus = await checkIdentityKey(userId, bundle.identity_key);
+    if (verifyStatus === 'key_changed') {
+      useEncryptionStore.getState().setIdentityKeyChanged(userId, true);
+    }
+  } catch {
+    // Non-critical — don't block session establishment
+  }
+
   return bundle;
 }
 
@@ -195,14 +243,16 @@ async function fetchKeyBundle(userId: string): Promise<FetchKeyBundleResponse> {
 
 /**
  * Establish a session with a user for encrypted communication
+ * Returns X3DH header to include in first message (Viber/Signal pattern)
  *
  * @param conversationId - Conversation ID
  * @param userId - Remote user ID
+ * @returns X3DH header for first message, or undefined if session already exists
  */
 export async function establishSession(
   conversationId: string,
   userId: string
-): Promise<void> {
+): Promise<X3DHHeader | undefined> {
   if (!isInitialized()) {
     await initialize();
   }
@@ -210,7 +260,7 @@ export async function establishSession(
   // Check if session already exists
   if (await hasSession(conversationId, userId)) {
     log.encryption.debug(`Session already exists for ${conversationId}:${userId}`);
-    return;
+    return undefined;
   }
 
   // Fetch their key bundle
@@ -222,8 +272,8 @@ export async function establishSession(
     throw new EncryptionError('Local keys not found', 'KEY_GENERATION_FAILED');
   }
 
-  // Perform X3DH key agreement
-  const { sharedSecret } = x3dhSend(ourKeys.identityKeyPair, {
+  // Perform X3DH key agreement - returns header with ephemeral key
+  const { sharedSecret, header: x3dhHeader } = x3dhSend(ourKeys.identityKeyPair, {
     identityKey: fromBase64(theirBundle.identity_key),
     signedPreKey: {
       keyId: theirBundle.signed_prekey.key_id,
@@ -247,7 +297,13 @@ export async function establishSession(
     fromBase64(theirBundle.signed_prekey.public_key)
   );
 
+  // Store header for first message (consumed after use)
+  const sessionKey = `${conversationId}:${userId}`;
+  pendingX3DHHeaders.set(sessionKey, x3dhHeader);
+
   log.encryption.info(`Session established with ${userId} for ${conversationId}`);
+
+  return x3dhHeader;
 }
 
 /**
@@ -299,6 +355,10 @@ export async function processX3DHHeader(
 /**
  * Encrypt a text message for a 1:1 conversation
  *
+ * Viber/Signal pattern:
+ * - On first message, includes X3DH header for recipient to establish session
+ * - Subsequent messages only include Double Ratchet encrypted content
+ *
  * @param conversationId - Conversation ID
  * @param recipientId - Recipient's user ID
  * @param content - Message content
@@ -312,15 +372,16 @@ export async function encryptDirectMessage(
     await initialize();
   }
 
+  // Check for pending X3DH header (first message after session creation)
+  const sessionKey = `${conversationId}:${recipientId}`;
+  let header = pendingX3DHHeaders.get(sessionKey);
+
   // Ensure session exists
   const sessionExists = await hasSession(conversationId, recipientId);
-  let header: X3DHHeader | undefined;
 
   if (!sessionExists) {
-    // Establish session (will set header for first message)
-    await establishSession(conversationId, recipientId);
-    // For first message, we need to include the X3DH header
-    // This is simplified - in production, track if it's first message
+    // Establish session - returns X3DH header for first message
+    header = await establishSession(conversationId, recipientId);
   }
 
   // Encrypt message
@@ -329,6 +390,12 @@ export async function encryptDirectMessage(
 
   // Serialize encrypted message
   const encryptedContent = serializeEncryptedMessage(encrypted);
+
+  // Consume the pending header after first message (one-time use)
+  if (header) {
+    pendingX3DHHeaders.delete(sessionKey);
+    log.encryption.debug(`X3DH header included for first message to ${recipientId}`);
+  }
 
   return { encryptedContent, header };
 }
@@ -597,6 +664,7 @@ export async function clearEncryptionData(): Promise<void> {
   const { clearAllData } = await import('../db/cryptoDb');
   await clearAllData();
   keyBundleCache.clear();
+  pendingX3DHHeaders.clear();
   initStatus = 'uninitialized';
   log.encryption.info('Encryption data cleared');
 }

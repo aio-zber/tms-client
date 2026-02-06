@@ -28,6 +28,9 @@ import { useConversationEvents } from '@/features/conversations/hooks/useConvers
 import { conversationService } from '@/features/conversations/services/conversationService';
 import { ChatHeader } from './ChatHeader';
 import { UserProfileDialog } from '@/features/users/components/UserProfileDialog';
+import { useEncryptionStore } from '@/features/encryption/stores/keyStore';
+import { KeyChangeBanner } from '@/features/encryption/components/KeyChangeBanner';
+import { KeyBackupDialog } from '@/features/encryption/components/KeyBackupDialog';
 
 interface ChatProps {
   conversationId: string;
@@ -64,6 +67,57 @@ export function Chat({
 
   useSocket(); // Initialize WebSocket connection
   useConversationEvents({ conversationId }); // Handle real-time conversation updates
+
+  // E2EE: Key change detection and backup prompts
+  const encryptionInitStatus = useEncryptionStore((s) => s.initStatus);
+  const identityKeyChanges = useEncryptionStore((s) => s.identityKeyChanges);
+  const hasBackup = useEncryptionStore((s) => s.hasBackup);
+  const clearIdentityKeyChanged = useEncryptionStore((s) => s.clearIdentityKeyChanged);
+
+  const [showBackupDialog, setShowBackupDialog] = useState(false);
+  const [backupMode, setBackupMode] = useState<'backup' | 'restore'>('backup');
+
+  // Determine if other user's key changed (DM only)
+  const otherDmUserId = conversation?.type === 'dm'
+    ? conversation.members.find((m) => m.userId !== currentUserId)?.userId
+    : undefined;
+  const otherDmUserName = otherDmUserId
+    ? getUserName(otherDmUserId)
+    : '';
+  const keyChanged = otherDmUserId ? (identityKeyChanges.get(otherDmUserId) ?? false) : false;
+
+  // Show restore dialog when encryption needs restore (immediate - critical path)
+  useEffect(() => {
+    if (encryptionInitStatus === 'needs_restore') {
+      setBackupMode('restore');
+      setShowBackupDialog(true);
+    }
+  }, [encryptionInitStatus]);
+
+  // Prompt for backup if no backup exists and E2EE is ready
+  // Viber pattern: delay prompt so user can start chatting first
+  const [backupPromptShown, setBackupPromptShown] = useState(false);
+  useEffect(() => {
+    // Check if user already dismissed/completed backup in this session
+    const BACKUP_PROMPT_KEY = 'tma_backup_prompt_dismissed';
+    const alreadyDismissed = sessionStorage.getItem(BACKUP_PROMPT_KEY) === 'true';
+
+    if (
+      encryptionInitStatus === 'ready' &&
+      hasBackup === false &&
+      !backupPromptShown &&
+      !alreadyDismissed
+    ) {
+      // Delay 3 seconds so user can start chatting first (Viber-style)
+      const timer = setTimeout(() => {
+        setBackupPromptShown(true);
+        setBackupMode('backup');
+        setShowBackupDialog(true);
+      }, 3000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [encryptionInitStatus, hasBackup, backupPromptShown]);
 
   // Mark conversation as read when opening (Messenger-style pattern)
   // This triggers the backend to update all unread messages to READ status
@@ -146,6 +200,22 @@ export function Chat({
   const handleSendMessage = async (content: string, replyToId?: string) => {
     log.debug('[Chat] Sending message:', content);
 
+    // Determine encryption options based on E2EE initialization status
+    let encryptionOptions: { encrypted?: boolean; recipientId?: string; isGroup?: boolean; currentUserId?: string } | undefined;
+    try {
+      const { encryptionService } = await import('@/features/encryption');
+      if (encryptionService.isInitialized() && conversation) {
+        if (conversation.type === 'group') {
+          encryptionOptions = { encrypted: true, isGroup: true, currentUserId, recipientId: currentUserId };
+        } else {
+          const otherMember = conversation.members.find(m => m.userId !== currentUserId);
+          if (otherMember) {
+            encryptionOptions = { encrypted: true, recipientId: otherMember.userId };
+          }
+        }
+      }
+    } catch { /* E2EE not available — send unencrypted */ }
+
     const message = await sendMessage(
       {
         conversation_id: conversationId,
@@ -158,7 +228,8 @@ export function Chat({
         log.debug('[Chat] Message sent successfully, adding to UI optimistically:', sentMessage);
         addOptimisticMessage(sentMessage);
         onMessageSent?.(sentMessage);
-      }
+      },
+      encryptionOptions,
     );
 
     if (message) {
@@ -358,6 +429,15 @@ export function Chat({
           goToPrevious={goToPrevious}
         />
 
+        {/* Key Change Warning Banner */}
+        {keyChanged && otherDmUserId && (
+          <KeyChangeBanner
+            userName={otherDmUserName}
+            onDismiss={() => clearIdentityKeyChanged(otherDmUserId)}
+            onViewSecurity={() => setShowSettingsDialog(true)}
+          />
+        )}
+
         {/* Messages Area */}
         <MessageList
           messages={messages}
@@ -418,6 +498,32 @@ export function Chat({
           open={showProfileDialog}
           onOpenChange={setShowProfileDialog}
           showSendMessageButton={selectedUserProfile !== currentUserId}
+        />
+
+        {/* Key Backup/Restore Dialog */}
+        <KeyBackupDialog
+          open={showBackupDialog}
+          onOpenChange={(open) => {
+            setShowBackupDialog(open);
+            // Mark as dismissed when user closes dialog (don't nag again this session)
+            if (!open && backupMode === 'backup') {
+              sessionStorage.setItem('tma_backup_prompt_dismissed', 'true');
+            }
+          }}
+          mode={backupMode}
+          onComplete={async () => {
+            // Mark as complete (don't prompt again this session)
+            sessionStorage.setItem('tma_backup_prompt_dismissed', 'true');
+
+            if (backupMode === 'restore') {
+              // After restore, re-initialize encryption
+              try {
+                const { encryptionService } = await import('@/features/encryption');
+                await encryptionService.initialize();
+              } catch { /* will retry on next message */ }
+            }
+            useEncryptionStore.getState().setHasBackup(true);
+          }}
         />
       </div>
     </>

@@ -25,7 +25,14 @@ export const MESSAGE_KEY_CONSTANT = new Uint8Array([0x02]); // For message key d
 
 // IndexedDB Configuration
 export const CRYPTO_DB_NAME = 'tma-e2ee-keys';
-export const CRYPTO_DB_VERSION = 1;
+export const CRYPTO_DB_VERSION = 2;
+
+// Key Backup Configuration
+export const BACKUP_VERSION = 1;
+export const PIN_LENGTH = 6;
+export const KDF_OPS_LIMIT = 3;       // crypto_pwhash_OPSLIMIT_MODERATE
+export const KDF_MEM_LIMIT = 67108864; // 64MB - crypto_pwhash_MEMLIMIT_MODERATE
+export const KDF_SALT_LENGTH = 16;
 
 // Store names
 export const IDENTITY_STORE = 'identity';

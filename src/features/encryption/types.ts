@@ -242,6 +242,7 @@ export type EncryptionInitStatus =
   | 'uninitialized'
   | 'initializing'
   | 'ready'
+  | 'needs_restore'
   | 'error';
 
 /**
@@ -291,4 +292,45 @@ export type EncryptionErrorCode =
   | 'INVALID_MESSAGE_FORMAT'
   | 'DUPLICATE_MESSAGE'
   | 'MESSAGE_TOO_OLD'
-  | 'DB_ERROR';
+  | 'DB_ERROR'
+  | 'BACKUP_FAILED'
+  | 'RESTORE_FAILED'
+  | 'INVALID_PIN';
+
+// ==================== Key Backup Types ====================
+
+export interface KeyBackupData {
+  identityKeyPair: {
+    publicKey: string;
+    privateKey: string;
+    createdAt: number;
+  };
+  signedPreKey: {
+    keyId: number;
+    publicKey: string;
+    privateKey: string;
+    signature: string;
+    createdAt: number;
+  };
+  backupTimestamp: number;
+}
+
+export interface KeyBackupStatus {
+  has_backup: boolean;
+  created_at: string | null;
+  identity_key_hash: string | null;
+}
+
+export interface KeyBackupServerResponse {
+  encrypted_data: string;
+  nonce: string;
+  salt: string;
+  key_derivation: string;
+  version: number;
+  identity_key_hash: string;
+  created_at: string;
+}
+
+// ==================== Verification Types ====================
+
+export type VerificationStatus = 'unverified' | 'verified' | 'key_changed';
