@@ -102,14 +102,23 @@ export function Chat({
     const BACKUP_PROMPT_KEY = 'tma_backup_prompt_dismissed';
     const alreadyDismissed = sessionStorage.getItem(BACKUP_PROMPT_KEY) === 'true';
 
+    log.debug('[Chat] Backup prompt check:', {
+      encryptionInitStatus,
+      hasBackup,
+      backupPromptShown,
+      alreadyDismissed,
+    });
+
     if (
       encryptionInitStatus === 'ready' &&
       hasBackup === false &&
       !backupPromptShown &&
       !alreadyDismissed
     ) {
+      log.debug('[Chat] Showing backup prompt in 3 seconds...');
       // Delay 3 seconds so user can start chatting first (Viber-style)
       const timer = setTimeout(() => {
+        log.debug('[Chat] Showing backup dialog now');
         setBackupPromptShown(true);
         setBackupMode('backup');
         setShowBackupDialog(true);

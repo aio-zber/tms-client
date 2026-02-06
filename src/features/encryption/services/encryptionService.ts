@@ -128,10 +128,14 @@ export async function initialize(): Promise<void> {
     // Check backup status in background
     try {
       const { getBackupStatus } = await import('./backupService');
+      log.encryption.debug('Checking backup status...');
       const status = await getBackupStatus();
+      log.encryption.info(`Backup status: has_backup=${status.has_backup}`);
       useEncryptionStore.getState().setHasBackup(status.has_backup);
-    } catch {
-      // Non-critical
+    } catch (err) {
+      log.encryption.warn('Failed to check backup status:', err);
+      // Set to false so backup prompt can appear
+      useEncryptionStore.getState().setHasBackup(false);
     }
 
     initStatus = 'ready';
