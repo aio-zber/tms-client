@@ -89,15 +89,18 @@ export async function initialize(): Promise<void> {
   try {
     // Initialize libsodium
     await initCrypto();
+    log.encryption.info('Step 1: libsodium initialized');
 
     // Check if we have local keys
     const hasLocalKeys = await hasIdentityKey();
+    log.encryption.info(`Step 2: hasLocalKeys=${hasLocalKeys}`);
 
     if (!hasLocalKeys) {
       // No local keys — check if server has a backup
       try {
         const { getBackupStatus } = await import('./backupService');
         const status = await getBackupStatus();
+        log.encryption.info(`Step 3: backup status=${JSON.stringify(status)}`);
         if (status.has_backup) {
           useEncryptionStore.getState().setHasBackup(true);
           initStatus = 'needs_restore';
@@ -105,17 +108,21 @@ export async function initialize(): Promise<void> {
           log.encryption.info('Backup found — waiting for PIN to restore');
           return;
         }
-      } catch {
+      } catch (backupErr) {
         // Server unreachable — proceed with new key generation
-        log.encryption.debug('Could not check backup status, generating new keys');
+        log.encryption.warn('Could not check backup status, generating new keys:', backupErr);
       }
     }
 
     // Initialize or load existing keys
+    log.encryption.info('Step 4: calling initializeKeys()');
     await initializeKeys();
+    log.encryption.info('Step 5: initializeKeys() complete');
 
     // Upload key bundle to server if new
+    log.encryption.info('Step 6: calling uploadKeyBundle()');
     await uploadKeyBundle();
+    log.encryption.info('Step 7: uploadKeyBundle() complete');
 
     // Check if we need to replenish pre-keys
     if (await needsPreKeyReplenishment()) {
