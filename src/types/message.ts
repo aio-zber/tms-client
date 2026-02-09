@@ -136,7 +136,7 @@ export interface SendMessageRequest {
   content: string;
   type?: MessageType;
   reply_to_id?: string;
-  metadata?: MessageMetadata;
+  metadata_json?: MessageMetadata;
 
   // E2EE fields
   encrypted?: boolean;

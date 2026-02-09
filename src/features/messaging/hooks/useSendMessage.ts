@@ -143,8 +143,8 @@ export function useSendMessage(): UseSendMessageReturn {
               content: encryptedContent,
               encrypted: true,
               encryption_version: ENCRYPTION_VERSION,
-              metadata: {
-                ...requestData.metadata,
+              metadata_json: {
+                ...requestData.metadata_json,
                 encryption: encryptionMetadata,
               },
             };
