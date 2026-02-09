@@ -209,7 +209,7 @@ export async function storePreKeys(preKeys: OneTimePreKey[]): Promise<void> {
         keyId: pk.keyId,
         publicKey: uint8ArrayToBase64(pk.keyPair.publicKey),
         privateKey: uint8ArrayToBase64(pk.keyPair.privateKey),
-        used: false,
+        used: 0,
         createdAt: now,
       })
     ),
@@ -224,12 +224,12 @@ export async function consumePreKey(keyId: number): Promise<OneTimePreKey | null
   const db = await getDb();
   const stored = await db.get(STORES.PREKEY, keyId);
 
-  if (!stored || stored.used) {
+  if (!stored || stored.used === 1) {
     return null;
   }
 
   // Mark as used
-  await db.put(STORES.PREKEY, { ...stored, used: true });
+  await db.put(STORES.PREKEY, { ...stored, used: 1 });
 
   return {
     keyId: stored.keyId,
@@ -245,7 +245,7 @@ export async function consumePreKey(keyId: number): Promise<OneTimePreKey | null
  */
 export async function getUnusedPreKeyCount(): Promise<number> {
   const db = await getDb();
-  const unused = await db.getAllFromIndex(STORES.PREKEY, 'byUsed', false);
+  const unused = await db.getAllFromIndex(STORES.PREKEY, 'byUsed', 0);
   return unused.length;
 }
 
@@ -254,7 +254,7 @@ export async function getUnusedPreKeyCount(): Promise<number> {
  */
 export async function getUnusedPreKeys(): Promise<OneTimePreKey[]> {
   const db = await getDb();
-  const stored = await db.getAllFromIndex(STORES.PREKEY, 'byUsed', false);
+  const stored = await db.getAllFromIndex(STORES.PREKEY, 'byUsed', 0);
 
   return stored.map((pk) => ({
     keyId: pk.keyId,
@@ -272,7 +272,7 @@ export async function getUnusedPreKeys(): Promise<OneTimePreKey[]> {
  */
 export async function deleteUsedPreKeys(): Promise<number> {
   const db = await getDb();
-  const used = await db.getAllFromIndex(STORES.PREKEY, 'byUsed', true);
+  const used = await db.getAllFromIndex(STORES.PREKEY, 'byUsed', 1);
   const tx = db.transaction(STORES.PREKEY, 'readwrite');
 
   await Promise.all([

@@ -29,7 +29,7 @@ export interface PreKeyStoreValue {
   keyId: number;
   publicKey: string; // Base64
   privateKey: string; // Base64
-  used: boolean;
+  used: number; // 0 = unused, 1 = used (IndexedDB keys must be numeric, not boolean)
   createdAt: number;
 }
 
@@ -87,7 +87,7 @@ export interface CryptoDBSchema {
   prekeys: {
     key: number;
     value: PreKeyStoreValue;
-    indexes: { byUsed: boolean };
+    indexes: { byUsed: number };
   };
   sessions: {
     key: string;
