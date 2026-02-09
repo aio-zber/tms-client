@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
+import { useEncryptionStore } from '@/features/encryption/stores/keyStore';
 import { AppHeader } from '@/components/layout/AppHeader';
 import ConversationList from '@/features/chat/components/ConversationList';
 import { NotificationCenter } from '@/features/notifications';
@@ -11,6 +12,7 @@ import { ConnectionStatus } from '@/components/ConnectionStatus';
 import { usePresenceInit } from '@/hooks/usePresence';
 import { useTheme } from '@/hooks/useTheme';
 import { SocketProvider } from '@/components/providers/SocketProvider';
+import { log } from '@/lib/logger';
 
 export default function MainLayout({
   children,
@@ -20,6 +22,7 @@ export default function MainLayout({
   const pathname = usePathname();
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuthStore();
+  const encryptionInitStatus = useEncryptionStore((s) => s.initStatus);
   const isChatsRoute = pathname.startsWith('/chats');
 
   // Initialize theme (applies 'dark' class to <html> based on stored preference)
@@ -30,6 +33,15 @@ export default function MainLayout({
 
   // Initialize presence tracking (online/offline status via WebSocket)
   usePresenceInit();
+
+  // Initialize E2EE when authenticated but encryption not yet initialized
+  useEffect(() => {
+    if (isAuthenticated && encryptionInitStatus === 'uninitialized') {
+      import('@/features/encryption')
+        .then(({ encryptionService }) => encryptionService.initialize())
+        .catch((err) => log.error('E2EE init failed in main layout:', err));
+    }
+  }, [isAuthenticated, encryptionInitStatus]);
 
   // Redirect to root if not authenticated
   useEffect(() => {

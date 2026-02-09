@@ -194,6 +194,11 @@ export const useAuthStore = create<AuthState>()(
             token,
             isAuthenticated: true,
           });
+
+          // Initialize E2EE after token is set (non-blocking)
+          import('@/features/encryption')
+            .then(({ encryptionService }) => encryptionService.initialize())
+            .catch((err) => log.auth.error('E2EE init failed on setToken:', err));
         } else {
           authService.logout();
           set({
