@@ -30,13 +30,13 @@ import { log } from '@/lib/logger';
 // Bounded LRU cache for decrypted message content (prevents re-decryption)
 // Viber/Messenger pattern: keep recent messages in memory, evict oldest when full
 const DECRYPTION_CACHE_MAX_SIZE = 1000;
-const decryptedContentCache = new Map<string, string>();
+export const decryptedContentCache = new Map<string, string>();
 
 /**
  * Add to LRU cache with size limit
  * Evicts oldest entries when cache exceeds max size
  */
-function cacheDecryptedContent(messageId: string, content: string): void {
+export function cacheDecryptedContent(messageId: string, content: string): void {
   // If key exists, delete and re-add to move to end (most recent)
   if (decryptedContentCache.has(messageId)) {
     decryptedContentCache.delete(messageId);
@@ -437,18 +437,26 @@ export function useMessages(
 
       // If encrypted, decrypt asynchronously then add to cache
       if (transformedMessage.encrypted) {
-        // Determine if group based on conversation type from metadata
-        const metadataJson = wsMessage.metadata_json as Record<string, unknown> | undefined;
-        const encMeta = metadataJson?.encryption as Record<string, unknown> | undefined;
-        const isGroup = !!encMeta?.isGroup
-          || wsMessage.conversation_type === 'group';
+        // Viber/Signal pattern: sender's own messages use cached plaintext
+        const cached = decryptedContentCache.get(transformedMessage.id);
+        if (cached) {
+          addMessageToCache({ ...transformedMessage, content: cached });
+        } else if (currentUserId && transformedMessage.senderId === currentUserId) {
+          // Own message not in cache — show placeholder (sent before this session)
+          addMessageToCache({ ...transformedMessage, content: '[Message sent encrypted]' });
+        } else {
+          // Recipient: decrypt the message
+          const metadataJson = wsMessage.metadata_json as Record<string, unknown> | undefined;
+          const encMeta = metadataJson?.encryption as Record<string, unknown> | undefined;
+          const isGroup = !!encMeta?.isGroup
+            || wsMessage.conversation_type === 'group';
 
-        transformAndDecryptMessage(wsMessage, isGroup).then((decryptedMsg) => {
-          addMessageToCache(decryptedMsg);
-        }).catch(() => {
-          // Fallback: add with placeholder content
-          addMessageToCache({ ...transformedMessage, content: '[Unable to decrypt message]' });
-        });
+          transformAndDecryptMessage(wsMessage, isGroup).then((decryptedMsg) => {
+            addMessageToCache(decryptedMsg);
+          }).catch(() => {
+            addMessageToCache({ ...transformedMessage, content: '[Unable to decrypt message]' });
+          });
+        }
       } else {
         addMessageToCache(transformedMessage);
       }

@@ -15,7 +15,7 @@
 import { log } from '@/lib/logger';
 import { useState, useCallback } from 'react';
 import { messageService } from '../services/messageService';
-import { transformServerMessage } from './useMessages';
+import { transformServerMessage, cacheDecryptedContent } from './useMessages';
 import type { SendMessageRequest, Message } from '@/types/message';
 import type { EncryptionMetadata } from '@/types/message';
 import { ENCRYPTION_VERSION } from '@/features/encryption/constants';
@@ -97,6 +97,10 @@ export function useSendMessage(): UseSendMessageReturn {
 
       try {
         let requestData = { ...data };
+        // Viber/Signal pattern: preserve plaintext for sender's own display
+        // The sender never decrypts their own messages — they keep the original
+        const originalContent = data.content;
+        let wasEncrypted = false;
 
         // If encryption is enabled, encrypt the message content
         if (options?.encrypted && options.recipientId) {
@@ -145,11 +149,11 @@ export function useSendMessage(): UseSendMessageReturn {
               },
             };
 
+            wasEncrypted = true;
             log.message.debug('[useSendMessage] Message encrypted successfully');
           } catch (encryptError) {
             log.message.error('[useSendMessage] Encryption failed:', encryptError);
             // Fall back to unencrypted if encryption fails
-            // In production, you might want to fail instead
           }
         }
 
@@ -157,15 +161,20 @@ export function useSendMessage(): UseSendMessageReturn {
 
         if (rawMessage) {
           // Transform API response from snake_case to camelCase
-          // This ensures consistency whether API returns snake_case or camelCase
           const message = transformServerMessage(rawMessage as unknown as Record<string, unknown>);
 
+          // Viber/Signal pattern: sender always sees their own plaintext
+          // The API returns encrypted content, so we replace it with the original
+          if (wasEncrypted) {
+            message.content = originalContent;
+            // Cache plaintext so API reloads also show it correctly
+            cacheDecryptedContent(message.id, originalContent);
+          }
+
           // Track this message ID to prevent WebSocket handler from invalidating cache
-          // This preserves the optimistic update when we receive our own message back
           trackSentMessage(message.id);
 
           // Call optimistic add callback if provided
-          // This allows the parent component to immediately add the message to UI
           if (onOptimisticAdd) {
             log.message.debug('[useSendMessage] Calling optimistic add callback with message:', message);
             onOptimisticAdd(message);

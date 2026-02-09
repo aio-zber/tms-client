@@ -60,7 +60,7 @@ export function AppHeader() {
 
         if (!jwtToken) {
           // No token, redirect to login
-          window.location.href = '/login';
+          window.location.href = '/';
           return;
         }
 
@@ -82,7 +82,7 @@ export function AppHeader() {
           // Token expired, clear storage and redirect to login
           localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
           localStorage.removeItem('tms_session_active');
-          window.location.href = '/login';
+          window.location.href = '/';
         } else {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
@@ -91,7 +91,7 @@ export function AppHeader() {
         // On error, clear auth and redirect to login
         localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
         localStorage.removeItem('tms_session_active');
-        window.location.href = '/login';
+        window.location.href = '/';
       } finally {
         setLoading(false);
       }
@@ -113,12 +113,12 @@ export function AppHeader() {
     try {
       await authService.logout();
       setUser(null);
-      // Redirect to login page
-      window.location.href = '/login';
+      // Redirect to root — it handles SSO redirect to GCGC login
+      window.location.href = '/';
     } catch (error) {
       log.error('Logout failed:', error);
-      // Even if logout fails, redirect to login for security
-      window.location.href = '/login';
+      // Even if logout fails, redirect for security
+      window.location.href = '/';
     }
   };
 
