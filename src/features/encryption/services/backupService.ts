@@ -88,6 +88,9 @@ export async function createKeyBackup(pin: string): Promise<void> {
     identityKeyPair: {
       publicKey: toBase64(keys.identityKeyPair.publicKey),
       privateKey: toBase64(keys.identityKeyPair.privateKey),
+      signingKey: keys.identityKeyPair.signingKey
+        ? toBase64(keys.identityKeyPair.signingKey)
+        : undefined,
       createdAt: keys.identityKeyPair.createdAt,
     },
     signedPreKey: {
@@ -188,6 +191,9 @@ export async function restoreKeyBackup(pin: string): Promise<void> {
       {
         publicKey: fromBase64(backupData.identityKeyPair.publicKey),
         privateKey: fromBase64(backupData.identityKeyPair.privateKey),
+        signingKey: backupData.identityKeyPair.signingKey
+          ? fromBase64(backupData.identityKeyPair.signingKey)
+          : undefined,
         createdAt: backupData.identityKeyPair.createdAt,
       },
       {

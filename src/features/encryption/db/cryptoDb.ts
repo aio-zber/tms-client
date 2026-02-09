@@ -131,6 +131,9 @@ export async function storeIdentityKey(
     identityKeyPair: {
       publicKey: uint8ArrayToBase64(identityKeyPair.publicKey),
       privateKey: uint8ArrayToBase64(identityKeyPair.privateKey),
+      signingKey: identityKeyPair.signingKey
+        ? uint8ArrayToBase64(identityKeyPair.signingKey)
+        : undefined,
       createdAt: identityKeyPair.createdAt,
     },
     signedPreKey: {
@@ -163,6 +166,9 @@ export async function getIdentityKey(): Promise<{
     identityKeyPair: {
       publicKey: base64ToUint8Array(stored.identityKeyPair.publicKey),
       privateKey: base64ToUint8Array(stored.identityKeyPair.privateKey),
+      signingKey: stored.identityKeyPair.signingKey
+        ? base64ToUint8Array(stored.identityKeyPair.signingKey)
+        : undefined,
       createdAt: stored.identityKeyPair.createdAt,
     },
     signedPreKey: {

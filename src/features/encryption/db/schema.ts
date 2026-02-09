@@ -9,8 +9,9 @@ import { CRYPTO_DB_VERSION } from '../constants';
 export interface IdentityStoreValue {
   id: string;
   identityKeyPair: {
-    publicKey: string; // Base64
-    privateKey: string; // Base64
+    publicKey: string; // Base64 (X25519)
+    privateKey: string; // Base64 (X25519)
+    signingKey?: string; // Base64 (Ed25519 64-byte private key)
     createdAt: number;
   };
   signedPreKey: {

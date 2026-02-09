@@ -53,25 +53,26 @@ import { log } from '@/lib/logger';
 // ==================== Key Generation ====================
 
 /**
- * Generate an identity key pair (Ed25519 for signing)
- * The Ed25519 key is converted to X25519 for key exchange
+ * Generate an identity key pair
+ * Ed25519 keys are generated for signing, then converted to X25519 for DH.
+ * Both are stored: X25519 as publicKey/privateKey, Ed25519 as signingKey.
  */
 export function generateIdentityKeyPair(): IdentityKeyPair {
   const signingKeyPair = generateSigningKeyPair();
 
-  // Convert to X25519 for DH operations
   return {
     publicKey: ed25519PublicKeyToX25519(signingKeyPair.publicKey),
     privateKey: ed25519PrivateKeyToX25519(signingKeyPair.privateKey),
+    signingKey: signingKeyPair.privateKey, // 64-byte Ed25519 key for signing
     createdAt: Date.now(),
   };
 }
 
 /**
  * Generate a signed pre-key
- * The pre-key is signed with the identity key for authentication
+ * The pre-key is signed with the identity Ed25519 key for authentication
  *
- * @param identityPrivateKey - Identity private key for signing
+ * @param identityKeyPair - Identity key pair (must include signingKey)
  * @param keyId - Unique ID for this pre-key
  */
 export function generateSignedPreKey(
@@ -80,11 +81,12 @@ export function generateSignedPreKey(
 ): SignedPreKey {
   const keyPair = generateX25519KeyPair();
 
-  // Sign the public key with identity key
-  // We need to sign with Ed25519, but our identity key is X25519
-  // In a real implementation, we'd store both formats
-  // For simplicity, we sign the hash of the public key
-  const signature = signPreKey(keyPair.publicKey, identityKeyPair.privateKey);
+  if (!identityKeyPair.signingKey) {
+    throw new Error('Identity key pair missing Ed25519 signing key');
+  }
+
+  // Sign the hash of the pre-key public key with the Ed25519 signing key
+  const signature = signPreKey(keyPair.publicKey, identityKeyPair.signingKey);
 
   return {
     keyId,
@@ -95,18 +97,16 @@ export function generateSignedPreKey(
 }
 
 /**
- * Sign a pre-key public key
- * Uses the identity key to create a signature
+ * Sign a pre-key public key using Ed25519
  */
-function signPreKey(preKeyPublic: Uint8Array, identityPrivate: Uint8Array): Uint8Array {
-  // Create a signature using HMAC-like construction
-  // In production, you'd use proper Ed25519 signing
+function signPreKey(preKeyPublic: Uint8Array, ed25519PrivateKey: Uint8Array): Uint8Array {
   const message = sha256(preKeyPublic);
-  return sign(message, identityPrivate);
+  return sign(message, ed25519PrivateKey);
 }
 
 /**
- * Verify a pre-key signature
+ * Verify a pre-key signature using Ed25519 public key
+ * Note: identityPublic here must be the Ed25519 public key (not X25519)
  */
 export function verifyPreKeySignature(
   preKeyPublic: Uint8Array,
@@ -150,13 +150,18 @@ export async function initializeKeys(): Promise<LocalKeyBundle> {
 
   // Check if we already have keys
   const existing = await getIdentityKey();
-  if (existing) {
+  if (existing && existing.identityKeyPair.signingKey) {
     const preKeys = await getUnusedPreKeys();
     return {
       identityKeyPair: existing.identityKeyPair,
       signedPreKey: existing.signedPreKey,
       oneTimePreKeys: preKeys,
     };
+  }
+
+  // If existing keys lack signingKey (pre-fix data), regenerate
+  if (existing && !existing.identityKeyPair.signingKey) {
+    log.encryption.warn('Existing keys missing signing key — regenerating');
   }
 
   log.encryption.info('Generating new key bundle');

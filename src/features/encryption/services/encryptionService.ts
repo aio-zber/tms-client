@@ -188,8 +188,13 @@ async function uploadKeyBundle(): Promise<void> {
     })),
   };
 
-  await apiClient.post(`${ENCRYPTION_API}/keys/bundle`, request);
-  log.encryption.info('Key bundle uploaded to server');
+  try {
+    await apiClient.post(`${ENCRYPTION_API}/keys/bundle`, request);
+    log.encryption.info('Key bundle uploaded to server');
+  } catch (err) {
+    log.encryption.error('Key bundle upload failed:', err);
+    throw err;
+  }
 }
 
 /**

@@ -15,8 +15,11 @@ export interface KeyPair {
 
 /**
  * User's long-term identity key pair
+ * publicKey/privateKey are X25519 (for DH key exchange)
+ * signingKey is the Ed25519 private key (for signing pre-keys)
  */
 export interface IdentityKeyPair extends KeyPair {
+  signingKey?: Uint8Array; // Ed25519 64-byte private key for signing
   createdAt: number;
 }
 
@@ -303,6 +306,7 @@ export interface KeyBackupData {
   identityKeyPair: {
     publicKey: string;
     privateKey: string;
+    signingKey?: string; // Ed25519 private key (Base64)
     createdAt: number;
   };
   signedPreKey: {
