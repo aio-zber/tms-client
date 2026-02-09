@@ -30,9 +30,13 @@ import {
   LogOut,
   ChevronDown,
   Settings,
+  Shield,
+  Key,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NotificationBadge, NotificationSettings } from '@/features/notifications';
+import { useEncryptionStore } from '@/features/encryption/stores/keyStore';
+import { KeyBackupDialog } from '@/features/encryption/components/KeyBackupDialog';
 
 export function AppHeader() {
   const [user, setUser] = useState<User | null>(null);
@@ -40,6 +44,13 @@ export function AppHeader() {
   const { theme, setTheme } = useTheme();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [notificationSettingsOpen, setNotificationSettingsOpen] = useState(false);
+
+  // E2EE state
+  const encryptionInitStatus = useEncryptionStore((s) => s.initStatus);
+  const hasBackup = useEncryptionStore((s) => s.hasBackup);
+  const [showBackupDialog, setShowBackupDialog] = useState(false);
+  const [backupMode, setBackupMode] = useState<'backup' | 'restore'>('backup');
+  const isE2EEReady = encryptionInitStatus === 'ready';
 
   useEffect(() => {
     const loadUser = async () => {
@@ -272,6 +283,43 @@ export function AppHeader() {
             <span>Notification Settings</span>
           </DropdownMenuItem>
 
+          {/* Security Section - shown when E2EE is ready */}
+          {isE2EEReady && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-xs text-gray-500 dark:text-dark-text-secondary uppercase font-semibold">
+                Security
+              </DropdownMenuLabel>
+
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onClick={() => {
+                  setBackupMode('backup');
+                  setShowBackupDialog(true);
+                }}
+              >
+                <Key className="w-4 h-4 mr-3" />
+                <span>{hasBackup ? 'Update Key Backup' : 'Back Up Encryption Keys'}</span>
+                {!hasBackup && (
+                  <div className="ml-auto w-2 h-2 rounded-full bg-orange-400" />
+                )}
+              </DropdownMenuItem>
+
+              {hasBackup && (
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onClick={() => {
+                    setBackupMode('restore');
+                    setShowBackupDialog(true);
+                  }}
+                >
+                  <Shield className="w-4 h-4 mr-3" />
+                  <span>Restore Encryption Keys</span>
+                </DropdownMenuItem>
+              )}
+            </>
+          )}
+
           <DropdownMenuSeparator />
 
           {/* Logout */}
@@ -295,6 +343,22 @@ export function AppHeader() {
           <NotificationSettings />
         </DialogContent>
       </Dialog>
+
+      {/* Key Backup/Restore Dialog */}
+      <KeyBackupDialog
+        open={showBackupDialog}
+        onOpenChange={setShowBackupDialog}
+        mode={backupMode}
+        onComplete={async () => {
+          if (backupMode === 'restore') {
+            try {
+              const { encryptionService } = await import('@/features/encryption');
+              await encryptionService.initialize();
+            } catch { /* will retry on next message */ }
+          }
+          useEncryptionStore.getState().setHasBackup(true);
+        }}
+      />
     </header>
   );
 }

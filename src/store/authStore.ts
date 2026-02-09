@@ -258,6 +258,14 @@ export const useAuthStore = create<AuthState>()(
               isAuthenticated: true,
               isLoading: false,
             });
+
+            // Initialize E2EE for returning users (non-blocking)
+            try {
+              const { encryptionService } = await import('@/features/encryption');
+              await encryptionService.initialize();
+            } catch (err) {
+              log.auth.error('E2EE init failed on checkAuth:', err);
+            }
           } else {
             // Session is invalid, clear everything
             await authService.logout();
