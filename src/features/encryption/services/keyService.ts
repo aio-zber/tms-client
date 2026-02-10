@@ -21,7 +21,7 @@ import {
   x25519,
   sign,
   verify,
-  deriveKey,
+  hkdf,
   sha256,
   toHex,
   initCrypto,
@@ -41,6 +41,7 @@ import {
   KEY_SIZE,
 } from '../constants';
 import type {
+  KeyPair,
   IdentityKeyPair,
   SignedPreKey,
   OneTimePreKey,
@@ -266,7 +267,7 @@ export function x3dhSend(
     signedPreKey: { keyId: number; publicKey: Uint8Array; signature: Uint8Array };
     oneTimePreKey?: { keyId: number; publicKey: Uint8Array };
   }
-): { sharedSecret: Uint8Array; header: X3DHHeader } {
+): { sharedSecret: Uint8Array; header: X3DHHeader; ephemeralKeyPair: KeyPair } {
   // Verify signed pre-key signature
   // Note: In production, verify with Ed25519 public key
   // Here we're using X25519 key, so skip verification for now
@@ -304,7 +305,7 @@ export function x3dhSend(
     preKeyId: theirBundle.oneTimePreKey?.keyId,
   };
 
-  return { sharedSecret, header };
+  return { sharedSecret, header, ephemeralKeyPair: ephemeralKey };
 }
 
 /**
@@ -385,7 +386,7 @@ function concatenateKeys(
 
 /**
  * KDF for X3DH shared secret derivation
- * Uses HKDF with protocol-specific info
+ * Uses HKDF with protocol-specific info including both identity keys
  */
 function kdfX3DH(
   dhOutput: Uint8Array,
@@ -393,20 +394,20 @@ function kdfX3DH(
   recipientIdentityKey: Uint8Array
 ): Uint8Array {
   // Protocol info includes both identity keys for domain separation
+  const encoder = new TextEncoder();
+  const prefix = encoder.encode('TMA-X3DH');
   const info = new Uint8Array(
-    'TMA-X3DH'.length + senderIdentityKey.length + recipientIdentityKey.length
+    prefix.length + senderIdentityKey.length + recipientIdentityKey.length
   );
 
   let offset = 0;
-  const encoder = new TextEncoder();
-  const prefix = encoder.encode('TMA-X3DH');
   info.set(prefix, offset);
   offset += prefix.length;
   info.set(senderIdentityKey, offset);
   offset += senderIdentityKey.length;
   info.set(recipientIdentityKey, offset);
 
-  return deriveKey(dhOutput, 'TMA-X3DH', KEY_SIZE);
+  return hkdf(dhOutput, null, info, KEY_SIZE);
 }
 
 // ==================== Key Fingerprint ====================

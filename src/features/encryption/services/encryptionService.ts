@@ -280,8 +280,8 @@ export async function establishSession(
     throw new EncryptionError('Local keys not found', 'KEY_GENERATION_FAILED');
   }
 
-  // Perform X3DH key agreement - returns header with ephemeral key
-  const { sharedSecret, header: x3dhHeader } = x3dhSend(ourKeys.identityKeyPair, {
+  // Perform X3DH key agreement - returns header with ephemeral key pair
+  const { sharedSecret, header: x3dhHeader, ephemeralKeyPair } = x3dhSend(ourKeys.identityKeyPair, {
     identityKey: fromBase64(theirBundle.identity_key),
     signedPreKey: {
       keyId: theirBundle.signed_prekey.key_id,
@@ -297,12 +297,14 @@ export async function establishSession(
   });
 
   // Initialize Double Ratchet session
+  // Signal spec: sender's initial ratchet key = ephemeral key from X3DH
   await initSessionAsSender(
     conversationId,
     userId,
     sharedSecret,
     fromBase64(theirBundle.identity_key),
-    fromBase64(theirBundle.signed_prekey.public_key)
+    fromBase64(theirBundle.signed_prekey.public_key),
+    ephemeralKeyPair
   );
 
   // Store header for first message (consumed after use)

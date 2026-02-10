@@ -25,7 +25,7 @@ export const MESSAGE_KEY_CONSTANT = new Uint8Array([0x02]); // For message key d
 
 // IndexedDB Configuration
 export const CRYPTO_DB_NAME = 'tma-e2ee-keys';
-export const CRYPTO_DB_VERSION = 2;
+export const CRYPTO_DB_VERSION = 3;
 
 // Key Backup Configuration
 export const BACKUP_VERSION = 1;

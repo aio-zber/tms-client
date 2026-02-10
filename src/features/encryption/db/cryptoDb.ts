@@ -71,6 +71,21 @@ export async function getDb(): Promise<IDBPDatabase<any>> {
           db.createObjectStore(STORES.KNOWN_KEYS, { keyPath: 'userId' });
         }
       }
+
+      // v3: Protocol fix — clear all sessions and keys to force re-registration
+      // X3DH KDF and initial ratchet key derivation changed (incompatible with v2)
+      if (oldVersion < 3 && oldVersion >= 1) {
+        const storeNames = [
+          STORES.IDENTITY, STORES.PREKEY, STORES.SESSION,
+          STORES.SENDER_KEY, STORES.MESSAGE_KEY,
+        ];
+        for (const name of storeNames) {
+          if (db.objectStoreNames.contains(name)) {
+            _transaction.objectStore(name).clear();
+          }
+        }
+        log.encryption.info('Cleared all crypto data for protocol v3 upgrade');
+      }
     },
     blocked() {
       log.encryption.warn('Crypto DB upgrade blocked - close other tabs');

@@ -46,23 +46,30 @@ const KDF_MESSAGE = 'TMA-DoubleRatchet-Message';
 /**
  * Initialize a new session as sender (after X3DH)
  *
+ * Signal Protocol: The sender's initial ratchet key pair is the ephemeral key
+ * from X3DH. This ensures both sides compute the same initial DH ratchet:
+ * - Sender: DH(EK_A, SPK_B)
+ * - Recipient: DH(SPK_B, EK_A)
+ *
  * @param conversationId - Conversation ID
  * @param remoteUserId - Remote user ID
  * @param sharedSecret - Shared secret from X3DH
  * @param remoteIdentityKey - Remote party's identity key
- * @param remotePublicKey - Remote party's current ratchet public key (usually signed pre-key)
+ * @param remotePublicKey - Remote party's current ratchet public key (signed pre-key)
+ * @param ephemeralKeyPair - Sender's ephemeral key pair from X3DH (used as initial ratchet key)
  */
 export async function initSessionAsSender(
   conversationId: string,
   remoteUserId: string,
   sharedSecret: Uint8Array,
   remoteIdentityKey: Uint8Array,
-  remotePublicKey: Uint8Array
+  remotePublicKey: Uint8Array,
+  ephemeralKeyPair: KeyPair
 ): Promise<SessionState> {
-  // Generate our first ratchet key pair
-  const localKeyPair = generateX25519KeyPair();
+  // Use the X3DH ephemeral key pair as our initial ratchet key (Signal spec)
+  const localKeyPair = ephemeralKeyPair;
 
-  // Perform initial DH ratchet step
+  // Perform initial DH ratchet step: DH(EK_A, SPK_B)
   const dhOutput = x25519(localKeyPair.privateKey, remotePublicKey);
 
   // Derive root key and sending chain key
@@ -168,6 +175,22 @@ export async function encryptWithSession(
       `No session found for ${conversationId}:${remoteUserId}`,
       'SESSION_NOT_FOUND'
     );
+  }
+
+  // If sending chain is uninitialized (recipient side), perform DH ratchet first
+  // Signal spec: recipient must ratchet before sending their first message
+  if (isSendingChainUninitialized(state)) {
+    const newKeyPair = generateX25519KeyPair();
+    const dhOutput = x25519(newKeyPair.privateKey, state.remotePublicKey);
+    const { rootKey, chainKey } = kdfRootKey(state.rootKey, dhOutput);
+
+    state.previousSendingChainLength = state.sendingChainKey.index;
+    state.localKeyPair = newKeyPair;
+    state.rootKey = rootKey;
+    state.sendingChainKey = { key: chainKey, index: 0 };
+    state.sendingMessageNumber = 0;
+
+    log.encryption.debug(`Auto-ratcheted sending chain for ${conversationId}:${remoteUserId}`);
   }
 
   // Derive message key from sending chain
@@ -477,6 +500,14 @@ function kdfChainKey(
 }
 
 // ==================== Utilities ====================
+
+/**
+ * Check if the sending chain key is uninitialized (all zeros)
+ * This happens on the recipient side before they send their first message
+ */
+function isSendingChainUninitialized(state: SessionState): boolean {
+  return state.sendingChainKey.key.every((byte) => byte === 0);
+}
 
 /**
  * Check if two keys are equal
