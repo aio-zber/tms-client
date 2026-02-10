@@ -7,7 +7,7 @@
 
 import { useState, Suspense, useMemo, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { MessageCircle, Search, Plus } from 'lucide-react';
+import { MessageCircle, Search, Plus, Lock } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -331,7 +331,14 @@ function ConversationListContent() {
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-sm text-gray-600 dark:text-dark-text-secondary truncate">
                         {conversation.lastMessage ? (
-                          conversation.lastMessage.content
+                          (conversation.lastMessage.encrypted || conversation.lastMessage.content.startsWith('{"v":')) ? (
+                            <span className="flex items-center gap-1 text-gray-400 dark:text-dark-text-secondary italic">
+                              <Lock className="w-3 h-3" />
+                              Encrypted message
+                            </span>
+                          ) : (
+                            conversation.lastMessage.content
+                          )
                         ) : (
                           <span className="text-gray-400 dark:text-dark-text-secondary italic">No messages yet</span>
                         )}

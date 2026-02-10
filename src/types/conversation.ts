@@ -17,6 +17,7 @@ export interface Conversation {
     content: string;
     senderId: string;
     timestamp: string;
+    encrypted?: boolean;
   };
   unreadCount: number;
   isMuted: boolean;

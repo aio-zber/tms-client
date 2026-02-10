@@ -113,12 +113,20 @@ export function AppHeader() {
     try {
       await authService.logout();
       setUser(null);
-      // Redirect to root — it handles SSO redirect to GCGC login
-      window.location.href = '/';
     } catch (error) {
       log.error('Logout failed:', error);
-      // Even if logout fails, redirect for security
-      window.location.href = '/';
+    } finally {
+      // Redirect to GCGC signout to clear the NextAuth session cookie.
+      // Without this, the SSO flow auto-logs the user back in immediately.
+      // After GCGC signout, redirect back to TMS root which shows the SSO login.
+      const gcgcUrl = process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL || '';
+      const tmsClientUrl = process.env.NEXT_PUBLIC_TMS_CLIENT_URL ||
+        (typeof window !== 'undefined' ? window.location.origin : '');
+      if (gcgcUrl) {
+        window.location.href = `${gcgcUrl}/api/auth/signout?callbackUrl=${encodeURIComponent(tmsClientUrl)}`;
+      } else {
+        window.location.href = '/';
+      }
     }
   };
 

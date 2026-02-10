@@ -47,10 +47,12 @@ function updateConversationCacheWithNewMessage(
 
   // Build the new lastMessage from the WebSocket payload
   // Backend sends snake_case; the Conversation type uses mixed casing
+  const isEncrypted = !!(message.encrypted);
   const newLastMessage = {
     content: (message.content as string) || '',
     senderId: (message.sender_id || message.senderId) as string,
     timestamp: (message.created_at || message.createdAt) as string,
+    encrypted: isEncrypted,
   };
 
   // Find the conversation across all pages and extract it

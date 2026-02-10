@@ -9,11 +9,20 @@ import { formatSidebarTimestamp } from '@/lib/dateUtils';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useIsUserOnline } from '@/hooks/usePresence';
+import { Lock } from 'lucide-react';
 import {
   getConversationDisplayName,
   getNameInitials,
   getOtherUserId,
 } from '@/lib/conversationUtils';
+
+/**
+ * Detect if message content is encrypted ciphertext (JSON with E2EE envelope).
+ * Fallback for when the backend doesn't send the `encrypted` flag.
+ */
+function isEncryptedContent(content: string): boolean {
+  return content.startsWith('{"v":') || content.startsWith('{"V":');
+}
 
 interface ConversationListItemProps {
   conversation: Conversation;
@@ -74,7 +83,14 @@ export function ConversationListItem({
         <div className="flex items-center justify-between gap-2">
           {conversation.lastMessage && (
             <p className="text-sm text-gray-600 truncate">
-              {conversation.lastMessage.content}
+              {(conversation.lastMessage.encrypted || isEncryptedContent(conversation.lastMessage.content)) ? (
+                <span className="flex items-center gap-1 text-gray-400 italic">
+                  <Lock className="w-3 h-3" />
+                  Encrypted message
+                </span>
+              ) : (
+                conversation.lastMessage.content
+              )}
             </p>
           )}
           {conversation.unreadCount > 0 && (
