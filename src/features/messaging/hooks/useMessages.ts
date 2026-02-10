@@ -118,6 +118,10 @@ async function decryptMessageContent(
  */
 export function clearDecryptionCache(): void {
   decryptedContentCache.clear();
+  // Also clear failed decryption tracking so a new session can retry
+  import('./useMessagesQuery').then(({ clearFailedDecryptions }) => {
+    clearFailedDecryptions();
+  }).catch(() => {});
 }
 
 /**

@@ -3,9 +3,11 @@
  * TanStack Query version of message fetching with proper cache management
  * Supports infinite scrolling for loading older messages
  *
- * Viber/Signal pattern for E2EE:
- * - Sender's own messages are never re-decrypted (plaintext cached at send time)
- * - Only recipient messages are decrypted via Double Ratchet / Sender Keys
+ * Viber/Signal E2EE pattern:
+ * - Raw ciphertext NEVER reaches the UI — encrypted content is replaced immediately
+ * - Decrypted content is cached; failed decryptions are cached as placeholders
+ * - Sender's own messages use locally cached plaintext (Double Ratchet encrypts for recipient only)
+ * - Decryption is attempted once per message; failures are not retried on refetch
  */
 
 import { useMemo } from 'react';
@@ -14,9 +16,17 @@ import { messageService } from '../services/messageService';
 import { queryKeys } from '@/lib/queryClient';
 import { parseTimestamp } from '@/lib/dateUtils';
 import { useUserStore } from '@/store/userStore';
-import { decryptedContentCache } from './useMessages';
+import { decryptedContentCache, cacheDecryptedContent } from './useMessages';
 import type { Message } from '@/types/message';
 import { log } from '@/lib/logger';
+
+// Track message IDs that permanently failed decryption so we never retry
+const failedDecryptionIds = new Set<string>();
+
+/** Clear failed decryption cache (call on logout) */
+export function clearFailedDecryptions(): void {
+  failedDecryptionIds.clear();
+}
 
 interface UseMessagesQueryOptions {
   conversationId: string;
@@ -40,27 +50,36 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
         cursor: pageParam ? (pageParam as string) : undefined,
       });
 
-      // Decrypt any encrypted messages
-      const decryptedMessages = await Promise.all(
+      // Process messages: replace encrypted content BEFORE returning to UI
+      // This ensures raw ciphertext never flashes in the UI
+      const processedMessages = await Promise.all(
         response.data.map(async (msg) => {
           if (!msg.encrypted) return msg;
 
-          // Viber/Signal pattern: sender's own messages use cached plaintext
-          // The sender can't decrypt their own Double Ratchet messages (encrypted for recipient)
+          // 1. Check decryption cache first (includes sender's cached plaintext)
           const cached = decryptedContentCache.get(msg.id);
           if (cached) {
             return { ...msg, content: cached };
           }
 
-          // Skip decryption for own messages that aren't cached
-          // (e.g., sent before this session — they can't be decrypted by the sender)
+          // 2. Sender's own messages — can't decrypt (Double Ratchet encrypts for recipient)
           if (currentUserId && msg.senderId === currentUserId) {
             return { ...msg, content: '[Message sent encrypted]' };
           }
 
+          // 3. Already failed — don't retry
+          if (failedDecryptionIds.has(msg.id)) {
+            return { ...msg, content: '[Unable to decrypt message]' };
+          }
+
+          // 4. Attempt decryption (recipient path)
           try {
             const { encryptionService } = await import('@/features/encryption');
-            if (!encryptionService.isInitialized()) return msg;
+            if (!encryptionService.isInitialized()) {
+              // Not ready yet — show placeholder but DON'T mark as permanently failed
+              // (will retry once encryption initializes and query refetches)
+              return { ...msg, content: '[Unable to decrypt message]' };
+            }
 
             const msgMeta = msg.metadata as Record<string, unknown> | undefined;
             const encMeta = msgMeta?.encryption as Record<string, unknown> | undefined;
@@ -80,16 +99,20 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
               );
             }
 
+            // Cache successful decryption
+            cacheDecryptedContent(msg.id, decryptedContent);
             return { ...msg, content: decryptedContent };
           } catch (err) {
             log.message.error(`[useMessagesQuery] Failed to decrypt message ${msg.id}:`, err);
+            // Mark as permanently failed — never retry this message
+            failedDecryptionIds.add(msg.id);
             return { ...msg, content: '[Unable to decrypt message]' };
           }
         })
       );
 
       // Sort messages by sequence number (primary) and timestamp (fallback)
-      const sortedMessages = decryptedMessages.sort((a, b) => {
+      const sortedMessages = processedMessages.sort((a, b) => {
         if (a.sequenceNumber !== undefined && b.sequenceNumber !== undefined) {
           if (a.sequenceNumber !== b.sequenceNumber) {
             return a.sequenceNumber - b.sequenceNumber;
