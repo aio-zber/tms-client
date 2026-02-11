@@ -36,6 +36,25 @@ import type {
 import { EncryptionError } from '../types';
 import { log } from '@/lib/logger';
 
+// ==================== Per-Session Mutex ====================
+// Double Ratchet state is sequential — concurrent read-modify-write corrupts chain keys.
+// Signal/Viber serialize all encrypt/decrypt ops per session. We do the same.
+const sessionLocks = new Map<string, Promise<unknown>>();
+
+/**
+ * Acquire a per-session lock. Returns a release function.
+ * Operations on the same session are serialized; different sessions run in parallel.
+ */
+function acquireSessionLock(sessionKey: string): Promise<() => void> {
+  let release: () => void;
+  const newLock = new Promise<void>((resolve) => { release = resolve; });
+
+  const prev = sessionLocks.get(sessionKey) ?? Promise.resolve();
+  sessionLocks.set(sessionKey, prev.then(() => newLock));
+
+  return prev.then(() => release!);
+}
+
 // KDF info strings for domain separation
 const KDF_ROOT = 'TMA-DoubleRatchet-Root';
 const KDF_CHAIN = 'TMA-DoubleRatchet-Chain';
@@ -66,38 +85,45 @@ export async function initSessionAsSender(
   remotePublicKey: Uint8Array,
   ephemeralKeyPair: KeyPair
 ): Promise<SessionState> {
-  // Use the X3DH ephemeral key pair as our initial ratchet key (Signal spec)
-  const localKeyPair = ephemeralKeyPair;
+  const sessionKey = `${conversationId}:${remoteUserId}`;
+  const release = await acquireSessionLock(sessionKey);
 
-  // Perform initial DH ratchet step: DH(EK_A, SPK_B)
-  const dhOutput = x25519(localKeyPair.privateKey, remotePublicKey);
+  try {
+    // Use the X3DH ephemeral key pair as our initial ratchet key (Signal spec)
+    const localKeyPair = ephemeralKeyPair;
 
-  // Derive root key and sending chain key
-  const { rootKey, chainKey } = kdfRootKey(sharedSecret, dhOutput);
+    // Perform initial DH ratchet step: DH(EK_A, SPK_B)
+    const dhOutput = x25519(localKeyPair.privateKey, remotePublicKey);
 
-  const now = Date.now();
-  const state: SessionState = {
-    remoteIdentityKey,
-    remotePublicKey,
-    localKeyPair,
-    rootKey,
-    sendingChainKey: { key: chainKey, index: 0 },
-    receivingChainKey: { key: new Uint8Array(KEY_SIZE), index: 0 }, // Not set until we receive
-    previousSendingChains: [],
-    skippedMessageKeys: new Map(),
-    sendingMessageNumber: 0,
-    receivingMessageNumber: 0,
-    previousSendingChainLength: 0,
-    createdAt: now,
-    updatedAt: now,
-  };
+    // Derive root key and sending chain key
+    const { rootKey, chainKey } = kdfRootKey(sharedSecret, dhOutput);
 
-  // Store session
-  await storeSession(conversationId, remoteUserId, state);
+    const now = Date.now();
+    const state: SessionState = {
+      remoteIdentityKey,
+      remotePublicKey,
+      localKeyPair,
+      rootKey,
+      sendingChainKey: { key: chainKey, index: 0 },
+      receivingChainKey: { key: new Uint8Array(KEY_SIZE), index: 0 },
+      previousSendingChains: [],
+      skippedMessageKeys: new Map(),
+      sendingMessageNumber: 0,
+      receivingMessageNumber: 0,
+      previousSendingChainLength: 0,
+      createdAt: now,
+      updatedAt: now,
+    };
 
-  log.encryption.info(`Session initialized as sender for ${conversationId}:${remoteUserId}`);
+    // Store session
+    await storeSession(conversationId, remoteUserId, state);
 
-  return state;
+    log.encryption.info(`Session initialized as sender for ${conversationId}:${remoteUserId}`);
+
+    return state;
+  } finally {
+    release();
+  }
 }
 
 /**
@@ -118,45 +144,48 @@ export async function initSessionAsRecipient(
   senderEphemeralKey: Uint8Array,
   ourSignedPreKey: KeyPair
 ): Promise<SessionState> {
-  const now = Date.now();
+  const sessionKey = `${conversationId}:${remoteUserId}`;
+  const release = await acquireSessionLock(sessionKey);
 
-  // We don't have a local ratchet key pair yet
-  // It will be created when we send our first message
-  const state: SessionState = {
-    remoteIdentityKey,
-    remotePublicKey: senderEphemeralKey,
-    localKeyPair: ourSignedPreKey, // Use signed pre-key initially
-    rootKey: sharedSecret,
-    sendingChainKey: { key: new Uint8Array(KEY_SIZE), index: 0 }, // Not set until we ratchet
-    receivingChainKey: { key: new Uint8Array(KEY_SIZE), index: 0 }, // Will be set on first decrypt
-    previousSendingChains: [],
-    skippedMessageKeys: new Map(),
-    sendingMessageNumber: 0,
-    receivingMessageNumber: 0,
-    previousSendingChainLength: 0,
-    createdAt: now,
-    updatedAt: now,
-  };
+  try {
+    const now = Date.now();
 
-  // Perform DH ratchet to derive receiving chain
-  const dhOutput = x25519(ourSignedPreKey.privateKey, senderEphemeralKey);
-  const { rootKey, chainKey } = kdfRootKey(sharedSecret, dhOutput);
+    // Perform DH ratchet to derive receiving chain
+    const dhOutput = x25519(ourSignedPreKey.privateKey, senderEphemeralKey);
+    const { rootKey, chainKey } = kdfRootKey(sharedSecret, dhOutput);
 
-  state.rootKey = rootKey;
-  state.receivingChainKey = { key: chainKey, index: 0 };
+    const state: SessionState = {
+      remoteIdentityKey,
+      remotePublicKey: senderEphemeralKey,
+      localKeyPair: ourSignedPreKey,
+      rootKey,
+      sendingChainKey: { key: new Uint8Array(KEY_SIZE), index: 0 },
+      receivingChainKey: { key: chainKey, index: 0 },
+      previousSendingChains: [],
+      skippedMessageKeys: new Map(),
+      sendingMessageNumber: 0,
+      receivingMessageNumber: 0,
+      previousSendingChainLength: 0,
+      createdAt: now,
+      updatedAt: now,
+    };
 
-  // Store session
-  await storeSession(conversationId, remoteUserId, state);
+    // Store session
+    await storeSession(conversationId, remoteUserId, state);
 
-  log.encryption.info(`Session initialized as recipient for ${conversationId}:${remoteUserId}`);
+    log.encryption.info(`Session initialized as recipient for ${conversationId}:${remoteUserId}`);
 
-  return state;
+    return state;
+  } finally {
+    release();
+  }
 }
 
 // ==================== Message Encryption ====================
 
 /**
  * Encrypt a message using the Double Ratchet
+ * Serialized per-session to prevent chain key corruption from concurrent ops.
  *
  * @param conversationId - Conversation ID
  * @param remoteUserId - Remote user ID
@@ -168,57 +197,64 @@ export async function encryptWithSession(
   remoteUserId: string,
   plaintext: Uint8Array
 ): Promise<{ encrypted: EncryptedMessage; state: SessionState }> {
-  const state = await getSession(conversationId, remoteUserId);
+  const sessionKey = `${conversationId}:${remoteUserId}`;
+  const release = await acquireSessionLock(sessionKey);
 
-  if (!state) {
-    throw new EncryptionError(
-      `No session found for ${conversationId}:${remoteUserId}`,
-      'SESSION_NOT_FOUND'
-    );
+  try {
+    const state = await getSession(conversationId, remoteUserId);
+
+    if (!state) {
+      throw new EncryptionError(
+        `No session found for ${conversationId}:${remoteUserId}`,
+        'SESSION_NOT_FOUND'
+      );
+    }
+
+    // If sending chain is uninitialized (recipient side), perform DH ratchet first
+    // Signal spec: recipient must ratchet before sending their first message
+    if (isSendingChainUninitialized(state)) {
+      const newKeyPair = generateX25519KeyPair();
+      const dhOutput = x25519(newKeyPair.privateKey, state.remotePublicKey);
+      const { rootKey, chainKey } = kdfRootKey(state.rootKey, dhOutput);
+
+      state.previousSendingChainLength = state.sendingChainKey.index;
+      state.localKeyPair = newKeyPair;
+      state.rootKey = rootKey;
+      state.sendingChainKey = { key: chainKey, index: 0 };
+      state.sendingMessageNumber = 0;
+
+      log.encryption.debug(`Auto-ratcheted sending chain for ${conversationId}:${remoteUserId}`);
+    }
+
+    // Derive message key from sending chain
+    const { messageKey, nextChainKey } = kdfChainKey(state.sendingChainKey.key);
+
+    // Update chain key
+    state.sendingChainKey = {
+      key: nextChainKey,
+      index: state.sendingChainKey.index + 1,
+    };
+    state.sendingMessageNumber++;
+
+    // Encrypt message
+    const { ciphertext, nonce } = encrypt(plaintext, messageKey);
+
+    const encrypted: EncryptedMessage = {
+      version: 1,
+      ciphertext,
+      nonce,
+      messageNumber: state.sendingMessageNumber - 1,
+      previousChainLength: state.previousSendingChainLength,
+    };
+
+    // Update session state
+    state.updatedAt = Date.now();
+    await storeSession(conversationId, remoteUserId, state);
+
+    return { encrypted, state };
+  } finally {
+    release();
   }
-
-  // If sending chain is uninitialized (recipient side), perform DH ratchet first
-  // Signal spec: recipient must ratchet before sending their first message
-  if (isSendingChainUninitialized(state)) {
-    const newKeyPair = generateX25519KeyPair();
-    const dhOutput = x25519(newKeyPair.privateKey, state.remotePublicKey);
-    const { rootKey, chainKey } = kdfRootKey(state.rootKey, dhOutput);
-
-    state.previousSendingChainLength = state.sendingChainKey.index;
-    state.localKeyPair = newKeyPair;
-    state.rootKey = rootKey;
-    state.sendingChainKey = { key: chainKey, index: 0 };
-    state.sendingMessageNumber = 0;
-
-    log.encryption.debug(`Auto-ratcheted sending chain for ${conversationId}:${remoteUserId}`);
-  }
-
-  // Derive message key from sending chain
-  const { messageKey, nextChainKey } = kdfChainKey(state.sendingChainKey.key);
-
-  // Update chain key
-  state.sendingChainKey = {
-    key: nextChainKey,
-    index: state.sendingChainKey.index + 1,
-  };
-  state.sendingMessageNumber++;
-
-  // Encrypt message
-  const { ciphertext, nonce } = encrypt(plaintext, messageKey);
-
-  const encrypted: EncryptedMessage = {
-    version: 1,
-    ciphertext,
-    nonce,
-    messageNumber: state.sendingMessageNumber - 1,
-    previousChainLength: state.previousSendingChainLength,
-  };
-
-  // Update session state
-  state.updatedAt = Date.now();
-  await storeSession(conversationId, remoteUserId, state);
-
-  return { encrypted, state };
 }
 
 /**
@@ -275,6 +311,7 @@ export async function encryptWithRatchet(
 
 /**
  * Decrypt a message using the Double Ratchet
+ * Serialized per-session to prevent chain key corruption from concurrent ops.
  *
  * @param conversationId - Conversation ID
  * @param remoteUserId - Remote user ID
@@ -287,76 +324,83 @@ export async function decryptWithSession(
   encrypted: EncryptedMessage,
   senderPublicKey?: Uint8Array
 ): Promise<Uint8Array> {
-  let state = await getSession(conversationId, remoteUserId);
+  const sessionKey = `${conversationId}:${remoteUserId}`;
+  const release = await acquireSessionLock(sessionKey);
 
-  if (!state) {
-    throw new EncryptionError(
-      `No session found for ${conversationId}:${remoteUserId}`,
-      'SESSION_NOT_FOUND'
-    );
-  }
+  try {
+    let state = await getSession(conversationId, remoteUserId);
 
-  const messageNumber = encrypted.messageNumber ?? 0;
-  const previousChainLength = encrypted.previousChainLength ?? 0;
+    if (!state) {
+      throw new EncryptionError(
+        `No session found for ${conversationId}:${remoteUserId}`,
+        'SESSION_NOT_FOUND'
+      );
+    }
 
-  // Check if this is a message from a previous chain (skipped message)
-  const skippedKey = await tryGetSkippedMessageKey(
-    conversationId,
-    remoteUserId,
-    senderPublicKey || state.remotePublicKey,
-    messageNumber
-  );
+    const messageNumber = encrypted.messageNumber ?? 0;
+    const previousChainLength = encrypted.previousChainLength ?? 0;
 
-  if (skippedKey) {
-    return decrypt(encrypted.ciphertext, encrypted.nonce, skippedKey);
-  }
-
-  // Check if we need to perform a DH ratchet step
-  if (senderPublicKey && !keysEqual(senderPublicKey, state.remotePublicKey)) {
-    state = await performDHRatchet(
+    // Check if this is a message from a previous chain (skipped message)
+    const skippedKey = await tryGetSkippedMessageKey(
       conversationId,
       remoteUserId,
-      state,
-      senderPublicKey,
-      previousChainLength
-    );
-  }
-
-  // Skip ahead in the receiving chain if needed
-  if (messageNumber > state.receivingChainKey.index) {
-    state = await skipMessageKeys(
-      conversationId,
-      remoteUserId,
-      state,
+      senderPublicKey || state.remotePublicKey,
       messageNumber
     );
-  }
 
-  // Derive message key
-  const { messageKey, nextChainKey } = kdfChainKey(state.receivingChainKey.key);
+    if (skippedKey) {
+      return decrypt(encrypted.ciphertext, encrypted.nonce, skippedKey);
+    }
 
-  // Update chain key
-  state.receivingChainKey = {
-    key: nextChainKey,
-    index: state.receivingChainKey.index + 1,
-  };
-  state.receivingMessageNumber++;
+    // Check if we need to perform a DH ratchet step
+    if (senderPublicKey && !keysEqual(senderPublicKey, state.remotePublicKey)) {
+      state = await performDHRatchet(
+        conversationId,
+        remoteUserId,
+        state,
+        senderPublicKey,
+        previousChainLength
+      );
+    }
 
-  // Decrypt message
-  try {
-    const plaintext = decrypt(encrypted.ciphertext, encrypted.nonce, messageKey);
+    // Skip ahead in the receiving chain if needed
+    if (messageNumber > state.receivingChainKey.index) {
+      state = await skipMessageKeys(
+        conversationId,
+        remoteUserId,
+        state,
+        messageNumber
+      );
+    }
 
-    // Update session state
-    state.updatedAt = Date.now();
-    await storeSession(conversationId, remoteUserId, state);
+    // Derive message key
+    const { messageKey, nextChainKey } = kdfChainKey(state.receivingChainKey.key);
 
-    return plaintext;
-  } catch (error) {
-    throw new EncryptionError(
-      'Failed to decrypt message',
-      'DECRYPTION_FAILED',
-      error as Error
-    );
+    // Update chain key
+    state.receivingChainKey = {
+      key: nextChainKey,
+      index: state.receivingChainKey.index + 1,
+    };
+    state.receivingMessageNumber++;
+
+    // Decrypt message
+    try {
+      const plaintext = decrypt(encrypted.ciphertext, encrypted.nonce, messageKey);
+
+      // Update session state
+      state.updatedAt = Date.now();
+      await storeSession(conversationId, remoteUserId, state);
+
+      return plaintext;
+    } catch (error) {
+      throw new EncryptionError(
+        'Failed to decrypt message',
+        'DECRYPTION_FAILED',
+        error as Error
+      );
+    }
+  } finally {
+    release();
   }
 }
 

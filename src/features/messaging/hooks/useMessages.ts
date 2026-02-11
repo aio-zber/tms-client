@@ -446,8 +446,9 @@ export function useMessages(
         if (cached) {
           addMessageToCache({ ...transformedMessage, content: cached });
         } else if (currentUserId && transformedMessage.senderId === currentUserId) {
-          // Own message not in cache — show placeholder (sent before this session)
-          addMessageToCache({ ...transformedMessage, content: '[Message sent encrypted]' });
+          // Own encrypted message not in cache yet — the send path will add it
+          // via optimistic update. Don't add a placeholder that would flash.
+          log.message.debug('[useMessages] Skipping own encrypted message (waiting for send path):', transformedMessage.id);
         } else {
           // Recipient: decrypt the message
           const metadataJson = wsMessage.metadata_json as Record<string, unknown> | undefined;

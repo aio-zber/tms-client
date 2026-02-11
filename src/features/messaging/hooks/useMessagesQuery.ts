@@ -52,64 +52,71 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
 
       // Process messages: replace encrypted content BEFORE returning to UI
       // This ensures raw ciphertext never flashes in the UI
-      const processedMessages = await Promise.all(
-        response.data.map(async (msg) => {
-          if (!msg.encrypted) return msg;
+      // CRITICAL: Decrypt sequentially (not Promise.all) — Double Ratchet chain keys
+      // are sequential state machines. Parallel decryption corrupts chain state.
+      const processedMessages: typeof response.data = [];
+      for (const msg of response.data) {
+        if (!msg.encrypted) {
+          processedMessages.push(msg);
+          continue;
+        }
 
-          // 1. Check decryption cache first (includes sender's cached plaintext)
-          const cached = decryptedContentCache.get(msg.id);
-          if (cached) {
-            return { ...msg, content: cached };
+        // 1. Check decryption cache first (includes sender's cached plaintext)
+        const cached = decryptedContentCache.get(msg.id);
+        if (cached) {
+          processedMessages.push({ ...msg, content: cached });
+          continue;
+        }
+
+        // 2. Sender's own messages — use 'Encrypted message' placeholder
+        //    Plaintext is cached at send time; if not in cache, it was sent in a prior session
+        if (currentUserId && msg.senderId === currentUserId) {
+          processedMessages.push({ ...msg, content: '[Encrypted message]' });
+          continue;
+        }
+
+        // 3. Already failed — don't retry
+        if (failedDecryptionIds.has(msg.id)) {
+          processedMessages.push({ ...msg, content: '[Unable to decrypt message]' });
+          continue;
+        }
+
+        // 4. Attempt decryption (recipient path) — sequential to preserve chain order
+        try {
+          const { encryptionService } = await import('@/features/encryption');
+          if (!encryptionService.isInitialized()) {
+            processedMessages.push({ ...msg, content: '[Unable to decrypt message]' });
+            continue;
           }
 
-          // 2. Sender's own messages — can't decrypt (Double Ratchet encrypts for recipient)
-          if (currentUserId && msg.senderId === currentUserId) {
-            return { ...msg, content: '[Message sent encrypted]' };
+          const msgMeta = msg.metadata as Record<string, unknown> | undefined;
+          const encMeta = msgMeta?.encryption as Record<string, unknown> | undefined;
+          const isGroup = !!encMeta?.isGroup;
+          let decryptedContent: string;
+
+          if (isGroup) {
+            decryptedContent = await encryptionService.decryptGroupMessageContent(
+              msg.conversationId, msg.senderId, msg.content
+            );
+          } else {
+            const x3dhHeader = encMeta?.x3dhHeader
+              ? encryptionService.deserializeX3DHHeader(encMeta.x3dhHeader as string)
+              : undefined;
+            decryptedContent = await encryptionService.decryptDirectMessage(
+              msg.conversationId, msg.senderId, msg.content, x3dhHeader
+            );
           }
 
-          // 3. Already failed — don't retry
-          if (failedDecryptionIds.has(msg.id)) {
-            return { ...msg, content: '[Unable to decrypt message]' };
-          }
-
-          // 4. Attempt decryption (recipient path)
-          try {
-            const { encryptionService } = await import('@/features/encryption');
-            if (!encryptionService.isInitialized()) {
-              // Not ready yet — show placeholder but DON'T mark as permanently failed
-              // (will retry once encryption initializes and query refetches)
-              return { ...msg, content: '[Unable to decrypt message]' };
-            }
-
-            const msgMeta = msg.metadata as Record<string, unknown> | undefined;
-            const encMeta = msgMeta?.encryption as Record<string, unknown> | undefined;
-            const isGroup = !!encMeta?.isGroup;
-            let decryptedContent: string;
-
-            if (isGroup) {
-              decryptedContent = await encryptionService.decryptGroupMessageContent(
-                msg.conversationId, msg.senderId, msg.content
-              );
-            } else {
-              const x3dhHeader = encMeta?.x3dhHeader
-                ? encryptionService.deserializeX3DHHeader(encMeta.x3dhHeader as string)
-                : undefined;
-              decryptedContent = await encryptionService.decryptDirectMessage(
-                msg.conversationId, msg.senderId, msg.content, x3dhHeader
-              );
-            }
-
-            // Cache successful decryption
-            cacheDecryptedContent(msg.id, decryptedContent);
-            return { ...msg, content: decryptedContent };
-          } catch (err) {
-            log.message.error(`[useMessagesQuery] Failed to decrypt message ${msg.id}:`, err);
-            // Mark as permanently failed — never retry this message
-            failedDecryptionIds.add(msg.id);
-            return { ...msg, content: '[Unable to decrypt message]' };
-          }
-        })
-      );
+          // Cache successful decryption
+          cacheDecryptedContent(msg.id, decryptedContent);
+          processedMessages.push({ ...msg, content: decryptedContent });
+        } catch (err) {
+          log.message.error(`[useMessagesQuery] Failed to decrypt message ${msg.id}:`, err);
+          // Mark as permanently failed — never retry this message
+          failedDecryptionIds.add(msg.id);
+          processedMessages.push({ ...msg, content: '[Unable to decrypt message]' });
+        }
+      }
 
       // Sort messages by sequence number (primary) and timestamp (fallback)
       const sortedMessages = processedMessages.sort((a, b) => {

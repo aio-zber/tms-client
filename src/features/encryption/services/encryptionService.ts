@@ -316,8 +316,14 @@ export async function establishSession(
   return x3dhHeader;
 }
 
+// In-flight X3DH processing — prevents concurrent processX3DHHeader from
+// consuming the one-time pre-key twice and creating sessions with different secrets.
+const processingX3DH = new Map<string, Promise<void>>();
+
 /**
- * Process an incoming X3DH header and establish session as recipient
+ * Process an incoming X3DH header and establish session as recipient.
+ * Deduplicated per conversation:sender — only the first call runs X3DH;
+ * concurrent calls wait for it and then return.
  */
 export async function processX3DHHeader(
   conversationId: string,
@@ -333,31 +339,55 @@ export async function processX3DHHeader(
     return;
   }
 
-  // Get our keys
-  const ourKeys = await getIdentityKey();
-  if (!ourKeys) {
-    throw new EncryptionError('Local keys not found', 'KEY_GENERATION_FAILED');
+  const key = `${conversationId}:${senderId}`;
+
+  // If another call is already processing X3DH for this session, wait for it
+  const existing = processingX3DH.get(key);
+  if (existing) {
+    await existing;
+    return;
   }
 
-  // Perform X3DH as recipient
-  const sharedSecret = await x3dhReceive(
-    header,
-    ourKeys.identityKeyPair,
-    ourKeys.signedPreKey,
-    header.preKeyId
-  );
+  // This is the first call — run X3DH and let concurrent calls wait
+  const promise = (async () => {
+    try {
+      // Double-check after acquiring the "slot" (another call may have finished before us)
+      if (await hasSession(conversationId, senderId)) {
+        return;
+      }
 
-  // Initialize session as recipient
-  await initSessionAsRecipient(
-    conversationId,
-    senderId,
-    sharedSecret,
-    header.identityKey,
-    header.ephemeralKey,
-    ourKeys.signedPreKey.keyPair
-  );
+      // Get our keys
+      const ourKeys = await getIdentityKey();
+      if (!ourKeys) {
+        throw new EncryptionError('Local keys not found', 'KEY_GENERATION_FAILED');
+      }
 
-  log.encryption.info(`Session established as recipient with ${senderId} for ${conversationId}`);
+      // Perform X3DH as recipient
+      const sharedSecret = await x3dhReceive(
+        header,
+        ourKeys.identityKeyPair,
+        ourKeys.signedPreKey,
+        header.preKeyId
+      );
+
+      // Initialize session as recipient (locked internally)
+      await initSessionAsRecipient(
+        conversationId,
+        senderId,
+        sharedSecret,
+        header.identityKey,
+        header.ephemeralKey,
+        ourKeys.signedPreKey.keyPair
+      );
+
+      log.encryption.info(`Session established as recipient with ${senderId} for ${conversationId}`);
+    } finally {
+      processingX3DH.delete(key);
+    }
+  })();
+
+  processingX3DH.set(key, promise);
+  await promise;
 }
 
 // ==================== Message Encryption ====================
@@ -675,6 +705,7 @@ export async function clearEncryptionData(): Promise<void> {
   await clearAllData();
   keyBundleCache.clear();
   pendingX3DHHeaders.clear();
+  processingX3DH.clear();
   initStatus = 'uninitialized';
   log.encryption.info('Encryption data cleared');
 }
