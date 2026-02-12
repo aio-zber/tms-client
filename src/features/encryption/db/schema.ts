@@ -75,6 +75,13 @@ export interface KnownKeyStoreValue {
   verifiedAt?: number;
 }
 
+export interface DecryptedMessageStoreValue {
+  messageId: string;
+  content: string;
+  conversationId: string;
+  storedAt: number;
+}
+
 /**
  * IndexedDB schema for E2EE key storage
  * Using explicit types instead of DBSchema to avoid index type issues
@@ -122,4 +129,5 @@ export const STORES = {
   SENDER_KEY: 'senderKeys' as const,
   MESSAGE_KEY: 'messageKeys' as const,
   KNOWN_KEYS: 'knownIdentityKeys' as const,
+  DECRYPTED_MESSAGES: 'decryptedMessages' as const,
 };

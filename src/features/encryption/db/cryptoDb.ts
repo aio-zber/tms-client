@@ -86,6 +86,15 @@ export async function getDb(): Promise<IDBPDatabase<any>> {
         }
         log.encryption.info('Cleared all crypto data for protocol v3 upgrade');
       }
+
+      // v4: Add decryptedMessages store for persistent plaintext cache
+      // Decrypt-once-store-forever pattern (Signal/Viber/WhatsApp)
+      if (oldVersion < 4) {
+        if (!db.objectStoreNames.contains(STORES.DECRYPTED_MESSAGES)) {
+          const decryptedStore = db.createObjectStore(STORES.DECRYPTED_MESSAGES, { keyPath: 'messageId' });
+          decryptedStore.createIndex('byConversation', 'conversationId');
+        }
+      }
     },
     blocked() {
       log.encryption.warn('Crypto DB upgrade blocked - close other tabs');
@@ -118,6 +127,7 @@ export async function clearAllData(): Promise<void> {
   const storeNames = [
     STORES.IDENTITY, STORES.PREKEY, STORES.SESSION,
     STORES.SENDER_KEY, STORES.MESSAGE_KEY, STORES.KNOWN_KEYS,
+    STORES.DECRYPTED_MESSAGES,
   ];
   const tx = db.transaction(storeNames, 'readwrite');
 
@@ -564,6 +574,72 @@ export async function setVerificationStatus(
   existing.lastSeen = Date.now();
 
   await db.put(STORES.KNOWN_KEYS, existing);
+}
+
+// ==================== Decrypted Message Cache Operations ====================
+
+/**
+ * Store a decrypted message plaintext (decrypt-once-store-forever pattern)
+ */
+export async function storeDecryptedMessage(
+  messageId: string,
+  conversationId: string,
+  content: string
+): Promise<void> {
+  const db = await getDb();
+  await db.put(STORES.DECRYPTED_MESSAGES, {
+    messageId,
+    conversationId,
+    content,
+    storedAt: Date.now(),
+  });
+}
+
+/**
+ * Get a single decrypted message plaintext
+ */
+export async function getDecryptedMessage(
+  messageId: string
+): Promise<string | null> {
+  const db = await getDb();
+  const stored = await db.get(STORES.DECRYPTED_MESSAGES, messageId);
+  return stored?.content ?? null;
+}
+
+/**
+ * Batch-get decrypted messages by IDs (single transaction for efficiency)
+ * Returns a Map of messageId → plaintext content
+ */
+export async function getDecryptedMessages(
+  messageIds: string[]
+): Promise<Map<string, string>> {
+  const db = await getDb();
+  const result = new Map<string, string>();
+
+  if (messageIds.length === 0) return result;
+
+  const tx = db.transaction(STORES.DECRYPTED_MESSAGES, 'readonly');
+  const store = tx.objectStore(STORES.DECRYPTED_MESSAGES);
+
+  const promises = messageIds.map(async (id) => {
+    const stored = await store.get(id);
+    if (stored) {
+      result.set(id, stored.content);
+    }
+  });
+
+  await Promise.all([...promises, tx.done]);
+  return result;
+}
+
+/**
+ * Clear all decrypted messages (for logout)
+ */
+export async function clearDecryptedMessages(): Promise<void> {
+  const db = await getDb();
+  const tx = db.transaction(STORES.DECRYPTED_MESSAGES, 'readwrite');
+  await tx.objectStore(STORES.DECRYPTED_MESSAGES).clear();
+  await tx.done;
 }
 
 // ==================== Helper Functions ====================

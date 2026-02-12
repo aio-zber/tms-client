@@ -167,8 +167,8 @@ export function useSendMessage(): UseSendMessageReturn {
           // The API returns encrypted content, so we replace it with the original
           if (wasEncrypted) {
             message.content = originalContent;
-            // Cache plaintext so API reloads also show it correctly
-            cacheDecryptedContent(message.id, originalContent);
+            // Cache plaintext so API reloads also show it correctly (in-memory + IndexedDB)
+            cacheDecryptedContent(message.id, originalContent, data.conversation_id);
           }
 
           // Track this message ID to prevent WebSocket handler from invalidating cache

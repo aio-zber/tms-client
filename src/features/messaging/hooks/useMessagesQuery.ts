@@ -54,6 +54,23 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
       // This ensures raw ciphertext never flashes in the UI
       // CRITICAL: Decrypt sequentially (not Promise.all) — Double Ratchet chain keys
       // are sequential state machines. Parallel decryption corrupts chain state.
+
+      // Batch-load persistent cache from IndexedDB for all encrypted messages
+      // This avoids N+1 async lookups in the per-message loop
+      const encryptedMsgIds = response.data
+        .filter((msg) => msg.encrypted && !decryptedContentCache.has(msg.id))
+        .map((msg) => msg.id);
+
+      let persistedCache = new Map<string, string>();
+      if (encryptedMsgIds.length > 0) {
+        try {
+          const { getDecryptedMessages } = await import('@/features/encryption/db/cryptoDb');
+          persistedCache = await getDecryptedMessages(encryptedMsgIds);
+        } catch {
+          // IndexedDB unavailable — fall through to decryption
+        }
+      }
+
       const processedMessages: typeof response.data = [];
       for (const msg of response.data) {
         if (!msg.encrypted) {
@@ -61,27 +78,36 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
           continue;
         }
 
-        // 1. Check decryption cache first (includes sender's cached plaintext)
+        // 1. Check in-memory cache first (fast path, no async)
         const cached = decryptedContentCache.get(msg.id);
         if (cached) {
           processedMessages.push({ ...msg, content: cached });
           continue;
         }
 
-        // 2. Sender's own messages — use 'Encrypted message' placeholder
-        //    Plaintext is cached at send time; if not in cache, it was sent in a prior session
+        // 2. Check IndexedDB persistent cache (survives page refresh)
+        const persisted = persistedCache.get(msg.id);
+        if (persisted) {
+          // Promote to in-memory cache for subsequent reads
+          cacheDecryptedContent(msg.id, persisted, msg.conversationId);
+          processedMessages.push({ ...msg, content: persisted });
+          continue;
+        }
+
+        // 3. Sender's own messages — use placeholder
+        //    Plaintext is cached at send time; if not in any cache, it was sent before E2EE persistence
         if (currentUserId && msg.senderId === currentUserId) {
           processedMessages.push({ ...msg, content: '[Encrypted message]' });
           continue;
         }
 
-        // 3. Already failed — don't retry
+        // 4. Already failed — don't retry
         if (failedDecryptionIds.has(msg.id)) {
           processedMessages.push({ ...msg, content: '[Unable to decrypt message]' });
           continue;
         }
 
-        // 4. Attempt decryption (recipient path) — sequential to preserve chain order
+        // 5. Attempt Double Ratchet decryption (recipient path) — sequential to preserve chain order
         try {
           const { encryptionService } = await import('@/features/encryption');
           if (!encryptionService.isInitialized()) {
@@ -107,12 +133,12 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
             );
           }
 
-          // Cache successful decryption
-          cacheDecryptedContent(msg.id, decryptedContent);
+          // 6. Cache successful decryption (in-memory + IndexedDB persistent)
+          cacheDecryptedContent(msg.id, decryptedContent, msg.conversationId);
           processedMessages.push({ ...msg, content: decryptedContent });
         } catch (err) {
           log.message.error(`[useMessagesQuery] Failed to decrypt message ${msg.id}:`, err);
-          // Mark as permanently failed — never retry this message
+          // 7. Mark as permanently failed — never retry this message
           failedDecryptionIds.add(msg.id);
           processedMessages.push({ ...msg, content: '[Unable to decrypt message]' });
         }

@@ -33,10 +33,11 @@ const DECRYPTION_CACHE_MAX_SIZE = 1000;
 export const decryptedContentCache = new Map<string, string>();
 
 /**
- * Add to LRU cache with size limit
+ * Add to LRU cache with size limit and persist to IndexedDB
  * Evicts oldest entries when cache exceeds max size
+ * IndexedDB persistence is fire-and-forget (non-blocking)
  */
-export function cacheDecryptedContent(messageId: string, content: string): void {
+export function cacheDecryptedContent(messageId: string, content: string, conversationId?: string): void {
   // If key exists, delete and re-add to move to end (most recent)
   if (decryptedContentCache.has(messageId)) {
     decryptedContentCache.delete(messageId);
@@ -51,6 +52,15 @@ export function cacheDecryptedContent(messageId: string, content: string): void 
   }
 
   decryptedContentCache.set(messageId, content);
+
+  // Persist to IndexedDB (fire-and-forget) for decrypt-once-store-forever pattern
+  if (conversationId) {
+    import('@/features/encryption/db/cryptoDb').then(({ storeDecryptedMessage }) => {
+      storeDecryptedMessage(messageId, conversationId, content).catch(() => {
+        // IndexedDB write failure is non-critical — in-memory cache still works
+      });
+    }).catch(() => {});
+  }
 }
 
 /**
@@ -102,8 +112,8 @@ async function decryptMessageContent(
       );
     }
 
-    // Cache decrypted content (LRU bounded)
-    cacheDecryptedContent(message.id, decryptedContent);
+    // Cache decrypted content (LRU bounded + IndexedDB persistent)
+    cacheDecryptedContent(message.id, decryptedContent, message.conversationId);
 
     return decryptedContent;
   } catch (error) {
@@ -121,6 +131,10 @@ export function clearDecryptionCache(): void {
   // Also clear failed decryption tracking so a new session can retry
   import('./useMessagesQuery').then(({ clearFailedDecryptions }) => {
     clearFailedDecryptions();
+  }).catch(() => {});
+  // Clear persistent IndexedDB cache
+  import('@/features/encryption/db/cryptoDb').then(({ clearDecryptedMessages }) => {
+    clearDecryptedMessages().catch(() => {});
   }).catch(() => {});
 }
 
