@@ -280,8 +280,8 @@ export async function establishSession(
     throw new EncryptionError('Local keys not found', 'KEY_GENERATION_FAILED');
   }
 
-  // Perform X3DH key agreement - returns header with ephemeral key pair
-  const { sharedSecret, header: x3dhHeader, ephemeralKeyPair } = x3dhSend(ourKeys.identityKeyPair, {
+  // Perform X3DH key agreement
+  const { sharedSecret, header: x3dhHeader } = x3dhSend(ourKeys.identityKeyPair, {
     identityKey: fromBase64(theirBundle.identity_key),
     signedPreKey: {
       keyId: theirBundle.signed_prekey.key_id,
@@ -296,15 +296,12 @@ export async function establishSession(
       : undefined,
   });
 
-  // Initialize Double Ratchet session
-  // Signal spec: sender's initial ratchet key = ephemeral key from X3DH
+  // Derive conversation key from X3DH shared secret
   await initSessionAsSender(
     conversationId,
     userId,
     sharedSecret,
-    fromBase64(theirBundle.identity_key),
-    fromBase64(theirBundle.signed_prekey.public_key),
-    ephemeralKeyPair
+    fromBase64(theirBundle.identity_key)
   );
 
   // Store header for first message (consumed after use)
@@ -370,14 +367,12 @@ export async function processX3DHHeader(
         header.preKeyId
       );
 
-      // Initialize session as recipient (locked internally)
+      // Derive conversation key from X3DH shared secret
       await initSessionAsRecipient(
         conversationId,
         senderId,
         sharedSecret,
-        header.identityKey,
-        header.ephemeralKey,
-        ourKeys.signedPreKey.keyPair
+        header.identityKey
       );
 
       log.encryption.info(`Session established as recipient with ${senderId} for ${conversationId}`);
@@ -639,22 +634,32 @@ export async function receiveSenderKeyDistribution(
 
 /**
  * Serialize encrypted message for transmission
+ * v2 messages omit messageNumber and previousChainLength (no Double Ratchet)
  */
 function serializeEncryptedMessage(encrypted: EncryptedMessage): string {
-  const serialized = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const serialized: Record<string, any> = {
     v: encrypted.version,
     c: toBase64(encrypted.ciphertext),
     n: toBase64(encrypted.nonce),
-    mn: encrypted.messageNumber,
-    pcl: encrypted.previousChainLength,
-    ski: encrypted.senderKeyId,
   };
+
+  // Only include Double Ratchet fields for legacy v1 messages
+  if (encrypted.version === 1) {
+    serialized.mn = encrypted.messageNumber;
+    serialized.pcl = encrypted.previousChainLength;
+  }
+
+  if (encrypted.senderKeyId) {
+    serialized.ski = encrypted.senderKeyId;
+  }
 
   return JSON.stringify(serialized);
 }
 
 /**
  * Deserialize encrypted message from transmission
+ * Handles both v1 (legacy Double Ratchet) and v2 (conversation key) formats
  */
 function deserializeEncryptedMessage(data: string): EncryptedMessage {
   const parsed = JSON.parse(data);

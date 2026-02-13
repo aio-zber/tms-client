@@ -40,7 +40,7 @@ export type {
   PublicKeyBundle,
   LocalKeyBundle,
   X3DHHeader,
-  SessionState,
+  ConversationKeySession,
   SenderKey,
   SenderKeyDistribution,
   EncryptedMessage,

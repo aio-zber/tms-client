@@ -37,7 +37,8 @@ export interface SessionStoreValue {
   id: string;
   conversationId: string;
   userId: string;
-  state: string; // JSON-serialized SessionState
+  conversationKey: string; // Base64-encoded 32-byte symmetric key
+  remoteIdentityKey: string; // Base64-encoded identity key
   version: number;
   createdAt: number;
   updatedAt: number;

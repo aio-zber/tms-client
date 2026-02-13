@@ -81,62 +81,16 @@ export interface X3DHHeader {
 }
 
 /**
- * Double Ratchet chain key state
+ * Conversation key session (v2 — replaces Double Ratchet)
+ *
+ * Both parties derive the same symmetric key from the X3DH shared secret.
+ * Encryption/decryption is idempotent — no sequential state machine.
  */
-export interface ChainKey {
-  key: Uint8Array;
-  index: number;
-}
-
-/**
- * Double Ratchet session state
- */
-export interface SessionState {
-  // Remote party info
-  remoteIdentityKey: Uint8Array;
-  remotePublicKey: Uint8Array; // Current ratchet public key
-
-  // Our ratchet key pair
-  localKeyPair: KeyPair;
-
-  // Root key for deriving new chain keys
-  rootKey: Uint8Array;
-
-  // Sending chain
-  sendingChainKey: ChainKey;
-
-  // Receiving chain
-  receivingChainKey: ChainKey;
-
-  // Previous sending chains (for out-of-order messages)
-  previousSendingChains: Array<{
-    publicKey: Uint8Array;
-    chainKey: ChainKey;
-    messageKeys: Map<number, Uint8Array>;
-  }>;
-
-  // Skipped message keys (for out-of-order messages)
-  skippedMessageKeys: Map<string, Uint8Array>; // key format: `${publicKeyHex}:${messageIndex}`
-
-  // Message counters
-  sendingMessageNumber: number;
-  receivingMessageNumber: number;
-  previousSendingChainLength: number;
-
-  // Session metadata
+export interface ConversationKeySession {
+  conversationKey: Uint8Array;   // 32-byte symmetric key derived from X3DH shared secret
+  remoteIdentityKey: Uint8Array; // For identity verification / safety numbers
   createdAt: number;
   updatedAt: number;
-}
-
-/**
- * Stored session (per conversation + user pair)
- */
-export interface StoredSession {
-  id: string; // `${conversationId}:${userId}`
-  conversationId: string;
-  userId: string;
-  state: SessionState;
-  version: number;
 }
 
 // ==================== Sender Key Types (for groups) ====================

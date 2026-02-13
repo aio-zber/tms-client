@@ -10,7 +10,7 @@ import type {
   IdentityKeyPair,
   SignedPreKey,
   OneTimePreKey,
-  SessionState,
+  ConversationKeySession,
   SenderKey,
   VerificationStatus,
 } from '../types';
@@ -94,6 +94,19 @@ export async function getDb(): Promise<IDBPDatabase<any>> {
           const decryptedStore = db.createObjectStore(STORES.DECRYPTED_MESSAGES, { keyPath: 'messageId' });
           decryptedStore.createIndex('byConversation', 'conversationId');
         }
+      }
+
+      // v5: Replace Double Ratchet with per-conversation symmetric key
+      // Clear sessions and messageKeys (incompatible format). Keep identity, prekeys,
+      // senderKeys, knownIdentityKeys, decryptedMessages.
+      if (oldVersion < 5 && oldVersion >= 1) {
+        const storesToClear = [STORES.SESSION, STORES.MESSAGE_KEY];
+        for (const name of storesToClear) {
+          if (db.objectStoreNames.contains(name)) {
+            _transaction.objectStore(name).clear();
+          }
+        }
+        log.encryption.info('Cleared sessions and messageKeys for v5 conversation key upgrade');
       }
     },
     blocked() {
@@ -311,12 +324,12 @@ export async function deleteUsedPreKeys(): Promise<number> {
 // ==================== Session Operations ====================
 
 /**
- * Store a Double Ratchet session
+ * Store a conversation key session
  */
 export async function storeSession(
   conversationId: string,
   userId: string,
-  state: SessionState
+  session: ConversationKeySession
 ): Promise<void> {
   const db = await getDb();
   const id = `${conversationId}:${userId}`;
@@ -326,9 +339,10 @@ export async function storeSession(
     id,
     conversationId,
     userId,
-    state: serializeSessionState(state),
-    version: 1,
-    createdAt: state.createdAt,
+    conversationKey: uint8ArrayToBase64(session.conversationKey),
+    remoteIdentityKey: uint8ArrayToBase64(session.remoteIdentityKey),
+    version: 2,
+    createdAt: session.createdAt,
     updatedAt: now,
   });
 }
@@ -339,7 +353,7 @@ export async function storeSession(
 export async function getSession(
   conversationId: string,
   userId: string
-): Promise<SessionState | null> {
+): Promise<ConversationKeySession | null> {
   const db = await getDb();
   const id = `${conversationId}:${userId}`;
   const stored = await db.get(STORES.SESSION, id);
@@ -348,7 +362,12 @@ export async function getSession(
     return null;
   }
 
-  return deserializeSessionState(stored.state);
+  return {
+    conversationKey: base64ToUint8Array(stored.conversationKey),
+    remoteIdentityKey: base64ToUint8Array(stored.remoteIdentityKey),
+    createdAt: stored.createdAt,
+    updatedAt: stored.updatedAt,
+  };
 }
 
 /**
@@ -356,13 +375,18 @@ export async function getSession(
  */
 export async function getConversationSessions(
   conversationId: string
-): Promise<Array<{ userId: string; state: SessionState }>> {
+): Promise<Array<{ userId: string; session: ConversationKeySession }>> {
   const db = await getDb();
   const sessions = await db.getAllFromIndex(STORES.SESSION, 'byConversation', conversationId);
 
   return sessions.map((s) => ({
     userId: s.userId,
-    state: deserializeSessionState(s.state),
+    session: {
+      conversationKey: base64ToUint8Array(s.conversationKey),
+      remoteIdentityKey: base64ToUint8Array(s.remoteIdentityKey),
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+    },
   }));
 }
 
@@ -667,85 +691,3 @@ export function base64ToUint8Array(base64: string): Uint8Array {
   return bytes;
 }
 
-/**
- * Serialize SessionState for storage
- */
-function serializeSessionState(state: SessionState): string {
-  // Convert all Uint8Arrays to Base64 and Maps to objects
-  const serializable = {
-    ...state,
-    remoteIdentityKey: uint8ArrayToBase64(state.remoteIdentityKey),
-    remotePublicKey: uint8ArrayToBase64(state.remotePublicKey),
-    localKeyPair: {
-      publicKey: uint8ArrayToBase64(state.localKeyPair.publicKey),
-      privateKey: uint8ArrayToBase64(state.localKeyPair.privateKey),
-    },
-    rootKey: uint8ArrayToBase64(state.rootKey),
-    sendingChainKey: {
-      key: uint8ArrayToBase64(state.sendingChainKey.key),
-      index: state.sendingChainKey.index,
-    },
-    receivingChainKey: {
-      key: uint8ArrayToBase64(state.receivingChainKey.key),
-      index: state.receivingChainKey.index,
-    },
-    previousSendingChains: state.previousSendingChains.map((chain) => ({
-      publicKey: uint8ArrayToBase64(chain.publicKey),
-      chainKey: {
-        key: uint8ArrayToBase64(chain.chainKey.key),
-        index: chain.chainKey.index,
-      },
-      messageKeys: Object.fromEntries(
-        Array.from(chain.messageKeys.entries()).map(([k, v]) => [k, uint8ArrayToBase64(v)])
-      ),
-    })),
-    skippedMessageKeys: Object.fromEntries(
-      Array.from(state.skippedMessageKeys.entries()).map(([k, v]) => [k, uint8ArrayToBase64(v)])
-    ),
-  };
-
-  return JSON.stringify(serializable);
-}
-
-/**
- * Deserialize SessionState from storage
- */
-function deserializeSessionState(json: string): SessionState {
-  const parsed = JSON.parse(json);
-
-  return {
-    ...parsed,
-    remoteIdentityKey: base64ToUint8Array(parsed.remoteIdentityKey),
-    remotePublicKey: base64ToUint8Array(parsed.remotePublicKey),
-    localKeyPair: {
-      publicKey: base64ToUint8Array(parsed.localKeyPair.publicKey),
-      privateKey: base64ToUint8Array(parsed.localKeyPair.privateKey),
-    },
-    rootKey: base64ToUint8Array(parsed.rootKey),
-    sendingChainKey: {
-      key: base64ToUint8Array(parsed.sendingChainKey.key),
-      index: parsed.sendingChainKey.index,
-    },
-    receivingChainKey: {
-      key: base64ToUint8Array(parsed.receivingChainKey.key),
-      index: parsed.receivingChainKey.index,
-    },
-    previousSendingChains: parsed.previousSendingChains.map((chain: {
-      publicKey: string;
-      chainKey: { key: string; index: number };
-      messageKeys: Record<string, string>;
-    }) => ({
-      publicKey: base64ToUint8Array(chain.publicKey),
-      chainKey: {
-        key: base64ToUint8Array(chain.chainKey.key),
-        index: chain.chainKey.index,
-      },
-      messageKeys: new Map(
-        Object.entries(chain.messageKeys).map(([k, v]) => [Number(k), base64ToUint8Array(v)])
-      ),
-    })),
-    skippedMessageKeys: new Map(
-      Object.entries(parsed.skippedMessageKeys).map(([k, v]) => [k, base64ToUint8Array(v as string)])
-    ),
-  };
-}
