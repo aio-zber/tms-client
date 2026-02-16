@@ -18,7 +18,7 @@ import { useEffect, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { socketClient } from '@/lib/socket';
 import { queryKeys } from '@/lib/queryClient';
-import { useMessagesQuery } from './useMessagesQuery';
+import { useMessagesQuery, failedDecryptionIds } from './useMessagesQuery';
 import { isPendingDelete } from './useMessageActions';
 import { isRecentlySentMessage } from './useSendMessage';
 import { nowUTC } from '@/lib/dateUtils';
@@ -81,6 +81,11 @@ async function decryptMessageContent(
     return message.content;
   }
 
+  // Skip already-failed messages (shared with useMessagesQuery)
+  if (failedDecryptionIds.has(message.id)) {
+    return '[Unable to decrypt message]';
+  }
+
   try {
     const { encryptionService } = await import('@/features/encryption');
 
@@ -118,7 +123,8 @@ async function decryptMessageContent(
     return decryptedContent;
   } catch (error) {
     log.message.error(`[useMessages] Failed to decrypt message ${message.id}:`, error);
-    // Return placeholder for failed decryption
+    // Track failure so WS echoes and refetches don't retry
+    failedDecryptionIds.add(message.id);
     return '[Unable to decrypt message]';
   }
 }

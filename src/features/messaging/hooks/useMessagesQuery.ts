@@ -21,7 +21,8 @@ import type { Message } from '@/types/message';
 import { log } from '@/lib/logger';
 
 // Track message IDs that permanently failed decryption so we never retry
-const failedDecryptionIds = new Set<string>();
+// Exported so useMessages (WS path) can also check/update this set
+export const failedDecryptionIds = new Set<string>();
 
 /** Clear failed decryption cache (call on logout) */
 export function clearFailedDecryptions(): void {

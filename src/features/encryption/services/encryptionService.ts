@@ -617,9 +617,9 @@ export async function distributeSenderKey(
     conversation_id: conversationId,
     recipients: memberIds,
     distribution: {
-      key_id: distribution.keyId,
+      sender_key_id: distribution.keyId,
+      public_key: toBase64(distribution.publicSigningKey),
       chain_key: toBase64(distribution.chainKey),
-      public_signing_key: toBase64(distribution.publicSigningKey),
     },
   });
 
