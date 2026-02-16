@@ -34,6 +34,7 @@ import {
   encryptWithSession,
   decryptWithSession,
   hasSession,
+  removeSession,
 } from './sessionService';
 import {
   encryptGroupMessage,
@@ -461,10 +462,28 @@ export async function decryptDirectMessage(
   // Deserialize encrypted message
   const encrypted = deserializeEncryptedMessage(encryptedContent);
 
-  // Decrypt message
-  const plaintext = await decryptWithSession(conversationId, senderId, encrypted);
+  // Legacy v1 (Double Ratchet) messages cannot be decrypted with v2 conversation keys
+  if (encrypted.version === 1) {
+    throw new EncryptionError(
+      'Legacy encrypted message (v1) — session key no longer available',
+      'DECRYPTION_FAILED'
+    );
+  }
 
-  return bytesToString(plaintext);
+  // Decrypt message — if the session key is wrong, delete the corrupt session
+  // so a new X3DH exchange happens on the next message
+  try {
+    const plaintext = await decryptWithSession(conversationId, senderId, encrypted);
+    return bytesToString(plaintext);
+  } catch (error) {
+    if (error instanceof EncryptionError && error.code === 'DECRYPTION_FAILED') {
+      await removeSession(conversationId, senderId);
+      log.encryption.warn(
+        `Deleted corrupt session ${conversationId}:${senderId} — will re-establish on next message`
+      );
+    }
+    throw error;
+  }
 }
 
 /**

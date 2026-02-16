@@ -23,7 +23,7 @@ export const CONVERSATION_KEY_INFO = 'TMA-ConversationKey';
 
 // IndexedDB Configuration
 export const CRYPTO_DB_NAME = 'tma-e2ee-keys';
-export const CRYPTO_DB_VERSION = 5;
+export const CRYPTO_DB_VERSION = 6;
 
 // Key Backup Configuration
 export const BACKUP_VERSION = 1;

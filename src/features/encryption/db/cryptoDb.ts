@@ -108,6 +108,16 @@ export async function getDb(): Promise<IDBPDatabase<any>> {
         }
         log.encryption.info('Cleared sessions and messageKeys for v5 conversation key upgrade');
       }
+
+      // v6: Fix OPK consumption race — clear sessions to force re-establishment
+      // with the fixed X3DH flow. Keep identity, prekeys, senderKeys,
+      // knownIdentityKeys, decryptedMessages.
+      if (oldVersion < 6 && oldVersion >= 1) {
+        if (db.objectStoreNames.contains(STORES.SESSION)) {
+          _transaction.objectStore(STORES.SESSION).clear();
+        }
+        log.encryption.info('Cleared sessions for v6 OPK fix');
+      }
     },
     blocked() {
       log.encryption.warn('Crypto DB upgrade blocked - close other tabs');

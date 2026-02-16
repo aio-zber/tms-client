@@ -49,6 +49,7 @@ import type {
   LocalKeyBundle,
   X3DHHeader,
 } from '../types';
+import { EncryptionError } from '../types';
 import { log } from '@/lib/logger';
 
 // ==================== Key Generation ====================
@@ -328,7 +329,12 @@ export async function x3dhReceive(
   if (ourOneTimePreKeyId !== undefined) {
     ourOneTimePreKey = await consumePreKey(ourOneTimePreKeyId);
     if (!ourOneTimePreKey) {
-      log.encryption.warn(`One-time pre-key ${ourOneTimePreKeyId} not found or already used`);
+      // Sender included DH4 in their shared secret, but we can't compute it
+      // without the OPK. The shared secrets will never match — fail early.
+      throw new EncryptionError(
+        `One-time pre-key ${ourOneTimePreKeyId} not found or already consumed`,
+        'DECRYPTION_FAILED'
+      );
     }
   }
 
