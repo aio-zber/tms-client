@@ -450,7 +450,7 @@ async function uploadAllExistingSessionBackups(): Promise<void> {
     const ourKeys = await getIdentityKey();
     if (!ourKeys) return;
 
-    for (const { conversationId, userId, session } of sessions) {
+    for (const { conversationId, session } of sessions) {
       try {
         const payload = new Uint8Array(64);
         payload.set(session.conversationKey, 0);
