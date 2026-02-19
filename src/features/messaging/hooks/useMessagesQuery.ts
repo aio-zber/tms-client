@@ -104,9 +104,7 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
             try {
               const { encryptionService } = await import('@/features/encryption');
               if (encryptionService.isInitialized()) {
-                const msgMeta = msg.metadata as Record<string, unknown> | undefined;
-                const encMeta = msgMeta?.encryption as Record<string, unknown> | undefined;
-                const isGroup = !!encMeta?.isGroup;
+                const isGroup = !!msg.senderKeyId;
                 const decryptedContent = isGroup
                   ? await encryptionService.decryptGroupMessageContent(
                       msg.conversationId, msg.senderId, msg.content
@@ -140,9 +138,10 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
             continue;
           }
 
+          // senderKeyId is the reliable group indicator — non-null only for group E2EE messages
+          const isGroup = !!msg.senderKeyId;
           const msgMeta = msg.metadata as Record<string, unknown> | undefined;
           const encMeta = msgMeta?.encryption as Record<string, unknown> | undefined;
-          const isGroup = !!encMeta?.isGroup;
           let decryptedContent: string;
 
           if (isGroup) {

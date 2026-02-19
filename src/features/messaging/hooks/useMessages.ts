@@ -96,8 +96,10 @@ async function decryptMessageContent(
 
     let decryptedContent: string;
     const encryptionMetadata = message.metadata?.encryption;
+    // senderKeyId is the reliable group indicator — non-null only for group E2EE messages
+    const isGroupMessage = !!message.senderKeyId || isGroup;
 
-    if (isGroup) {
+    if (isGroupMessage) {
       decryptedContent = await encryptionService.decryptGroupMessageContent(
         message.conversationId,
         message.senderId,
@@ -502,10 +504,9 @@ export function useMessages(
           log.message.debug('[useMessages] Skipping own encrypted message (waiting for send path):', transformedMessage.id);
         } else {
           // Recipient: decrypt the message
-          const metadataJson = wsMessage.metadata_json as Record<string, unknown> | undefined;
-          const encMeta = metadataJson?.encryption as Record<string, unknown> | undefined;
-          const isGroup = !!encMeta?.isGroup
-            || wsMessage.conversation_type === 'group';
+          // Use senderKeyId as the reliable group indicator — it's non-null only for group E2EE.
+          // metadata_json.encryption.isGroup and conversation_type are unreliable (not always present).
+          const isGroup = !!(wsMessage.sender_key_id || wsMessage.senderKeyId);
 
           transformAndDecryptMessage(wsMessage, isGroup).then((decryptedMsg) => {
             addMessageToCache(decryptedMsg);

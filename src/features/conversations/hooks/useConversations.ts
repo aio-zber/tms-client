@@ -205,15 +205,58 @@ export function useConversations(
       // For encrypted messages: attempt async decryption so the sidebar shows
       // the plaintext preview instead of the encrypted placeholder.
       // Only for received messages (own messages are cached at send time).
-      if (isEncrypted && !isOwnMessage && messageId) {
+      if (isEncrypted && messageId) {
         const rawContent = (message.content as string) || '';
+        // senderKeyId is the reliable group indicator — non-null only for group E2EE messages
+        const isGroup = !!(message.sender_key_id || message.senderKeyId);
         const metadataJson = message.metadata_json as Record<string, unknown> | undefined;
         const encMeta = metadataJson?.encryption as Record<string, unknown> | undefined;
         const x3dhHeaderRaw = encMeta?.x3dhHeader as string | undefined;
-        const isGroup = !!encMeta?.isGroup || message.conversation_type === 'group';
+
+        const patchSidebarWithDecrypted = (decryptedContent: string) => {
+          queryClient.setQueryData(
+            listQueryKey,
+            (oldData: unknown) => {
+              if (!oldData) return oldData;
+              return updateConversationCacheWithNewMessage(
+                oldData,
+                conversationId,
+                { ...message, content: decryptedContent, encrypted: false },
+                isOwnMessage
+              );
+            }
+          );
+        };
 
         import('@/features/encryption').then(async ({ encryptionService }) => {
           if (!encryptionService.isInitialized()) return;
+
+          // For own messages: use cache (populated at send time) or decrypt via key backup.
+          // The WS event may fire before useSendMessage caches the plaintext (race condition),
+          // so we retry once after a short delay for the cache, then fall back to decryption.
+          if (isOwnMessage) {
+            // Short wait for send path to cache the plaintext
+            await new Promise((r) => setTimeout(r, 200));
+            const { cacheDecryptedContent, decryptedContentCache: cache } = await import('@/features/messaging/hooks/useMessages');
+            const cached = cache.get(messageId);
+            if (cached) {
+              patchSidebarWithDecrypted(cached);
+              return;
+            }
+            // Cache miss even after delay (e.g. new device) — decrypt own DM message
+            if (!isGroup) {
+              try {
+                const decryptedContent = await encryptionService.decryptOwnDirectMessage(conversationId, rawContent);
+                cacheDecryptedContent(messageId, decryptedContent, conversationId);
+                patchSidebarWithDecrypted(decryptedContent);
+              } catch {
+                // No backup available yet — sidebar will show placeholder until send path caches it
+              }
+            }
+            return;
+          }
+
+          // For received messages: decrypt normally
           try {
             let decryptedContent: string;
             if (isGroup) {
@@ -223,23 +266,9 @@ export function useConversations(
               decryptedContent = await encryptionService.decryptDirectMessage(conversationId, senderId, rawContent, header);
             }
 
-            // Cache the decrypted content so message list can use it too
             const { cacheDecryptedContent } = await import('@/features/messaging/hooks/useMessages');
             cacheDecryptedContent(messageId, decryptedContent, conversationId);
-
-            // Patch the conversation last message with the decrypted content
-            queryClient.setQueryData(
-              listQueryKey,
-              (oldData: unknown) => {
-                if (!oldData) return oldData;
-                return updateConversationCacheWithNewMessage(
-                  oldData,
-                  conversationId,
-                  { ...message, content: decryptedContent, encrypted: false },
-                  isOwnMessage
-                );
-              }
-            );
+            patchSidebarWithDecrypted(decryptedContent);
           } catch {
             // Decryption failed — keep the encrypted placeholder, no retry
           }
