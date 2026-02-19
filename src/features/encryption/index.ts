@@ -63,6 +63,7 @@ export { verificationService } from './services/verificationService';
 export { SecurityTab } from './components/SecurityTab';
 export { KeyBackupDialog } from './components/KeyBackupDialog';
 export { KeyChangeBanner } from './components/KeyChangeBanner';
+export { EncryptionGate } from './components/EncryptionGate';
 
 // Constants
 export {

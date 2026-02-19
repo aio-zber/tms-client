@@ -86,13 +86,8 @@ export function Chat({
     : '';
   const keyChanged = otherDmUserId ? (identityKeyChanges.get(otherDmUserId) ?? false) : false;
 
-  // Show restore dialog when encryption needs restore (immediate - critical path)
-  useEffect(() => {
-    if (encryptionInitStatus === 'needs_restore') {
-      setBackupMode('restore');
-      setShowBackupDialog(true);
-    }
-  }, [encryptionInitStatus]);
+  // NOTE: Restore dialog moved to EncryptionGate (app-level, Messenger pattern).
+  // Chat.tsx only handles backup prompts now.
 
   // Prompt for backup if no backup exists and E2EE is ready
   // Viber pattern: delay prompt so user can start chatting first
@@ -523,14 +518,6 @@ export function Chat({
           onComplete={async () => {
             // Mark as complete (don't prompt again this session)
             sessionStorage.setItem('tma_backup_prompt_dismissed', 'true');
-
-            if (backupMode === 'restore') {
-              // After restore, re-initialize encryption
-              try {
-                const { encryptionService } = await import('@/features/encryption');
-                await encryptionService.initialize();
-              } catch { /* will retry on next message */ }
-            }
             useEncryptionStore.getState().setHasBackup(true);
           }}
         />

@@ -125,7 +125,10 @@ async function decryptMessageContent(
     log.message.error(`[useMessages] Failed to decrypt message ${message.id}:`, error);
     // Track failure so WS echoes and refetches don't retry
     failedDecryptionIds.add(message.id);
-    return '[Unable to decrypt message]';
+    const isLegacy = error instanceof Error && 'code' in error && (error as { code: string }).code === 'LEGACY_VERSION';
+    return isLegacy
+      ? '[This message uses an older encryption version]'
+      : '[Unable to decrypt message]';
   }
 }
 

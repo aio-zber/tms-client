@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { useEncryptionStore } from '@/features/encryption/stores/keyStore';
+import { EncryptionGate } from '@/features/encryption/components/EncryptionGate';
 import { AppHeader } from '@/components/layout/AppHeader';
 import ConversationList from '@/features/chat/components/ConversationList';
 import { NotificationCenter } from '@/features/notifications';
@@ -69,6 +70,7 @@ export default function MainLayout({
 
   return (
     <SocketProvider>
+      <EncryptionGate>
       <div className="h-screen flex flex-col bg-gray-50 dark:bg-dark-bg">
         {/* App Header with Settings */}
         <AppHeader />
@@ -113,6 +115,7 @@ export default function MainLayout({
           </div>
         </div>
       </div>
+      </EncryptionGate>
     </SocketProvider>
   );
 }

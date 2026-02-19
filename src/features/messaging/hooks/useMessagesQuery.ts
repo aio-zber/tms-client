@@ -141,7 +141,12 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
           log.message.error(`[useMessagesQuery] Failed to decrypt message ${msg.id}:`, err);
           // 7. Mark as permanently failed — never retry this message
           failedDecryptionIds.add(msg.id);
-          processedMessages.push({ ...msg, content: '[Unable to decrypt message]' });
+          // Show friendly message for legacy v1 encryption vs genuine failures
+          const isLegacy = err instanceof Error && 'code' in err && (err as { code: string }).code === 'LEGACY_VERSION';
+          const fallback = isLegacy
+            ? '[This message uses an older encryption version]'
+            : '[Unable to decrypt message]';
+          processedMessages.push({ ...msg, content: fallback });
         }
       }
 

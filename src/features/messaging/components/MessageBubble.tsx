@@ -79,7 +79,13 @@ export const MessageBubble = memo(function MessageBubble({
     const decryptFileContent = async () => {
       setIsDecryptingFile(true);
       try {
-        const response = await fetch(message.metadata!.fileUrl!);
+        // Use backend proxy to avoid CORS blocks on direct OSS access
+        const { getApiBaseUrl } = await import('@/lib/constants');
+        const proxyUrl = `${getApiBaseUrl()}/files/proxy?url=${encodeURIComponent(message.metadata!.fileUrl!)}`;
+        const token = localStorage.getItem('auth_token');
+        const response = await fetch(proxyUrl, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
         const encryptedData = await response.arrayBuffer();
         const { encryptionService } = await import('@/features/encryption');
         const { fromBase64 } = await import('@/features/encryption/services/cryptoService');

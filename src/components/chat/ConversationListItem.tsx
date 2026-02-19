@@ -14,6 +14,7 @@ import {
   getConversationDisplayName,
   getNameInitials,
   getOtherUserId,
+  getEncryptedMessagePreview,
 } from '@/lib/conversationUtils';
 
 /**
@@ -86,7 +87,7 @@ export function ConversationListItem({
               {(conversation.lastMessage.encrypted || isEncryptedContent(conversation.lastMessage.content)) ? (
                 <span className="flex items-center gap-1 text-gray-400 italic">
                   <Lock className="w-3 h-3" />
-                  Encrypted message
+                  {getEncryptedMessagePreview(conversation.lastMessage.type)}
                 </span>
               ) : (
                 conversation.lastMessage.content

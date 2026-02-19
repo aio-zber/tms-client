@@ -252,7 +252,8 @@ export type EncryptionErrorCode =
   | 'DB_ERROR'
   | 'BACKUP_FAILED'
   | 'RESTORE_FAILED'
-  | 'INVALID_PIN';
+  | 'INVALID_PIN'
+  | 'LEGACY_VERSION';
 
 // ==================== Key Backup Types ====================
 

@@ -19,6 +19,7 @@ import {
   getConversationDisplayName,
   getNameInitials,
   getOtherUserId,
+  getEncryptedMessagePreview,
 } from '@/lib/conversationUtils';
 import { useConversations, useConversationSearch } from '@/features/conversations';
 import { useUnifiedSearch } from '@/features/messaging/hooks/useUnifiedSearch';
@@ -334,7 +335,7 @@ function ConversationListContent() {
                           (conversation.lastMessage.encrypted || conversation.lastMessage.content.startsWith('{"v":')) ? (
                             <span className="flex items-center gap-1 text-gray-400 dark:text-dark-text-secondary italic">
                               <Lock className="w-3 h-3" />
-                              Encrypted message
+                              {getEncryptedMessagePreview(conversation.lastMessage.type)}
                             </span>
                           ) : (
                             conversation.lastMessage.content

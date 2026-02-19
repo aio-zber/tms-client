@@ -386,6 +386,47 @@ export async function processX3DHHeader(
   await promise;
 }
 
+// ==================== Session Recovery ====================
+
+/**
+ * Try to recover a session by fetching the X3DH header from the first
+ * encrypted message in the conversation (Messenger-style on-demand key derivation).
+ *
+ * @returns true if session was successfully re-established
+ */
+async function tryRecoverSession(
+  conversationId: string,
+  senderId: string,
+  _currentContent?: string
+): Promise<boolean> {
+  try {
+    // First check if the current message itself has a header in its metadata
+    // (handled by caller via `header` param — this function is the fallback)
+
+    // Fetch X3DH header from server (first encrypted message in conversation)
+    const response = await apiClient.get<{
+      found: boolean;
+      x3dh_header: string | null;
+      sender_id: string | null;
+    }>(`/messages/conversations/${conversationId}/x3dh-header`);
+
+    if (!response.found || !response.x3dh_header || !response.sender_id) {
+      log.encryption.warn(`No X3DH header found for session recovery in ${conversationId}`);
+      return false;
+    }
+
+    // Deserialize and process the header to re-establish the session
+    const header = deserializeX3DHHeader(response.x3dh_header);
+    await processX3DHHeader(conversationId, response.sender_id, header);
+
+    log.encryption.info(`Session recovered from X3DH header for ${conversationId}:${senderId}`);
+    return true;
+  } catch (err) {
+    log.encryption.error(`Session recovery failed for ${conversationId}:${senderId}:`, err);
+    return false;
+  }
+}
+
 // ==================== Message Encryption ====================
 
 /**
@@ -454,6 +495,12 @@ export async function decryptDirectMessage(
     await initialize();
   }
 
+  // Content guard: file messages (IMAGE, VOICE, FILE) have encrypted=true
+  // but content is a filename, not ciphertext. Don't try to decrypt filenames.
+  if (!encryptedContent.startsWith('{"v":')) {
+    return encryptedContent;
+  }
+
   // Process X3DH header if present (first message)
   if (header) {
     await processX3DHHeader(conversationId, senderId, header);
@@ -466,13 +513,21 @@ export async function decryptDirectMessage(
   if (encrypted.version === 1) {
     throw new EncryptionError(
       'Legacy encrypted message (v1) — session key no longer available',
-      'DECRYPTION_FAILED'
+      'LEGACY_VERSION'
     );
   }
 
-  // Decrypt message — if the session key is wrong, delete the corrupt session
-  // so a new X3DH exchange happens on the next message
+  // Decrypt message — auto-recover sessions when missing
   try {
+    // Check if session exists; if not, try to re-establish from X3DH header
+    const sessionExists = await hasSession(conversationId, senderId);
+    if (!sessionExists) {
+      const recovered = await tryRecoverSession(conversationId, senderId, encryptedContent);
+      if (!recovered) {
+        throw new EncryptionError('No session found and recovery failed', 'SESSION_NOT_FOUND');
+      }
+    }
+
     const plaintext = await decryptWithSession(conversationId, senderId, encrypted);
     return bytesToString(plaintext);
   } catch (error) {
@@ -522,6 +577,11 @@ export async function decryptGroupMessageContent(
 ): Promise<string> {
   if (!isInitialized()) {
     await initialize();
+  }
+
+  // Content guard: file messages have encrypted=true but content is a filename
+  if (!encryptedContent.startsWith('{"v":')) {
+    return encryptedContent;
   }
 
   const encrypted = deserializeEncryptedMessage(encryptedContent);
