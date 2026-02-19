@@ -207,23 +207,35 @@ export function useConversations(
       // Only for received messages (own messages are cached at send time).
       if (isEncrypted && messageId) {
         const rawContent = (message.content as string) || '';
-        // senderKeyId is the reliable group indicator — non-null only for group E2EE messages
-        const isGroup = !!(message.sender_key_id || message.senderKeyId);
         const metadataJson = message.metadata_json as Record<string, unknown> | undefined;
         const encMeta = metadataJson?.encryption as Record<string, unknown> | undefined;
         const x3dhHeaderRaw = encMeta?.x3dhHeader as string | undefined;
+        // senderKeyId is the primary group indicator (non-null only for group E2EE).
+        // encMeta.isGroup is a secondary fallback set by the client at send time.
+        const isGroup = !!(message.sender_key_id || message.senderKeyId || encMeta?.isGroup);
 
+        // Only update lastMessage.content in-place — do NOT re-run the full
+        // updateConversationCacheWithNewMessage which would double-increment unreadCount
+        // and re-sort the conversation list.
         const patchSidebarWithDecrypted = (decryptedContent: string) => {
           queryClient.setQueryData(
             listQueryKey,
             (oldData: unknown) => {
-              if (!oldData) return oldData;
-              return updateConversationCacheWithNewMessage(
-                oldData,
-                conversationId,
-                { ...message, content: decryptedContent, encrypted: false },
-                isOwnMessage
-              );
+              if (!oldData || typeof oldData !== 'object') return oldData;
+              const data = oldData as { pages: Array<{ data: Conversation[] }>; pageParams: unknown[] };
+              if (!data.pages) return oldData;
+              const newPages = data.pages.map((page) => ({
+                ...page,
+                data: page.data.map((conv) => {
+                  if (conv.id !== conversationId) return conv;
+                  if (!conv.lastMessage) return conv;
+                  return {
+                    ...conv,
+                    lastMessage: { ...conv.lastMessage, content: decryptedContent, encrypted: false },
+                  };
+                }),
+              }));
+              return { ...data, pages: newPages };
             }
           );
         };

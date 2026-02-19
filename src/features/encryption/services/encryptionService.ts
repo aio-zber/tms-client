@@ -684,7 +684,7 @@ export async function encryptGroupMessageContent(
   conversationId: string,
   userId: string,
   content: string
-): Promise<string> {
+): Promise<{ encryptedContent: string; senderKeyId: string }> {
   if (!isInitialized()) {
     await initialize();
   }
@@ -692,7 +692,10 @@ export async function encryptGroupMessageContent(
   const plaintext = stringToBytes(content);
   const encrypted = await encryptGroupMessage(conversationId, userId, plaintext);
 
-  return serializeEncryptedMessage(encrypted);
+  return {
+    encryptedContent: serializeEncryptedMessage(encrypted),
+    senderKeyId: encrypted.senderKeyId ?? '',
+  };
 }
 
 /**

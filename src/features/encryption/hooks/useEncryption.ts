@@ -117,7 +117,8 @@ export function useEncryption(options: UseEncryptionOptions = {}): UseEncryption
 
       try {
         if (isGroup) {
-          return await encryptGroupMessageContent(conversationId, recipientId, content);
+          const { encryptedContent } = await encryptGroupMessageContent(conversationId, recipientId, content);
+          return encryptedContent;
         } else {
           const { encryptedContent } = await encryptDirectMessage(
             conversationId,

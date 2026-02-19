@@ -117,11 +117,15 @@ export function useSendMessage(): UseSendMessageReturn {
 
             if (options.isGroup && options.currentUserId) {
               // Group encryption using Sender Keys
-              encryptedContent = await encryptionService.encryptGroupMessageContent(
+              const result = await encryptionService.encryptGroupMessageContent(
                 data.conversation_id,
                 options.currentUserId,
                 data.content
               );
+              encryptedContent = result.encryptedContent;
+              // sender_key_id is required for recipients to identify which sender key to use
+              requestData = { ...requestData, sender_key_id: result.senderKeyId };
+              encryptionMetadata.isGroup = true;
             } else {
               // DM encryption using Double Ratchet
               const result = await encryptionService.encryptDirectMessage(
