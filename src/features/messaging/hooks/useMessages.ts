@@ -462,12 +462,40 @@ export function useMessages(
         );
       };
 
+      // After decryption, patch the conversation list cache so the sidebar
+      // shows the decrypted preview instead of the encrypted placeholder.
+      const patchConversationLastMessage = (decryptedContent: string) => {
+        queryClient.setQueriesData<{ pages: Array<{ data: Array<{ id: string; lastMessage?: { content: string; encrypted?: boolean } }> }>; pageParams: unknown[] }>(
+          { queryKey: queryKeys.conversations.lists() },
+          (oldData) => {
+            if (!oldData?.pages) return oldData;
+            const newPages = oldData.pages.map((page) => ({
+              ...page,
+              data: page.data.map((conv) => {
+                if ((conv as { id: string }).id !== conversationId) return conv;
+                if (!conv.lastMessage?.encrypted) return conv;
+                return {
+                  ...conv,
+                  lastMessage: {
+                    ...conv.lastMessage,
+                    content: decryptedContent,
+                    encrypted: false,
+                  },
+                };
+              }),
+            }));
+            return { ...oldData, pages: newPages };
+          }
+        );
+      };
+
       // If encrypted, decrypt asynchronously then add to cache
       if (transformedMessage.encrypted) {
         // Viber/Signal pattern: sender's own messages use cached plaintext
         const cached = decryptedContentCache.get(transformedMessage.id);
         if (cached) {
           addMessageToCache({ ...transformedMessage, content: cached });
+          patchConversationLastMessage(cached);
         } else if (currentUserId && transformedMessage.senderId === currentUserId) {
           // Own encrypted message not in cache yet — the send path will add it
           // via optimistic update. Don't add a placeholder that would flash.
@@ -481,6 +509,7 @@ export function useMessages(
 
           transformAndDecryptMessage(wsMessage, isGroup).then((decryptedMsg) => {
             addMessageToCache(decryptedMsg);
+            patchConversationLastMessage(decryptedMsg.content);
           }).catch(() => {
             addMessageToCache({ ...transformedMessage, content: '[Unable to decrypt message]' });
           });

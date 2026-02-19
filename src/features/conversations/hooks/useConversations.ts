@@ -17,6 +17,7 @@ import { authService } from '@/features/auth/services/authService';
 import { queryKeys } from '@/lib/queryClient';
 import { useConversationsQuery } from './useConversationsQuery';
 import { useSocketReady } from '@/components/providers/SocketProvider';
+import { decryptedContentCache } from '@/features/messaging/hooks/useMessages';
 import type { Conversation, ConversationType, ConversationListResponse } from '@/types/conversation';
 
 interface UseConversationsOptions {
@@ -48,11 +49,19 @@ function updateConversationCacheWithNewMessage(
   // Build the new lastMessage from the WebSocket payload
   // Backend sends snake_case; the Conversation type uses mixed casing
   const isEncrypted = !!(message.encrypted);
+  const rawContent = (message.content as string) || '';
+  const messageId = (message.id as string) || '';
+
+  // Use decrypted content from cache if available (so sidebar shows plaintext)
+  const cachedDecrypted = messageId ? decryptedContentCache.get(messageId) : undefined;
+  const displayContent = cachedDecrypted ?? rawContent;
+
   const newLastMessage = {
-    content: (message.content as string) || '',
+    content: displayContent,
     senderId: (message.sender_id || message.senderId) as string,
     timestamp: (message.created_at || message.createdAt) as string,
-    encrypted: isEncrypted,
+    // Mark as encrypted only when no decrypted content is available
+    encrypted: isEncrypted && !cachedDecrypted,
   };
 
   // Find the conversation across all pages and extract it
@@ -176,10 +185,12 @@ export function useConversations(
     const handleNewMessage = (message: Record<string, unknown>) => {
       const conversationId = (message.conversation_id || message.conversationId) as string;
       const senderId = (message.sender_id || message.senderId) as string;
+      const messageId = (message.id as string) || '';
 
       if (!conversationId) return;
 
       const isOwnMessage = senderId === currentUserId;
+      const isEncrypted = !!(message.encrypted);
 
       // INSTANT UPDATE: Directly update the conversation cache
       queryClient.setQueryData(
@@ -189,6 +200,50 @@ export function useConversations(
           return updateConversationCacheWithNewMessage(oldData, conversationId, message, isOwnMessage);
         }
       );
+
+      // For encrypted messages: attempt async decryption so the sidebar shows
+      // the plaintext preview instead of the encrypted placeholder.
+      // Only for received messages (own messages are cached at send time).
+      if (isEncrypted && !isOwnMessage && messageId) {
+        const rawContent = (message.content as string) || '';
+        const metadataJson = message.metadata_json as Record<string, unknown> | undefined;
+        const encMeta = metadataJson?.encryption as Record<string, unknown> | undefined;
+        const x3dhHeaderRaw = encMeta?.x3dhHeader as string | undefined;
+        const isGroup = !!encMeta?.isGroup || message.conversation_type === 'group';
+
+        import('@/features/encryption').then(async ({ encryptionService }) => {
+          if (!encryptionService.isInitialized()) return;
+          try {
+            let decryptedContent: string;
+            if (isGroup) {
+              decryptedContent = await encryptionService.decryptGroupMessageContent(conversationId, senderId, rawContent);
+            } else {
+              const header = x3dhHeaderRaw ? encryptionService.deserializeX3DHHeader(x3dhHeaderRaw) : undefined;
+              decryptedContent = await encryptionService.decryptDirectMessage(conversationId, senderId, rawContent, header);
+            }
+
+            // Cache the decrypted content so message list can use it too
+            const { cacheDecryptedContent } = await import('@/features/messaging/hooks/useMessages');
+            cacheDecryptedContent(messageId, decryptedContent, conversationId);
+
+            // Patch the conversation last message with the decrypted content
+            queryClient.setQueryData(
+              listQueryKey,
+              (oldData: unknown) => {
+                if (!oldData) return oldData;
+                return updateConversationCacheWithNewMessage(
+                  oldData,
+                  conversationId,
+                  { ...message, content: decryptedContent, encrypted: false },
+                  isOwnMessage
+                );
+              }
+            );
+          } catch {
+            // Decryption failed — keep the encrypted placeholder, no retry
+          }
+        }).catch(() => {});
+      }
 
       // Update unread counts for messages from others
       if (!isOwnMessage) {

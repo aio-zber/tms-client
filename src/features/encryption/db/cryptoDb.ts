@@ -409,6 +409,25 @@ export async function deleteSession(conversationId: string, userId: string): Pro
   await db.delete(STORES.SESSION, id);
 }
 
+/**
+ * Get all sessions (for bulk operations like key backup upload)
+ */
+export async function getAllSessions(): Promise<Array<{ conversationId: string; userId: string; session: ConversationKeySession }>> {
+  const db = await getDb();
+  const all = await db.getAll(STORES.SESSION);
+
+  return all.map((s) => ({
+    conversationId: s.conversationId,
+    userId: s.userId,
+    session: {
+      conversationKey: base64ToUint8Array(s.conversationKey),
+      remoteIdentityKey: base64ToUint8Array(s.remoteIdentityKey),
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+    },
+  }));
+}
+
 // ==================== Sender Key Operations ====================
 
 /**

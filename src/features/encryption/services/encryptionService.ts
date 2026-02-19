@@ -138,6 +138,9 @@ export async function initialize(): Promise<void> {
       useEncryptionStore.getState().setHasBackup(false);
     }
 
+    // Upload existing session key backups in background (for sessions pre-dating this feature)
+    uploadAllExistingSessionBackups();
+
     initStatus = 'ready';
     useEncryptionStore.getState().setInitStatus('ready');
     log.encryption.info('E2EE initialized successfully');
@@ -305,6 +308,9 @@ export async function establishSession(
     fromBase64(theirBundle.identity_key)
   );
 
+  // Upload conversation key backup for multi-device recovery (fire-and-forget)
+  uploadConversationKeyBackup(conversationId, userId);
+
   // Store header for first message (consumed after use)
   const sessionKey = `${conversationId}:${userId}`;
   pendingX3DHHeaders.set(sessionKey, x3dhHeader);
@@ -376,6 +382,9 @@ export async function processX3DHHeader(
         header.identityKey
       );
 
+      // Upload conversation key backup for multi-device recovery (fire-and-forget)
+      uploadConversationKeyBackup(conversationId, senderId);
+
       log.encryption.info(`Session established as recipient with ${senderId} for ${conversationId}`);
     } finally {
       processingX3DH.delete(key);
@@ -389,6 +398,128 @@ export async function processX3DHHeader(
 // ==================== Session Recovery ====================
 
 /**
+ * Upload the conversation key to the server, encrypted with our own identity key.
+ * Enables multi-device recovery without needing the X3DH one-time prekey.
+ * Fire-and-forget — failures are non-critical (X3DH recovery is the fallback).
+ */
+async function uploadConversationKeyBackup(
+  conversationId: string,
+  remoteUserId: string
+): Promise<void> {
+  try {
+    const session = await import('../db/cryptoDb').then(({ getSession }) =>
+      getSession(conversationId, remoteUserId)
+    );
+    if (!session) return;
+
+    const ourKeys = await getIdentityKey();
+    if (!ourKeys) return;
+
+    // Pack conversationKey + remoteIdentityKey into a single payload before encrypting
+    // Format: 32 bytes conversationKey || 32 bytes remoteIdentityKey = 64 bytes total
+    const payload = new Uint8Array(64);
+    payload.set(session.conversationKey, 0);
+    payload.set(session.remoteIdentityKey.slice(0, 32), 32);
+
+    // Encrypt with our own identity private key (32-byte X25519)
+    const { ciphertext, nonce } = encrypt(payload, ourKeys.identityKeyPair.privateKey);
+
+    await apiClient.post(`${ENCRYPTION_API}/keys/conversation`, {
+      conversation_id: conversationId,
+      encrypted_key: toBase64(ciphertext),
+      nonce: toBase64(nonce),
+    });
+
+    log.encryption.debug(`Conversation key backup uploaded for ${conversationId}`);
+  } catch (err) {
+    // Non-critical — X3DH recovery remains as fallback
+    log.encryption.warn(`Conversation key backup upload failed for ${conversationId}:`, err);
+  }
+}
+
+/**
+ * Upload key backups for all existing sessions (fire-and-forget).
+ * Called once on init to ensure sessions established before this feature are covered.
+ */
+async function uploadAllExistingSessionBackups(): Promise<void> {
+  try {
+    const { getAllSessions } = await import('../db/cryptoDb');
+    const sessions = await getAllSessions();
+    if (sessions.length === 0) return;
+
+    const ourKeys = await getIdentityKey();
+    if (!ourKeys) return;
+
+    for (const { conversationId, userId, session } of sessions) {
+      try {
+        const payload = new Uint8Array(64);
+        payload.set(session.conversationKey, 0);
+        payload.set(session.remoteIdentityKey.slice(0, 32), 32);
+        const { ciphertext, nonce } = encrypt(payload, ourKeys.identityKeyPair.privateKey);
+
+        await apiClient.post(`${ENCRYPTION_API}/keys/conversation`, {
+          conversation_id: conversationId,
+          encrypted_key: toBase64(ciphertext),
+          nonce: toBase64(nonce),
+        });
+      } catch {
+        // Skip failed uploads — non-critical
+      }
+    }
+
+    log.encryption.info(`Uploaded key backups for ${sessions.length} existing sessions`);
+  } catch (err) {
+    log.encryption.warn('Failed to upload existing session backups:', err);
+  }
+}
+
+/**
+ * Try to recover a session from the server-stored conversation key backup.
+ * Uses our own identity private key to decrypt (Messenger multi-device pattern).
+ *
+ * @returns true if session was successfully restored
+ */
+async function tryRecoverFromKeyBackup(
+  conversationId: string,
+  remoteUserId: string
+): Promise<boolean> {
+  try {
+    const response = await apiClient.get<{
+      conversation_id: string;
+      encrypted_key: string;
+      nonce: string;
+    }>(`${ENCRYPTION_API}/keys/conversation/${conversationId}`);
+
+    const ourKeys = await getIdentityKey();
+    if (!ourKeys) return false;
+
+    const ciphertext = fromBase64(response.encrypted_key);
+    const nonce = fromBase64(response.nonce);
+
+    // Decrypt using our identity private key
+    const payload = decrypt(ciphertext, nonce, ourKeys.identityKeyPair.privateKey);
+
+    // Unpack: first 32 bytes = conversationKey, next 32 bytes = remoteIdentityKey
+    const conversationKey = payload.slice(0, 32);
+    const remoteIdentityKey = payload.slice(32, 64);
+
+    // Store the recovered session
+    const { storeSession } = await import('../db/cryptoDb');
+    await storeSession(conversationId, remoteUserId, {
+      conversationKey,
+      remoteIdentityKey,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    log.encryption.info(`Session recovered from key backup for ${conversationId}:${remoteUserId}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Try to recover a session by fetching the X3DH header from the first
  * encrypted message in the conversation (Messenger-style on-demand key derivation).
  *
@@ -399,11 +530,12 @@ async function tryRecoverSession(
   senderId: string,
   _currentContent?: string
 ): Promise<boolean> {
-  try {
-    // First check if the current message itself has a header in its metadata
-    // (handled by caller via `header` param — this function is the fallback)
+  // Strategy 1: Try key backup first (works across devices without needing OPK)
+  const recoveredFromBackup = await tryRecoverFromKeyBackup(conversationId, senderId);
+  if (recoveredFromBackup) return true;
 
-    // Fetch X3DH header from server (first encrypted message in conversation)
+  // Strategy 2: Re-run X3DH from stored header (works if OPK is still in IndexedDB)
+  try {
     const response = await apiClient.get<{
       found: boolean;
       x3dh_header: string | null;
