@@ -95,24 +95,31 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
           continue;
         }
 
-        // 3. Sender's own messages — try decrypting with the conversation key (Messenger Labyrinth pattern)
-        //    The conversation key is symmetric: the same key the sender used to encrypt
-        //    can decrypt on any device, recovered from the server-side key backup.
-        //    Fall back to placeholder if decryption fails (pre-E2EE message or no backup yet).
+        // 3. Sender's own messages — try decrypting (Messenger Labyrinth pattern)
+        //    DM: conversation key is symmetric → recovered from server key backup on new device
+        //    Group: sender key with private key is in IndexedDB → decrypt directly; no backup
+        //    Fall back to placeholder if decryption fails.
         if (currentUserId && msg.senderId === currentUserId) {
           if (msg.content.startsWith('{"v":')) {
             try {
               const { encryptionService } = await import('@/features/encryption');
               if (encryptionService.isInitialized()) {
-                const decryptedContent = await encryptionService.decryptOwnDirectMessage(
-                  msg.conversationId, msg.content
-                );
+                const msgMeta = msg.metadata as Record<string, unknown> | undefined;
+                const encMeta = msgMeta?.encryption as Record<string, unknown> | undefined;
+                const isGroup = !!encMeta?.isGroup;
+                const decryptedContent = isGroup
+                  ? await encryptionService.decryptGroupMessageContent(
+                      msg.conversationId, msg.senderId, msg.content
+                    )
+                  : await encryptionService.decryptOwnDirectMessage(
+                      msg.conversationId, msg.content
+                    );
                 cacheDecryptedContent(msg.id, decryptedContent, msg.conversationId);
                 processedMessages.push({ ...msg, content: decryptedContent });
                 continue;
               }
             } catch {
-              // Decryption failed (no backup or pre-E2EE message) — show placeholder
+              // Decryption failed (no sender key / no backup) — show placeholder
             }
           }
           processedMessages.push({ ...msg, content: '[Encrypted message]' });
