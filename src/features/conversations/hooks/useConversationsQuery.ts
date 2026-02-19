@@ -6,7 +6,8 @@
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
 import { conversationService } from '../services/conversationService';
 import { queryKeys } from '@/lib/queryClient';
-import type { ConversationType } from '@/types/conversation';
+import { decryptedContentCache } from '@/features/messaging/hooks/useMessages';
+import type { ConversationType, Conversation } from '@/types/conversation';
 
 interface UseConversationsQueryOptions {
   limit?: number;
@@ -28,7 +29,23 @@ export function useConversationsQuery(options: UseConversationsQueryOptions = {}
         offset: pageParam as number,
         type,
       });
-      return response;
+
+      // Replace encrypted lastMessage content with cached decrypted content (if available).
+      // This prevents the sidebar from flashing "Encrypted message" after every refetch —
+      // the decrypted content was already cached by useConversations/useMessages.
+      const processedData: Conversation[] = response.data.map((conv) => {
+        if (!conv.lastMessage?.encrypted) return conv;
+        const lastMsgId = (conv.lastMessage as { id?: string }).id;
+        if (!lastMsgId) return conv;
+        const cached = decryptedContentCache.get(lastMsgId);
+        if (!cached) return conv;
+        return {
+          ...conv,
+          lastMessage: { ...conv.lastMessage, content: cached, encrypted: false },
+        };
+      });
+
+      return { ...response, data: processedData };
     },
     getNextPageParam: (lastPage, allPages) => {
       // If has_more is true, return next offset

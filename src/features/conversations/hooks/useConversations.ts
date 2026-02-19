@@ -57,6 +57,7 @@ function updateConversationCacheWithNewMessage(
   const displayContent = cachedDecrypted ?? rawContent;
 
   const newLastMessage = {
+    id: messageId || undefined,
     content: displayContent,
     senderId: (message.sender_id || message.senderId) as string,
     timestamp: (message.created_at || message.createdAt) as string,
@@ -255,10 +256,16 @@ export function useConversations(
         });
       }
 
-      // Background sync: invalidate to eventually reconcile with server
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.conversations.all,
-      });
+      // Background sync: invalidate to reconcile with server.
+      // IMPORTANT: Skip for encrypted messages — the server's last_message still
+      // contains raw ciphertext (encrypted: true). Invalidating here would trigger
+      // a refetch that overwrites the decrypted sidebar preview we just patched in.
+      // The decrypted patch from setQueryData above is the source of truth.
+      if (!isEncrypted) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.conversations.all,
+        });
+      }
     };
 
     // Listen for message status updates (when messages are read)

@@ -926,6 +926,72 @@ export async function clearEncryptionData(): Promise<void> {
   log.encryption.info('Encryption data cleared');
 }
 
+// ==================== Own Message Decryption (Messenger Labyrinth pattern) ====================
+
+/**
+ * Decrypt the sender's own message using the conversation symmetric key.
+ *
+ * Messenger Labyrinth insight: the conversation key is symmetric — the same key
+ * encrypts and decrypts. On a new device, we recover the key from the server-side
+ * backup (encrypted with our identity key) rather than re-running X3DH.
+ *
+ * Steps:
+ * 1. Find any existing session for this conversation (fast path)
+ * 2. If no session, recover from server key backup → store under sentinel '__self__'
+ * 3. Decrypt using the recovered conversation key
+ */
+export async function decryptOwnDirectMessage(
+  conversationId: string,
+  encryptedContent: string
+): Promise<string> {
+  if (!isInitialized()) {
+    await initialize();
+  }
+
+  if (!encryptedContent.startsWith('{"v":')) {
+    return encryptedContent;
+  }
+
+  const encrypted = deserializeEncryptedMessage(encryptedContent);
+  if (encrypted.version === 1) {
+    throw new EncryptionError(
+      'Legacy encrypted message (v1) — session key no longer available',
+      'LEGACY_VERSION'
+    );
+  }
+
+  const { getConversationSessions, getSession } = await import('../db/cryptoDb');
+
+  // Step 1: Try any existing session for this conversation
+  const sessions = await getConversationSessions(conversationId);
+  if (sessions.length > 0) {
+    const { session } = sessions[0];
+    try {
+      const plaintext = decrypt(encrypted.ciphertext, encrypted.nonce, session.conversationKey);
+      return bytesToString(plaintext);
+    } catch {
+      // Fall through to recovery
+    }
+  }
+
+  // Step 2: No session locally — recover from server key backup (Messenger Labyrinth pattern)
+  // Use sentinel '__self__' as remoteUserId since we're decrypting our own copy of the message
+  const SELF_SENTINEL = '__self__';
+  const recovered = await tryRecoverFromKeyBackup(conversationId, SELF_SENTINEL);
+  if (!recovered) {
+    throw new EncryptionError('No session and recovery failed', 'SESSION_NOT_FOUND');
+  }
+
+  // Step 3: Decrypt with recovered conversation key
+  const recoveredSession = await getSession(conversationId, SELF_SENTINEL);
+  if (!recoveredSession) {
+    throw new EncryptionError('Recovered session not found', 'SESSION_NOT_FOUND');
+  }
+
+  const plaintext = decrypt(encrypted.ciphertext, encrypted.nonce, recoveredSession.conversationKey);
+  return bytesToString(plaintext);
+}
+
 // Export encryption service object
 export const encryptionService = {
   initialize,
@@ -934,6 +1000,7 @@ export const encryptionService = {
   establishSession,
   encryptDirectMessage,
   decryptDirectMessage,
+  decryptOwnDirectMessage,
   encryptGroupMessageContent,
   decryptGroupMessageContent,
   encryptFile,

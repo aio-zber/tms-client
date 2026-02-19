@@ -14,6 +14,7 @@ export interface Conversation {
   avatarUrl?: string;
   members: ConversationMember[];
   lastMessage?: {
+    id?: string;
     content: string;
     senderId: string;
     timestamp: string;

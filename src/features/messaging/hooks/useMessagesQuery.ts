@@ -95,9 +95,26 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
           continue;
         }
 
-        // 3. Sender's own messages — use placeholder
-        //    Plaintext is cached at send time; if not in any cache, it was sent before E2EE persistence
+        // 3. Sender's own messages — try decrypting with the conversation key (Messenger Labyrinth pattern)
+        //    The conversation key is symmetric: the same key the sender used to encrypt
+        //    can decrypt on any device, recovered from the server-side key backup.
+        //    Fall back to placeholder if decryption fails (pre-E2EE message or no backup yet).
         if (currentUserId && msg.senderId === currentUserId) {
+          if (msg.content.startsWith('{"v":')) {
+            try {
+              const { encryptionService } = await import('@/features/encryption');
+              if (encryptionService.isInitialized()) {
+                const decryptedContent = await encryptionService.decryptOwnDirectMessage(
+                  msg.conversationId, msg.content
+                );
+                cacheDecryptedContent(msg.id, decryptedContent, msg.conversationId);
+                processedMessages.push({ ...msg, content: decryptedContent });
+                continue;
+              }
+            } catch {
+              // Decryption failed (no backup or pre-E2EE message) — show placeholder
+            }
+          }
           processedMessages.push({ ...msg, content: '[Encrypted message]' });
           continue;
         }
