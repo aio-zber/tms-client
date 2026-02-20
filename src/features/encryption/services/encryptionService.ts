@@ -748,12 +748,27 @@ export async function decryptGroupMessageContent(
     const plaintext = await decryptGroupMessage(conversationId, encrypted);
     return bytesToString(plaintext);
   } catch (error) {
-    if (error instanceof EncryptionError && error.code === 'SESSION_NOT_FOUND') {
-      // Group key missing — try recovering from server key backup
-      const recovered = await tryRecoverGroupKey(conversationId);
-      if (recovered) {
-        const plaintext = await decryptGroupMessage(conversationId, encrypted);
-        return bytesToString(plaintext);
+    if (error instanceof EncryptionError) {
+      if (error.code === 'SESSION_NOT_FOUND') {
+        // Group key missing locally — try recovering from server key backup
+        const recovered = await tryRecoverGroupKey(conversationId);
+        if (recovered) {
+          const plaintext = await decryptGroupMessage(conversationId, encrypted);
+          return bytesToString(plaintext);
+        }
+      } else if (error.code === 'DECRYPTION_FAILED') {
+        // Stale/wrong key stored locally — recover from server backup (overwrites local key).
+        // This can happen if a previous test session stored a different key for this conversation.
+        log.encryption.warn(`[decryptGroupMessageContent] Wrong key for ${conversationId} — recovering from server backup`);
+        const recovered = await tryRecoverGroupKey(conversationId);
+        if (recovered) {
+          try {
+            const plaintext = await decryptGroupMessage(conversationId, encrypted);
+            return bytesToString(plaintext);
+          } catch {
+            // Recovery didn't help — key on server is also wrong; throw original error
+          }
+        }
       }
     }
     throw error;
@@ -915,7 +930,14 @@ export async function distributeSenderKey(
   _userId: string, // kept for API compatibility
   memberIds: string[]
 ): Promise<void> {
-  // Get or create the shared group key
+  // On a new device, no group key exists locally — recover from server backup first.
+  // This prevents generating a fresh key that would invalidate all existing encrypted messages.
+  if (!(await hasGroupKey(conversationId))) {
+    await tryRecoverGroupKey(conversationId);
+  }
+
+  // Get or create: if recovery succeeded we use the recovered key; only generates a new
+  // random key if this is genuinely a brand-new group with no backup on the server yet.
   const session = await getOrCreateGroupKey(conversationId);
 
   // Distribute via server (stored + relayed to online members)
