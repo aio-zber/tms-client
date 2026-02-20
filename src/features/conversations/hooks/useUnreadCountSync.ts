@@ -1,6 +1,11 @@
 /**
  * useUnreadCountSync Hook
- * Syncs unread counts with WebSocket events for real-time updates
+ * Syncs unread counts with WebSocket events for real-time updates.
+ *
+ * Only invalidates on read events — increment is handled by useConversations
+ * (which also manages the conversation list cache). Having two listeners for
+ * new_message that both invalidate unread count queries caused cascading
+ * double-refetches and inflated counts.
  */
 
 import { log } from '@/lib/logger';
@@ -10,8 +15,9 @@ import { socketClient } from '@/lib/socket';
 import { queryKeys } from '@/lib/queryClient';
 
 /**
- * Hook to sync unread counts via WebSocket
- * Invalidates unread count queries when messages are marked as read
+ * Hook to sync unread counts via WebSocket.
+ * Listens for message_read and message_status(read) events and invalidates
+ * the unread count queries so the server's accurate count is fetched.
  */
 export function useUnreadCountSync() {
   const queryClient = useQueryClient();
@@ -23,109 +29,52 @@ export function useUnreadCountSync() {
       return;
     }
 
-    // Listen for message_read events
+    // Listen for message_read events (explicit read receipts)
     const handleMessageRead = (data: Record<string, unknown>) => {
       log.message.debug('[useUnreadCountSync] Message read event received:', data);
 
       const conversationId = data.conversation_id as string;
 
       if (conversationId) {
-        // Invalidate specific conversation unread count
         queryClient.invalidateQueries({
           queryKey: queryKeys.unreadCount.conversation(conversationId),
         });
       }
 
-      // Always invalidate total unread count
       queryClient.invalidateQueries({
         queryKey: queryKeys.unreadCount.total(),
       });
     };
 
-    // Listen for new_message events (increment count)
-    const handleNewMessage = (data: Record<string, unknown>) => {
-      log.message.debug('[useUnreadCountSync] New message event received:', data);
-
-      const conversationId = data.conversation_id as string;
-
-      if (conversationId) {
-        // Invalidate specific conversation unread count
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.unreadCount.conversation(conversationId),
-        });
-      }
-
-      // Invalidate total unread count
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.unreadCount.total(),
-      });
-    };
-
-    // Listen for message_status events (Telegram/Messenger pattern)
+    // Listen for message_status events — reset to 0 on READ (Telegram/Messenger pattern).
+    // Do NOT decrement by 1 per event: mark-as-read is a batch operation and the server
+    // returns the accurate count after last_read_at. Just invalidate and let it refetch.
     const handleMessageStatus = (data: Record<string, unknown>) => {
-      log.message.debug('[useUnreadCountSync] Message status event received:', data);
-
       const { status, conversation_id } = data as {
         status: string;
         conversation_id?: string;
-        user_id?: string;
       };
 
-      // If message is marked as READ, decrement unread count
       if (status === 'READ' || status === 'read') {
-        log.message.debug('[useUnreadCountSync] Message marked as READ - updating unread counts');
+        log.message.debug('[useUnreadCountSync] Message marked as READ - invalidating unread counts');
 
-        // Optimistically decrement unread count for this conversation
         if (conversation_id) {
-          queryClient.setQueryData(
-            queryKeys.unreadCount.conversation(conversation_id),
-            (old: unknown) => {
-              if (!old || typeof old !== 'object') return old;
-              const oldData = old as { unread_count?: number };
-              const currentCount = oldData.unread_count ?? 0;
-              return {
-                ...oldData,
-                unread_count: Math.max(0, currentCount - 1), // Don't go below 0
-              };
-            }
-          );
-
-          // Invalidate to refetch accurate count
           queryClient.invalidateQueries({
             queryKey: queryKeys.unreadCount.conversation(conversation_id),
           });
         }
 
-        // Optimistically decrement total unread count
-        queryClient.setQueryData(
-          queryKeys.unreadCount.total(),
-          (old: unknown) => {
-            if (!old || typeof old !== 'object') return old;
-            const oldData = old as { total_unread_count?: number };
-            const currentTotal = oldData.total_unread_count ?? 0;
-            return {
-              ...oldData,
-              total_unread_count: Math.max(0, currentTotal - 1), // Don't go below 0
-            };
-          }
-        );
-
-        // Invalidate total unread count to refetch
         queryClient.invalidateQueries({
           queryKey: queryKeys.unreadCount.total(),
         });
       }
     };
 
-    // Register listeners
     socketClient.onMessageRead(handleMessageRead);
-    socketClient.onNewMessage(handleNewMessage);
     socketClient.onMessageStatus(handleMessageStatus);
 
-    // Cleanup
     return () => {
       socketClient.off('message_read', handleMessageRead);
-      socketClient.off('new_message', handleNewMessage);
       socketClient.off('message_status', handleMessageStatus);
     };
   }, [queryClient]);

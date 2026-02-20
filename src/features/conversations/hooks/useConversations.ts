@@ -13,11 +13,11 @@ import { log } from '@/lib/logger';
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { socketClient } from '@/lib/socket';
-import { authService } from '@/features/auth/services/authService';
 import { queryKeys } from '@/lib/queryClient';
 import { useConversationsQuery } from './useConversationsQuery';
 import { useSocketReady } from '@/components/providers/SocketProvider';
 import { decryptedContentCache } from '@/features/messaging/hooks/useMessages';
+import { useUserStore } from '@/store/userStore';
 import type { Conversation, ConversationType, ConversationListResponse } from '@/types/conversation';
 
 interface UseConversationsOptions {
@@ -88,15 +88,16 @@ function updateConversationCacheWithNewMessage(
     return oldData;
   }
 
-  // Create updated conversation (immutable — new object)
+  // Create updated conversation (immutable — new object).
+  // Do NOT optimistically increment unreadCount here — that causes inflation
+  // when combined with the server refetch that follows. The server tracks
+  // unread counts accurately via last_read_at; we rely on that as the source
+  // of truth and invalidate the query to get the fresh value.
   const updatedConversation: Conversation = {
     ...targetConversation,
     lastMessage: newLastMessage,
     updatedAt: newLastMessage.timestamp,
-    // Increment unread count for messages from other users
-    unreadCount: isOwnMessage
-      ? targetConversation.unreadCount
-      : targetConversation.unreadCount + 1,
+    unreadCount: targetConversation.unreadCount,
   };
 
   // Build new pages: remove conversation from its current position,
@@ -204,18 +205,9 @@ export function useConversations(
 
     log.message.debug('[useConversations] Attaching instance callbacks');
 
-    let currentUserId: string | null = null;
-
-    const initializeUser = async () => {
-      try {
-        const currentUser = await authService.getCurrentUser();
-        currentUserId = currentUser?.id || null;
-      } catch (err) {
-        log.message.warn('[useConversations] Failed to get current user:', err);
-      }
-    };
-
-    initializeUser();
+    // Read synchronously from the Zustand store — already populated at login,
+    // no async gap that could misidentify own messages as foreign.
+    const getCurrentUserId = () => useUserStore.getState().currentUser?.id ?? null;
 
     // On reconnect, server auto-rejoins all rooms. Just refresh data
     // to catch any messages missed during disconnection.
@@ -239,7 +231,7 @@ export function useConversations(
 
       if (!conversationId) return;
 
-      const isOwnMessage = senderId === currentUserId;
+      const isOwnMessage = senderId === getCurrentUserId();
       const isEncrypted = !!(message.encrypted);
 
       // INSTANT UPDATE: Directly update the conversation cache
@@ -361,7 +353,7 @@ export function useConversations(
       const conversationId = data.conversation_id as string;
       const userId = data.user_id as string;
 
-      if (status === 'read' && userId === currentUserId && conversationId) {
+      if (status === 'read' && userId === getCurrentUserId() && conversationId) {
         queryClient.setQueryData(
           listQueryKey,
           (oldData: unknown) => {
