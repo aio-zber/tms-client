@@ -43,7 +43,6 @@ import {
   decryptGroupMessage,
   getOrCreateGroupKey,
   hasGroupKey,
-  rotateGroupKey,
   storeReceivedGroupKey,
 } from './groupCryptoService';
 import { getIdentityKey, hasIdentityKey } from '../db/cryptoDb';

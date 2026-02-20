@@ -26,7 +26,7 @@ import {
   storeSession,
   getSession,
 } from '../db/cryptoDb';
-import { KEY_SIZE, GROUP_KEY_SENTINEL } from '../constants';
+import { GROUP_KEY_SENTINEL } from '../constants';
 import type { ConversationKeySession, EncryptedMessage } from '../types';
 import { EncryptionError } from '../types';
 import { log } from '@/lib/logger';
