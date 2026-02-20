@@ -8,6 +8,8 @@
 
 import { log } from '@/lib/logger';
 import { useState, useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/lib/queryClient';
 import { Loader2, X } from 'lucide-react';
 import { MessageList } from '@/features/messaging/components/MessageList';
 import { MessageInput } from '@/features/messaging/components/MessageInput';
@@ -55,6 +57,7 @@ export function Chat({
   const [showProfileDialog, setShowProfileDialog] = useState(false);
 
   // Hooks - Use existing hooks instead of manual implementation
+  const queryClient = useQueryClient();
   const { conversation, isLoading: loadingConversation } = useConversationQuery(conversationId, true);
   const { user: currentUser } = useCurrentUser();
   const currentUserId = currentUser?.id || '';
@@ -150,6 +153,8 @@ export function Chat({
     import('@/features/encryption').then(async ({ encryptionService }) => {
       if (!encryptionService.isInitialized()) return;
 
+      let newKeysStored = false;
+
       // 1. Fetch existing sender keys from the server for all group members
       //    (covers members who distributed their key before we connected)
       try {
@@ -175,6 +180,7 @@ export function Chat({
               public_signing_key: sk.public_signing_key,
               chain_key: sk.chain_key,
             });
+            newKeysStored = true;
           }
           log.debug(`[Chat] Loaded ${senderKeys.length} sender keys for group ${conversationId}`);
         }
@@ -189,9 +195,20 @@ export function Chat({
       } catch (err) {
         log.warn('[Chat] Failed to distribute own sender key:', err);
       }
+
+      // 3. If we got new keys, clear failed decryption cache and re-fetch messages
+      //    so previously-unreadable messages get a fresh decryption attempt.
+      if (newKeysStored) {
+        const { clearFailedDecryptions } = await import('@/features/messaging/hooks/useMessagesQuery');
+        clearFailedDecryptions();
+        queryClient.invalidateQueries({
+          queryKey: [...queryKeys.messages.lists(), conversationId],
+        });
+        log.debug('[Chat] New sender keys stored — invalidated message cache for re-decryption');
+      }
     }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversationId, conversation?.type, currentUserId, encryptionInitStatus]);
+  }, [conversationId, conversation?.type, currentUserId, encryptionInitStatus, queryClient]);
 
   // Jump to message hook for search navigation
   const {
