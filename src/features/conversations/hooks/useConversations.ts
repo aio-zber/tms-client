@@ -11,7 +11,7 @@
 
 import { log } from '@/lib/logger';
 import { useEffect } from 'react';
-import { useQueryClient, QueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { socketClient } from '@/lib/socket';
 import { authService } from '@/features/auth/services/authService';
 import { queryKeys } from '@/lib/queryClient';
