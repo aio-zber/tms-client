@@ -133,6 +133,66 @@ export function Chat({
     }
   }, [conversationId, currentUserId]);
 
+  // Group E2EE: On group chat open, fetch all stored sender keys from the server
+  // and distribute our own key to all members. This is the Messenger pattern:
+  // keys are exchanged when joining a conversation, not only when sending.
+  // This ensures every member can decrypt every other member's messages.
+  useEffect(() => {
+    if (!conversation || conversation.type !== 'group' || !currentUserId || !encryptionInitStatus) return;
+    if (encryptionInitStatus !== 'ready') return;
+
+    const memberIds = conversation.members
+      .map((m: { userId: string }) => m.userId)
+      .filter((id: string) => id !== currentUserId);
+
+    if (memberIds.length === 0) return;
+
+    import('@/features/encryption').then(async ({ encryptionService }) => {
+      if (!encryptionService.isInitialized()) return;
+
+      // 1. Fetch existing sender keys from the server for all group members
+      //    (covers members who distributed their key before we connected)
+      try {
+        const { apiClient } = await import('@/lib/apiClient');
+        const response = await apiClient.get<{
+          sender_keys: Array<{
+            sender_id: string;
+            key_id: string;
+            public_signing_key: string;
+            chain_key: string | null;
+          }>;
+        }>(`/encryption/sender-keys/${conversationId}`);
+        const senderKeys = response?.sender_keys;
+
+        if (senderKeys && senderKeys.length > 0) {
+          for (const sk of senderKeys) {
+            if (sk.sender_id === currentUserId) continue; // Skip own key
+            if (!sk.chain_key) continue; // Can't use key without chain_key
+            await encryptionService.receiveSenderKeyDistribution({
+              conversation_id: conversationId,
+              sender_id: sk.sender_id,
+              key_id: sk.key_id,
+              public_signing_key: sk.public_signing_key,
+              chain_key: sk.chain_key,
+            });
+          }
+          log.debug(`[Chat] Loaded ${senderKeys.length} sender keys for group ${conversationId}`);
+        }
+      } catch (err) {
+        log.warn('[Chat] Failed to fetch group sender keys:', err);
+      }
+
+      // 2. Distribute our own sender key to all members so they can decrypt our messages
+      try {
+        await encryptionService.distributeSenderKey(conversationId, currentUserId, memberIds);
+        log.debug(`[Chat] Distributed own sender key to ${memberIds.length} members`);
+      } catch (err) {
+        log.warn('[Chat] Failed to distribute own sender key:', err);
+      }
+    }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId, conversation?.type, currentUserId, encryptionInitStatus]);
+
   // Jump to message hook for search navigation
   const {
     jumpToMessage,

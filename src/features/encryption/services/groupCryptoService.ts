@@ -131,11 +131,23 @@ export async function createSenderKeyDistribution(
 
 /**
  * Process a received sender key distribution
- * Store the sender key for decryption
+ * Store the sender key for decryption — but only if we don't already have
+ * one with the same keyId. Overwriting an existing key would reset the
+ * chain position and break decryption of subsequent messages.
  */
 export async function processSenderKeyDistribution(
   distribution: SenderKeyDistribution
 ): Promise<void> {
+  // Check if we already have a key for this sender in this group
+  const existing = await getSenderKey(distribution.conversationId, distribution.senderId);
+  if (existing && existing.keyId === distribution.keyId) {
+    // Same key already stored — do not overwrite (chain position is in sync)
+    log.encryption.debug(
+      `Sender key ${distribution.keyId} from ${distribution.senderId} already stored — skipping`
+    );
+    return;
+  }
+
   const senderKey: SenderKey = {
     keyId: distribution.keyId,
     chainKey: distribution.chainKey,
