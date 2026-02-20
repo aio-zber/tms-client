@@ -60,6 +60,8 @@ interface SendMessageOptions {
   isGroup?: boolean;
   /** Current user ID (for group encryption) */
   currentUserId?: string;
+  /** Group member IDs (excluding self) — needed for sender key distribution */
+  memberIds?: string[];
 }
 
 interface UseSendMessageReturn {
@@ -126,6 +128,28 @@ export function useSendMessage(): UseSendMessageReturn {
               // sender_key_id is required for recipients to identify which sender key to use
               requestData = { ...requestData, sender_key_id: result.senderKeyId };
               encryptionMetadata.isGroup = true;
+
+              // Messenger Sender Key pattern: distribute key to members before sending.
+              // - New key (first message or post-rotation): AWAIT distribution so the
+              //   key arrives at recipients before the message does. No race condition.
+              // - Existing key (already distributed): fire-and-forget re-distribution
+              //   (handles members who may have missed the initial distribution).
+              if (options.memberIds && options.memberIds.length > 0) {
+                const distributePromise = encryptionService.distributeSenderKey(
+                  data.conversation_id,
+                  options.currentUserId,
+                  options.memberIds
+                ).catch((err: unknown) => {
+                  log.message.warn('[useSendMessage] Sender key distribution failed (non-critical):', err);
+                });
+
+                if (result.isNewKey) {
+                  // Block send until key is distributed — prevents race where message
+                  // arrives before recipients have the key to decrypt it.
+                  await distributePromise;
+                }
+                // For existing keys: distribution is fire-and-forget (already distributed)
+              }
             } else {
               // DM encryption using Double Ratchet
               const result = await encryptionService.encryptDirectMessage(

@@ -10,7 +10,7 @@
  */
 
 import { log } from '@/lib/logger';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { socketClient } from '@/lib/socket';
 import { authService } from '@/features/auth/services/authService';
@@ -128,6 +128,11 @@ export function useConversations(
   const queryClient = useQueryClient();
   const socketReady = useSocketReady();
 
+  // Track whether WS listeners are currently attached to prevent duplicates.
+  // socketReady can toggle false→true multiple times (reconnects), but we must
+  // only call socket.on() once per mount — Socket.IO accumulates listeners.
+  const listenersAttachedRef = useRef(false);
+
   // Use TanStack Query infinite query
   const {
     conversations,
@@ -151,8 +156,9 @@ export function useConversations(
   // join_conversation is still called by useMessages when the user OPENS
   // a specific chat, which triggers mark-as-read on the server.
   useEffect(() => {
-    if (!socketReady) return;
+    if (!socketReady || listenersAttachedRef.current) return;
 
+    listenersAttachedRef.current = true;
     log.message.debug('[useConversations] Attaching WebSocket listeners');
 
     let currentUserId: string | null = null;
@@ -372,6 +378,7 @@ export function useConversations(
       socketClient.off('message_status', handleMessageStatus);
       socketClient.off('conversation_updated', handleConversationUpdated);
       socket?.off('connect', handleConnect);
+      listenersAttachedRef.current = false;
     };
   }, [queryClient, socketReady, limit, type]);
 

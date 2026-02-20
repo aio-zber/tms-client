@@ -205,12 +205,15 @@ export function Chat({
     log.debug('[Chat] Sending message:', content);
 
     // Determine encryption options based on E2EE initialization status
-    let encryptionOptions: { encrypted?: boolean; recipientId?: string; isGroup?: boolean; currentUserId?: string } | undefined;
+    let encryptionOptions: { encrypted?: boolean; recipientId?: string; isGroup?: boolean; currentUserId?: string; memberIds?: string[] } | undefined;
     try {
       const { encryptionService } = await import('@/features/encryption');
       if (encryptionService.isInitialized() && conversation) {
         if (conversation.type === 'group') {
-          encryptionOptions = { encrypted: true, isGroup: true, currentUserId, recipientId: currentUserId };
+          const memberIds = conversation.members
+            .map((m: { userId: string }) => m.userId)
+            .filter((id: string) => id !== currentUserId);
+          encryptionOptions = { encrypted: true, isGroup: true, currentUserId, recipientId: currentUserId, memberIds };
         } else {
           const otherMember = conversation.members.find(m => m.userId !== currentUserId);
           if (otherMember) {

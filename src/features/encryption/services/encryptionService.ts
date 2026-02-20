@@ -676,6 +676,13 @@ export async function decryptDirectMessage(
 /**
  * Encrypt a message for a group conversation
  *
+ * Messenger Sender Key pattern:
+ * - If this is the first message (no key yet), we return isNewKey=true so the
+ *   caller can await distribution before sending. This guarantees recipients have
+ *   the key before the message arrives.
+ * - For subsequent messages the key already exists and was already distributed,
+ *   so isNewKey=false and the caller can skip redistribution.
+ *
  * @param conversationId - Group conversation ID
  * @param userId - Our user ID
  * @param content - Message content
@@ -684,10 +691,15 @@ export async function encryptGroupMessageContent(
   conversationId: string,
   userId: string,
   content: string
-): Promise<{ encryptedContent: string; senderKeyId: string }> {
+): Promise<{ encryptedContent: string; senderKeyId: string; isNewKey: boolean }> {
   if (!isInitialized()) {
     await initialize();
   }
+
+  // Check if we already have a sender key (i.e. it was previously distributed)
+  const { getSenderKey } = await import('../db/cryptoDb');
+  const existingKey = await getSenderKey(conversationId, userId);
+  const isNewKey = !existingKey || !existingKey.privateSigningKey;
 
   const plaintext = stringToBytes(content);
   const encrypted = await encryptGroupMessage(conversationId, userId, plaintext);
@@ -695,6 +707,7 @@ export async function encryptGroupMessageContent(
   return {
     encryptedContent: serializeEncryptedMessage(encrypted),
     senderKeyId: encrypted.senderKeyId ?? '',
+    isNewKey,
   };
 }
 
