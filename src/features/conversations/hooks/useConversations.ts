@@ -35,7 +35,7 @@ function updateConversationCacheWithNewMessage(
   oldData: unknown,
   conversationId: string,
   message: Record<string, unknown>,
-  isOwnMessage: boolean
+  _isOwnMessage: boolean
 ): unknown {
   if (!oldData || typeof oldData !== 'object') return oldData;
 
