@@ -72,6 +72,12 @@ const pendingX3DHHeaders = new Map<string, X3DHHeader>();
 // Encryption initialization status
 let initStatus: EncryptionInitStatus = 'uninitialized';
 
+// Per-conversation group key recovery deduplication.
+// Maps conversationId → in-flight recovery Promise (or resolved true/false).
+// Ensures tryRecoverGroupKey is called at most once per conversation per session,
+// regardless of how many messages fail concurrently.
+const groupKeyRecoveryCache = new Map<string, Promise<boolean>>();
+
 // ==================== Initialization ====================
 
 /**
@@ -880,37 +886,50 @@ async function uploadGroupKeyBackup(
  * Try to recover the group key from the server-stored conversation key backup.
  * Mirrors tryRecoverFromKeyBackup but stores under GROUP_KEY_SENTINEL.
  *
+ * Deduplicates concurrent calls per conversation — if multiple messages trigger
+ * recovery simultaneously, they all await the same single API call.
+ *
  * @returns true if group key was successfully restored
  */
-async function tryRecoverGroupKey(conversationId: string): Promise<boolean> {
-  try {
-    const response = await apiClient.get<{
-      conversation_id: string;
-      encrypted_key: string;
-      nonce: string;
-    }>(`${ENCRYPTION_API}/keys/conversation/${conversationId}`);
+function tryRecoverGroupKey(conversationId: string): Promise<boolean> {
+  const existing = groupKeyRecoveryCache.get(conversationId);
+  if (existing) return existing;
 
-    const ourKeys = await getIdentityKey();
-    if (!ourKeys) return false;
+  const recovery = (async (): Promise<boolean> => {
+    try {
+      const response = await apiClient.get<{
+        conversation_id: string;
+        encrypted_key: string;
+        nonce: string;
+      }>(`${ENCRYPTION_API}/keys/conversation/${conversationId}`);
 
-    const ciphertext = fromBase64(response.encrypted_key);
-    const nonce = fromBase64(response.nonce);
+      const ourKeys = await getIdentityKey();
+      if (!ourKeys) return false;
 
-    // Decrypt using our identity private key
-    const payload = decrypt(ciphertext, nonce, ourKeys.identityKeyPair.privateKey);
+      const ciphertext = fromBase64(response.encrypted_key);
+      const nonce = fromBase64(response.nonce);
 
-    // First 32 bytes = conversationKey; next 32 are remoteIdentityKey (zeroed for groups)
-    const conversationKey = payload.slice(0, 32);
+      // Decrypt using our identity private key
+      const payload = decrypt(ciphertext, nonce, ourKeys.identityKeyPair.privateKey);
 
-    // Generate a recovery keyId since we don't have the original
-    const groupKeyId = toHex(randomBytes(16));
-    await storeReceivedGroupKey(conversationId, conversationKey, groupKeyId);
+      // First 32 bytes = conversationKey; next 32 are remoteIdentityKey (zeroed for groups)
+      const conversationKey = payload.slice(0, 32);
 
-    log.encryption.info(`Group key recovered from backup for ${conversationId}`);
-    return true;
-  } catch {
-    return false;
-  }
+      // Generate a recovery keyId since we don't have the original
+      const groupKeyId = toHex(randomBytes(16));
+      await storeReceivedGroupKey(conversationId, conversationKey, groupKeyId);
+
+      log.encryption.info(`Group key recovered from backup for ${conversationId}`);
+      return true;
+    } catch {
+      // Remove from cache on failure so a later manual retry can try again
+      groupKeyRecoveryCache.delete(conversationId);
+      return false;
+    }
+  })();
+
+  groupKeyRecoveryCache.set(conversationId, recovery);
+  return recovery;
 }
 
 // ==================== Sender Key Distribution ====================
@@ -1067,6 +1086,7 @@ export async function clearEncryptionData(): Promise<void> {
   keyBundleCache.clear();
   pendingX3DHHeaders.clear();
   processingX3DH.clear();
+  groupKeyRecoveryCache.clear();
   initStatus = 'uninitialized';
   log.encryption.info('Encryption data cleared');
 }
