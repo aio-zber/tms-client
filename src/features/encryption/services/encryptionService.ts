@@ -17,6 +17,8 @@ import {
   generateKey,
   toBase64,
   fromBase64,
+  toHex,
+  randomBytes,
   stringToBytes,
   bytesToString,
 } from './cryptoService';
@@ -39,17 +41,19 @@ import {
 import {
   encryptGroupMessage,
   decryptGroupMessage,
-  createSenderKeyDistribution,
-  processSenderKeyDistribution,
+  getOrCreateGroupKey,
+  hasGroupKey,
+  rotateGroupKey,
+  storeReceivedGroupKey,
 } from './groupCryptoService';
 import { getIdentityKey, hasIdentityKey } from '../db/cryptoDb';
 import { useEncryptionStore } from '../stores/keyStore';
+import { GROUP_KEY_SENTINEL } from '../constants';
 import type {
   EncryptedMessage,
   FetchKeyBundleResponse,
   UploadKeyBundleRequest,
   X3DHHeader,
-  SenderKeyDistribution,
   EncryptionInitStatus,
 } from '../types';
 import { EncryptionError } from '../types';
@@ -440,6 +444,7 @@ async function uploadConversationKeyBackup(
 /**
  * Upload key backups for all existing sessions (fire-and-forget).
  * Called once on init to ensure sessions established before this feature are covered.
+ * Handles both DM sessions and GROUP sessions (stored under GROUP_KEY_SENTINEL).
  */
 async function uploadAllExistingSessionBackups(): Promise<void> {
   try {
@@ -450,11 +455,18 @@ async function uploadAllExistingSessionBackups(): Promise<void> {
     const ourKeys = await getIdentityKey();
     if (!ourKeys) return;
 
-    for (const { conversationId, session } of sessions) {
+    for (const { conversationId, userId, session } of sessions) {
       try {
+        const isGroup = userId === GROUP_KEY_SENTINEL;
+
         const payload = new Uint8Array(64);
         payload.set(session.conversationKey, 0);
-        payload.set(session.remoteIdentityKey.slice(0, 32), 32);
+        if (!isGroup) {
+          // DM: include remote identity key for identity verification
+          payload.set(session.remoteIdentityKey.slice(0, 32), 32);
+        }
+        // Group: remoteIdentityKey slot stays as zeros
+
         const { ciphertext, nonce } = encrypt(payload, ourKeys.identityKeyPair.privateKey);
 
         await apiClient.post(`${ENCRYPTION_API}/keys/conversation`, {
@@ -689,20 +701,19 @@ export async function decryptDirectMessage(
  */
 export async function encryptGroupMessageContent(
   conversationId: string,
-  userId: string,
+  _userId: string, // kept for API compatibility — group key is shared, not per-sender
   content: string
 ): Promise<{ encryptedContent: string; senderKeyId: string; isNewKey: boolean }> {
   if (!isInitialized()) {
     await initialize();
   }
 
-  // Check if we already have a sender key (i.e. it was previously distributed)
-  const { getSenderKey } = await import('../db/cryptoDb');
-  const existingKey = await getSenderKey(conversationId, userId);
-  const isNewKey = !existingKey || !existingKey.privateSigningKey;
+  // isNewKey: true if this is the first time we're encrypting for this group
+  // (no group key existed yet). Signals the caller to AWAIT distribution before sending.
+  const isNewKey = !(await hasGroupKey(conversationId));
 
   const plaintext = stringToBytes(content);
-  const encrypted = await encryptGroupMessage(conversationId, userId, plaintext);
+  const encrypted = await encryptGroupMessage(conversationId, plaintext);
 
   return {
     encryptedContent: serializeEncryptedMessage(encrypted),
@@ -720,9 +731,8 @@ export async function encryptGroupMessageContent(
  */
 export async function decryptGroupMessageContent(
   conversationId: string,
-  senderId: string,
-  encryptedContent: string,
-  advanceChain = true
+  _senderId: string, // kept for API compatibility — all members share one key
+  encryptedContent: string
 ): Promise<string> {
   if (!isInitialized()) {
     await initialize();
@@ -734,9 +744,21 @@ export async function decryptGroupMessageContent(
   }
 
   const encrypted = deserializeEncryptedMessage(encryptedContent);
-  const plaintext = await decryptGroupMessage(conversationId, senderId, encrypted, advanceChain);
 
-  return bytesToString(plaintext);
+  try {
+    const plaintext = await decryptGroupMessage(conversationId, encrypted);
+    return bytesToString(plaintext);
+  } catch (error) {
+    if (error instanceof EncryptionError && error.code === 'SESSION_NOT_FOUND') {
+      // Group key missing — try recovering from server key backup
+      const recovered = await tryRecoverGroupKey(conversationId);
+      if (recovered) {
+        const plaintext = await decryptGroupMessage(conversationId, encrypted);
+        return bytesToString(plaintext);
+      }
+    }
+    throw error;
+  }
 }
 
 // ==================== File Encryption ====================
@@ -806,56 +828,141 @@ export async function decryptFile(
   return new Blob([new Uint8Array(plaintext)], { type: mimeType });
 }
 
+// ==================== Group Key Backup & Recovery ====================
+
+/**
+ * Upload a group key backup to the server, encrypted with our own identity key.
+ * Same format as DM ConversationKeyBackup — enables cross-device recovery.
+ * Fire-and-forget — failures are non-critical.
+ */
+async function uploadGroupKeyBackup(
+  conversationId: string,
+  session: { conversationKey: Uint8Array; remoteIdentityKey: Uint8Array }
+): Promise<void> {
+  try {
+    const ourKeys = await getIdentityKey();
+    if (!ourKeys) return;
+
+    // Pack conversationKey + 32 zero bytes (remoteIdentityKey unused for groups)
+    const payload = new Uint8Array(64);
+    payload.set(session.conversationKey, 0);
+    // remoteIdentityKey slot left as zeros for group sessions
+
+    const { ciphertext, nonce } = encrypt(payload, ourKeys.identityKeyPair.privateKey);
+
+    await apiClient.post(`${ENCRYPTION_API}/keys/conversation`, {
+      conversation_id: conversationId,
+      encrypted_key: toBase64(ciphertext),
+      nonce: toBase64(nonce),
+    });
+
+    log.encryption.debug(`Group key backup uploaded for ${conversationId}`);
+  } catch (err) {
+    log.encryption.warn(`Group key backup upload failed for ${conversationId}:`, err);
+  }
+}
+
+/**
+ * Try to recover the group key from the server-stored conversation key backup.
+ * Mirrors tryRecoverFromKeyBackup but stores under GROUP_KEY_SENTINEL.
+ *
+ * @returns true if group key was successfully restored
+ */
+async function tryRecoverGroupKey(conversationId: string): Promise<boolean> {
+  try {
+    const response = await apiClient.get<{
+      conversation_id: string;
+      encrypted_key: string;
+      nonce: string;
+    }>(`${ENCRYPTION_API}/keys/conversation/${conversationId}`);
+
+    const ourKeys = await getIdentityKey();
+    if (!ourKeys) return false;
+
+    const ciphertext = fromBase64(response.encrypted_key);
+    const nonce = fromBase64(response.nonce);
+
+    // Decrypt using our identity private key
+    const payload = decrypt(ciphertext, nonce, ourKeys.identityKeyPair.privateKey);
+
+    // First 32 bytes = conversationKey; next 32 are remoteIdentityKey (zeroed for groups)
+    const conversationKey = payload.slice(0, 32);
+
+    // Generate a recovery keyId since we don't have the original
+    const groupKeyId = toHex(randomBytes(16));
+    await storeReceivedGroupKey(conversationId, conversationKey, groupKeyId);
+
+    log.encryption.info(`Group key recovered from backup for ${conversationId}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ==================== Sender Key Distribution ====================
 
 /**
- * Distribute sender key to group members
- * Should be called when joining a group or when sender key is rotated
+ * Distribute the group conversation key to all members.
+ *
+ * Reuses the existing sender-key distribution endpoint. The shared group key
+ * is carried in the `public_key` field (repurposed from signing key to group key).
+ * `chain_key` is null — there is no chain in the new static key model.
+ *
+ * The server stores this and relays it to online members via WebSocket.
+ * Offline members fetch it when they next open the group chat.
  */
 export async function distributeSenderKey(
   conversationId: string,
-  userId: string,
+  _userId: string, // kept for API compatibility
   memberIds: string[]
 ): Promise<void> {
-  // Create sender key distribution
-  const distribution = await createSenderKeyDistribution(conversationId, userId);
+  // Get or create the shared group key
+  const session = await getOrCreateGroupKey(conversationId);
 
-  // Send distribution to each member via server
-  // The server will relay this to each member
+  // Distribute via server (stored + relayed to online members)
   await apiClient.post(`${ENCRYPTION_API}/sender-keys/distribute`, {
     conversation_id: conversationId,
     recipients: memberIds,
     distribution: {
-      sender_key_id: distribution.keyId,
-      public_key: toBase64(distribution.publicSigningKey),
-      chain_key: toBase64(distribution.chainKey),
+      sender_key_id: session.groupKeyId,
+      public_key: toBase64(session.conversationKey), // group key bytes
+      chain_key: null, // no chain in static key model
     },
   });
 
-  log.encryption.info(`Distributed sender key to ${memberIds.length} members`);
+  // Upload own backup so we can recover on new devices
+  await uploadGroupKeyBackup(conversationId, session);
+
+  log.encryption.info(`Distributed group key ${session.groupKeyId} to ${memberIds.length} members for ${conversationId}`);
 }
 
 /**
- * Process received sender key distribution
+ * Process received group key distribution (WS event or server-fetch path).
+ *
+ * The `public_key` field carries the shared group conversation key bytes.
+ * The `key_id` field is the group key ID (used as senderKeyId in messages).
+ * Always stores the received key (overwrite) — the latest distributed key wins.
  */
 export async function receiveSenderKeyDistribution(
   data: {
     conversation_id: string;
-    sender_id: string;
+    sender_id?: string; // unused in static key model
     key_id: string;
-    chain_key: string;
-    public_signing_key: string;
+    chain_key?: string | null; // unused in static key model
+    public_signing_key: string; // carries group key bytes (repurposed field)
   }
 ): Promise<void> {
-  const distribution: SenderKeyDistribution = {
-    conversationId: data.conversation_id,
-    senderId: data.sender_id,
-    keyId: data.key_id,
-    chainKey: fromBase64(data.chain_key),
-    publicSigningKey: fromBase64(data.public_signing_key),
-  };
+  const groupKey = fromBase64(data.public_signing_key);
+  const groupKeyId = data.key_id;
 
-  await processSenderKeyDistribution(distribution);
+  await storeReceivedGroupKey(data.conversation_id, groupKey, groupKeyId);
+
+  // Upload own backup for cross-device recovery
+  const { getSession } = await import('../db/cryptoDb');
+  const session = await getSession(data.conversation_id, GROUP_KEY_SENTINEL);
+  if (session) {
+    await uploadGroupKeyBackup(data.conversation_id, session);
+  }
 }
 
 // ==================== Serialization ====================

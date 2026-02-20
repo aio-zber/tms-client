@@ -1,285 +1,172 @@
 /**
  * Group Crypto Service
- * Implements Sender Keys for efficient group encryption
+ * Implements static group conversation key encryption (Messenger Labyrinth-style)
  *
- * Sender Keys pattern (used by Signal, WhatsApp, Viber):
- * - Each member generates a Sender Key for each group
- * - Sender Key distributed to other members via 1:1 encrypted channels
- * - Messages encrypted once with Sender Key, all members can decrypt
- * - Re-key required when members added/removed
+ * Pattern (matches Messenger browser behavior):
+ * - One shared symmetric group key per conversation
+ * - Generated once, distributed to all members
+ * - All messages encrypted/decrypted with the same key — stateless and idempotent
+ * - Offline users can decrypt any message once they receive the key
+ * - Key rotated when group membership changes
  *
- * Benefits:
- * - O(1) encryption instead of O(n) for n members
- * - Still maintains forward secrecy via chain ratcheting
+ * Storage:
+ * - Group key stored in SESSION store with userId = GROUP_KEY_SENTINEL ('GROUP')
+ * - Backed up to server per-user via ConversationKeyBackup endpoint
+ * - Distributed to members via existing sender-key distribution endpoint (repurposed)
  */
 
 import {
-  generateSigningKeyPair,
   generateKey,
-  deriveKey,
   encrypt,
   decrypt,
-  sign,
-  randomBytes,
   toHex,
+  randomBytes,
 } from './cryptoService';
 import {
-  storeSenderKey,
-  getSenderKey,
-  getConversationSenderKeys,
+  storeSession,
+  getSession,
 } from '../db/cryptoDb';
-import { KEY_SIZE } from '../constants';
-import type {
-  SenderKey,
-  SenderKeyDistribution,
-  EncryptedMessage,
-} from '../types';
+import { KEY_SIZE, GROUP_KEY_SENTINEL } from '../constants';
+import type { ConversationKeySession, EncryptedMessage } from '../types';
 import { EncryptionError } from '../types';
 import { log } from '@/lib/logger';
 
-// KDF info for sender key chain
-const KDF_SENDER_CHAIN = 'TMA-SenderKey-Chain';
-const KDF_SENDER_MESSAGE = 'TMA-SenderKey-Message';
+// Per-group mutex: prevents concurrent generate+store races on first key creation.
+const groupKeyLocks = new Map<string, Promise<void>>();
 
-// Per-sender-key mutex: chain key read-modify-write must be serialized.
-// Key = `${conversationId}:${userId}` (same as IndexedDB record ID).
-const senderKeyLocks = new Map<string, Promise<void>>();
-
-function withSenderKeyLock<T>(
-  conversationId: string,
-  userId: string,
-  fn: () => Promise<T>
-): Promise<T> {
-  const key = `${conversationId}:${userId}`;
-  const prev = senderKeyLocks.get(key) ?? Promise.resolve();
+function withGroupKeyLock<T>(conversationId: string, fn: () => Promise<T>): Promise<T> {
+  const prev = groupKeyLocks.get(conversationId) ?? Promise.resolve();
   let resolve!: () => void;
   const next = new Promise<void>((r) => { resolve = r; });
-  senderKeyLocks.set(key, next);
+  groupKeyLocks.set(conversationId, next);
   return prev.then(fn).finally(resolve) as Promise<T>;
 }
 
-// ==================== Sender Key Generation ====================
+// ==================== Group Key Management ====================
 
 /**
- * Generate a new sender key for a group
- *
- * @param conversationId - Group conversation ID
- * @param userId - Our user ID
+ * Get the group SESSION entry for a conversation
  */
-export async function generateSenderKey(
+async function getGroupSession(conversationId: string): Promise<ConversationKeySession | null> {
+  return getSession(conversationId, GROUP_KEY_SENTINEL);
+}
+
+/**
+ * Store a group key as a SESSION entry
+ */
+async function storeGroupSession(
   conversationId: string,
-  userId: string
-): Promise<SenderKey> {
-  // Generate signing key pair for this sender key
-  const signingKeyPair = generateSigningKeyPair();
-
-  // Generate random chain key
-  const chainKey = generateKey();
-
-  // Generate unique key ID
-  const keyId = toHex(randomBytes(16));
-
-  const senderKey: SenderKey = {
-    keyId,
-    chainKey,
-    publicSigningKey: signingKeyPair.publicKey,
-    privateSigningKey: signingKeyPair.privateKey,
+  conversationKey: Uint8Array,
+  groupKeyId: string
+): Promise<ConversationKeySession> {
+  const now = Date.now();
+  const session: ConversationKeySession = {
+    conversationKey,
+    remoteIdentityKey: new Uint8Array(32), // unused for groups
+    createdAt: now,
+    updatedAt: now,
+    groupKeyId,
   };
-
-  // Store our sender key (with private key)
-  await storeSenderKey(conversationId, userId, senderKey, true);
-
-  log.encryption.info(`Generated sender key ${keyId} for group ${conversationId}`);
-
-  return senderKey;
+  await storeSession(conversationId, GROUP_KEY_SENTINEL, session);
+  return session;
 }
 
 /**
- * Get or create our sender key for a group
+ * Generate a new random group key and store it
  */
-export async function getOrCreateSenderKey(
+async function generateGroupKey(conversationId: string): Promise<ConversationKeySession> {
+  const conversationKey = generateKey(); // 32-byte random key
+  const groupKeyId = toHex(randomBytes(16)); // 32-char hex ID
+
+  const session = await storeGroupSession(conversationId, conversationKey, groupKeyId);
+  log.encryption.info(`Generated new group key ${groupKeyId} for ${conversationId}`);
+  return session;
+}
+
+/**
+ * Get or create the group key for a conversation.
+ * Thread-safe via per-group mutex.
+ */
+export function getOrCreateGroupKey(conversationId: string): Promise<ConversationKeySession> {
+  return withGroupKeyLock(conversationId, async () => {
+    const existing = await getGroupSession(conversationId);
+    if (existing) return existing;
+    return generateGroupKey(conversationId);
+  });
+}
+
+/**
+ * Check if a group key exists locally
+ */
+export async function hasGroupKey(conversationId: string): Promise<boolean> {
+  const session = await getGroupSession(conversationId);
+  return session !== null;
+}
+
+/**
+ * Rotate the group key — generates a new random key.
+ * Call when group membership changes (member added/removed).
+ */
+export async function rotateGroupKey(conversationId: string): Promise<ConversationKeySession> {
+  return withGroupKeyLock(conversationId, () => generateGroupKey(conversationId));
+}
+
+/**
+ * Store a group key received from another member (WS distribution or server fetch).
+ * Always overwrites — the latest distributed key is the authoritative one.
+ */
+export async function storeReceivedGroupKey(
   conversationId: string,
-  userId: string
-): Promise<SenderKey> {
-  const existing = await getSenderKey(conversationId, userId);
-
-  if (existing && existing.privateSigningKey) {
-    return existing;
-  }
-
-  return generateSenderKey(conversationId, userId);
-}
-
-/**
- * Create a sender key distribution message
- * This should be sent to each group member via 1:1 E2EE
- */
-export async function createSenderKeyDistribution(
-  conversationId: string,
-  userId: string
-): Promise<SenderKeyDistribution> {
-  const senderKey = await getOrCreateSenderKey(conversationId, userId);
-
-  return {
-    conversationId,
-    senderId: userId,
-    keyId: senderKey.keyId,
-    chainKey: senderKey.chainKey,
-    publicSigningKey: senderKey.publicSigningKey,
-  };
-}
-
-/**
- * Process a received sender key distribution
- * Store the sender key for decryption — but only if we don't already have
- * one with the same keyId. Overwriting an existing key would reset the
- * chain position and break decryption of subsequent messages.
- */
-export async function processSenderKeyDistribution(
-  distribution: SenderKeyDistribution
+  conversationKey: Uint8Array,
+  groupKeyId: string
 ): Promise<void> {
-  // Check if we already have a key for this sender in this group
-  const existing = await getSenderKey(distribution.conversationId, distribution.senderId);
-  if (existing && existing.keyId === distribution.keyId) {
-    // Same key already stored — do not overwrite (chain position is in sync)
-    log.encryption.debug(
-      `Sender key ${distribution.keyId} from ${distribution.senderId} already stored — skipping`
-    );
-    return;
-  }
-
-  const senderKey: SenderKey = {
-    keyId: distribution.keyId,
-    chainKey: distribution.chainKey,
-    publicSigningKey: distribution.publicSigningKey,
-    // No private key for received sender keys
-  };
-
-  await storeSenderKey(
-    distribution.conversationId,
-    distribution.senderId,
-    senderKey,
-    false
-  );
-
-  log.encryption.info(
-    `Stored sender key ${distribution.keyId} from ${distribution.senderId} for group ${distribution.conversationId}`
-  );
+  await storeGroupSession(conversationId, conversationKey, groupKeyId);
+  log.encryption.info(`Stored received group key ${groupKeyId} for ${conversationId}`);
 }
 
-// ==================== Group Message Encryption ====================
+// ==================== Message Encryption ====================
 
 /**
- * Encrypt a message for a group using sender key
+ * Encrypt a group message using the shared group key.
+ * Stateless and idempotent — no chain advancement.
  *
- * @param conversationId - Group conversation ID
- * @param userId - Our user ID (sender)
- * @param plaintext - Message to encrypt
+ * @returns encrypted message envelope with groupKeyId as senderKeyId
  */
-export function encryptGroupMessage(
+export async function encryptGroupMessage(
   conversationId: string,
-  userId: string,
   plaintext: Uint8Array
 ): Promise<EncryptedMessage> {
-  return withSenderKeyLock(conversationId, userId, () => _encryptGroupMessage(conversationId, userId, plaintext));
-}
-
-async function _encryptGroupMessage(
-  conversationId: string,
-  userId: string,
-  plaintext: Uint8Array
-): Promise<EncryptedMessage> {
-  const senderKey = await getOrCreateSenderKey(conversationId, userId);
-
-  if (!senderKey.privateSigningKey) {
-    throw new EncryptionError(
-      'Cannot encrypt: sender key missing private signing key',
-      'ENCRYPTION_FAILED'
-    );
-  }
-
-  // Derive message key from current chain key (always at index 0 = current position)
-  const { messageKey, nextChainKey } = deriveGroupMessageKey(senderKey.chainKey);
-
-  // Encrypt message
-  const { ciphertext, nonce } = encrypt(plaintext, messageKey);
-
-  // Sign the ciphertext for authenticity
-  sign(ciphertext, senderKey.privateSigningKey);
-
-  // Advance the chain key in DB — both sender and recipient advance in lockstep
-  senderKey.chainKey = nextChainKey;
-  await storeSenderKey(conversationId, userId, senderKey, true);
+  const session = await getOrCreateGroupKey(conversationId);
+  const { ciphertext, nonce } = encrypt(plaintext, session.conversationKey);
 
   return {
     version: 2,
     ciphertext,
     nonce,
-    senderKeyId: senderKey.keyId,
+    senderKeyId: session.groupKeyId,
   };
 }
 
 /**
- * Decrypt a group message using sender key
- *
- * @param conversationId - Group conversation ID
- * @param senderId - Sender's user ID
- * @param encrypted - Encrypted message
- * @param advanceChain - Whether to advance the chain key after decryption.
- *   Pass false for own messages (sender reads their own msg) — the sender's
- *   chain is advanced only during encryption, never during self-reads.
+ * Decrypt a group message using the shared group key.
+ * Fully stateless — can decrypt any message at any time.
+ * Offline users who receive the key later can decrypt all historical messages.
  */
-export function decryptGroupMessage(
+export async function decryptGroupMessage(
   conversationId: string,
-  senderId: string,
-  encrypted: EncryptedMessage,
-  advanceChain = true
+  encrypted: EncryptedMessage
 ): Promise<Uint8Array> {
-  // Only lock when we'll actually advance the chain (non-idempotent operation)
-  if (advanceChain) {
-    return withSenderKeyLock(conversationId, senderId, () =>
-      _decryptGroupMessage(conversationId, senderId, encrypted, true)
-    );
-  }
-  return _decryptGroupMessage(conversationId, senderId, encrypted, false);
-}
+  const session = await getGroupSession(conversationId);
 
-async function _decryptGroupMessage(
-  conversationId: string,
-  senderId: string,
-  encrypted: EncryptedMessage,
-  advanceChain: boolean
-): Promise<Uint8Array> {
-  if (!encrypted.senderKeyId) {
+  if (!session) {
     throw new EncryptionError(
-      'Missing sender key ID in group message',
-      'INVALID_MESSAGE_FORMAT'
-    );
-  }
-
-  const senderKey = await getSenderKey(conversationId, senderId);
-
-  if (!senderKey) {
-    throw new EncryptionError(
-      `No sender key found for ${senderId} in group ${conversationId}`,
+      `No group key found for conversation ${conversationId}`,
       'SESSION_NOT_FOUND'
     );
   }
 
-  if (senderKey.keyId !== encrypted.senderKeyId) {
-    throw new EncryptionError(
-      `Sender key ID mismatch: expected ${senderKey.keyId}, got ${encrypted.senderKeyId}`,
-      'INVALID_MESSAGE_FORMAT'
-    );
-  }
-
-  // Derive message key from current chain key (same as sender: always at current position)
-  const { messageKey, nextChainKey } = deriveGroupMessageKey(senderKey.chainKey);
-
-  // Decrypt message
-  let plaintext: Uint8Array;
   try {
-    plaintext = decrypt(encrypted.ciphertext, encrypted.nonce, messageKey);
+    return decrypt(encrypted.ciphertext, encrypted.nonce, session.conversationKey);
   } catch (error) {
     throw new EncryptionError(
       'Failed to decrypt group message',
@@ -287,103 +174,16 @@ async function _decryptGroupMessage(
       error as Error
     );
   }
-
-  // Advance the chain key in DB — keeps recipient in lockstep with sender.
-  // Skip for own-message reads: sender's chain is only advanced by encrypt.
-  if (advanceChain) {
-    senderKey.chainKey = nextChainKey;
-    await storeSenderKey(conversationId, senderId, senderKey, false);
-  }
-
-  return plaintext;
-}
-
-// ==================== Key Derivation ====================
-
-/**
- * Derive message key and next chain key from the current chain key.
- *
- * Both sender and recipient call this at their current chain position,
- * then store nextChainKey — keeping them in lockstep without needing
- * to pass a chain index in the message envelope.
- */
-function deriveGroupMessageKey(
-  chainKey: Uint8Array
-): { messageKey: Uint8Array; nextChainKey: Uint8Array } {
-  const messageKey = deriveKey(chainKey, KDF_SENDER_MESSAGE, KEY_SIZE);
-  const nextChainKey = deriveKey(chainKey, KDF_SENDER_CHAIN, KEY_SIZE);
-  return { messageKey, nextChainKey };
-}
-
-// ==================== Group Management ====================
-
-/**
- * Rotate sender key (required when members change)
- *
- * @param conversationId - Group conversation ID
- * @param userId - Our user ID
- */
-export async function rotateSenderKey(
-  conversationId: string,
-  userId: string
-): Promise<SenderKey> {
-  // Generate new sender key
-  const newSenderKey = await generateSenderKey(conversationId, userId);
-
-  log.encryption.info(`Rotated sender key for group ${conversationId}`);
-
-  return newSenderKey;
-}
-
-/**
- * Check if we have sender keys for all group members
- */
-export async function hasAllSenderKeys(
-  conversationId: string,
-  memberIds: string[]
-): Promise<boolean> {
-  const keys = await getConversationSenderKeys(conversationId);
-  const keyUserIds = new Set(keys.map((k) => k.userId));
-
-  return memberIds.every((id) => keyUserIds.has(id));
-}
-
-/**
- * Get missing sender keys (members we don't have keys for)
- */
-export async function getMissingSenderKeys(
-  conversationId: string,
-  memberIds: string[]
-): Promise<string[]> {
-  const keys = await getConversationSenderKeys(conversationId);
-  const keyUserIds = new Set(keys.map((k) => k.userId));
-
-  return memberIds.filter((id) => !keyUserIds.has(id));
-}
-
-/**
- * Check if sender key exists for a user in a group
- */
-export async function hasSenderKey(
-  conversationId: string,
-  userId: string
-): Promise<boolean> {
-  const key = await getSenderKey(conversationId, userId);
-  return key !== null;
 }
 
 // Export group crypto service object
 export const groupCryptoService = {
-  generateSenderKey,
-  getOrCreateSenderKey,
-  createSenderKeyDistribution,
-  processSenderKeyDistribution,
+  getOrCreateGroupKey,
+  hasGroupKey,
+  rotateGroupKey,
+  storeReceivedGroupKey,
   encryptGroupMessage,
   decryptGroupMessage,
-  rotateSenderKey,
-  hasAllSenderKeys,
-  getMissingSenderKeys,
-  hasSenderKey,
 };
 
 export default groupCryptoService;

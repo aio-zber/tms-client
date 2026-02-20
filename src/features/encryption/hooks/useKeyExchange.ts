@@ -16,7 +16,7 @@ import {
   receiveSenderKeyDistribution,
   distributeSenderKey,
 } from '../services/encryptionService';
-import { createSenderKeyDistribution } from '../services/groupCryptoService';
+
 import { log } from '@/lib/logger';
 
 interface UseKeyExchangeOptions {
@@ -110,16 +110,8 @@ export function useKeyExchange(options: UseKeyExchangeOptions = {}): UseKeyExcha
       log.encryption.debug('Received sender key request from:', requesterId);
 
       try {
-        // Create and send our sender key distribution
-        const distribution = await createSenderKeyDistribution(conversationId, currentUserId);
-
-        // Send via WebSocket
-        socketClient.distributeSenderKey(conversationId, {
-          key_id: distribution.keyId,
-          chain_key: Array.from(distribution.chainKey),
-          public_signing_key: Array.from(distribution.publicSigningKey),
-          recipient_id: requesterId,
-        });
+        // Distribute the shared group key to the requester via the server endpoint
+        await distributeSenderKey(conversationId, currentUserId, [requesterId]);
       } catch (error) {
         log.encryption.error('Failed to respond to sender key request:', error);
       }

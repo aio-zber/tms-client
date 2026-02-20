@@ -128,6 +128,19 @@ export async function getDb(): Promise<IDBPDatabase<any>> {
         }
         log.encryption.info('Cleared sender keys for v7 group chain key fix');
       }
+
+      // v8: Replace chain-based sender keys with static group conversation key.
+      // Group keys are now stored in the SESSION store (userId='GROUP') instead
+      // of the SENDER_KEY store. Clear old chain data so members re-establish
+      // via the new static key distribution on next group chat open.
+      if (oldVersion < 8 && oldVersion >= 1) {
+        if (db.objectStoreNames.contains(STORES.SENDER_KEY)) {
+          _transaction.objectStore(STORES.SENDER_KEY).clear();
+        }
+        // Also clear group SESSION entries from prior migration attempts
+        // (SESSION entries with userId='GROUP' from any intermediate state)
+        log.encryption.info('Cleared sender keys for v8 static group key upgrade');
+      }
     },
     blocked() {
       log.encryption.warn('Crypto DB upgrade blocked - close other tabs');
@@ -362,6 +375,7 @@ export async function storeSession(
     conversationKey: uint8ArrayToBase64(session.conversationKey),
     remoteIdentityKey: uint8ArrayToBase64(session.remoteIdentityKey),
     version: 2,
+    groupKeyId: session.groupKeyId,
     createdAt: session.createdAt,
     updatedAt: now,
   });
@@ -387,6 +401,7 @@ export async function getSession(
     remoteIdentityKey: base64ToUint8Array(stored.remoteIdentityKey),
     createdAt: stored.createdAt,
     updatedAt: stored.updatedAt,
+    groupKeyId: stored.groupKeyId,
   };
 }
 
@@ -406,6 +421,7 @@ export async function getConversationSessions(
       remoteIdentityKey: base64ToUint8Array(s.remoteIdentityKey),
       createdAt: s.createdAt,
       updatedAt: s.updatedAt,
+      groupKeyId: s.groupKeyId,
     },
   }));
 }
@@ -434,6 +450,7 @@ export async function getAllSessions(): Promise<Array<{ conversationId: string; 
       remoteIdentityKey: base64ToUint8Array(s.remoteIdentityKey),
       createdAt: s.createdAt,
       updatedAt: s.updatedAt,
+      groupKeyId: s.groupKeyId,
     },
   }));
 }

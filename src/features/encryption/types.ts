@@ -85,12 +85,18 @@ export interface X3DHHeader {
  *
  * Both parties derive the same symmetric key from the X3DH shared secret.
  * Encryption/decryption is idempotent — no sequential state machine.
+ *
+ * For GROUP sessions (userId = GROUP_KEY_SENTINEL):
+ *   - conversationKey is a randomly generated shared group key
+ *   - remoteIdentityKey is unused (zeroed)
+ *   - groupKeyId identifies which key a message was encrypted with
  */
 export interface ConversationKeySession {
-  conversationKey: Uint8Array;   // 32-byte symmetric key derived from X3DH shared secret
-  remoteIdentityKey: Uint8Array; // For identity verification / safety numbers
+  conversationKey: Uint8Array;   // 32-byte symmetric key
+  remoteIdentityKey: Uint8Array; // For identity verification / safety numbers (unused for groups)
   createdAt: number;
   updatedAt: number;
+  groupKeyId?: string;           // For group sessions: identifier sent as senderKeyId in messages
 }
 
 // ==================== Sender Key Types (for groups) ====================

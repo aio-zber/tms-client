@@ -24,6 +24,7 @@ import { isRecentlySentMessage } from './useSendMessage';
 import { nowUTC } from '@/lib/dateUtils';
 import { useUserStore } from '@/store/userStore';
 import { markMessagesAsDelivered } from '../services/messageService';
+import { conversationService } from '@/features/conversations/services/conversationService';
 import type { Message, MessageReaction } from '@/types/message';
 import { log } from '@/lib/logger';
 
@@ -125,9 +126,18 @@ async function decryptMessageContent(
     return decryptedContent;
   } catch (error) {
     log.message.error(`[useMessages] Failed to decrypt message ${message.id}:`, error);
-    // Track failure so WS echoes and refetches don't retry
-    failedDecryptionIds.add(message.id);
     const isLegacy = error instanceof Error && 'code' in error && (error as { code: string }).code === 'LEGACY_VERSION';
+    const isGroupKeyMissing = error instanceof Error && 'code' in error && (error as { code: string }).code === 'SESSION_NOT_FOUND' && isGroup;
+
+    if (isGroupKeyMissing) {
+      // Don't permanently blacklist — the Chat.tsx useEffect will fetch the sender key
+      // and then clear failedDecryptionIds + invalidate the cache for a retry.
+      // Returning a placeholder here; useMessagesQuery will re-decrypt on cache invalidation.
+      return '[Unable to decrypt message]';
+    }
+
+    // For DM failures and non-recoverable errors: track as permanently failed
+    failedDecryptionIds.add(message.id);
     return isLegacy
       ? '[This message uses an older encryption version]'
       : '[Unable to decrypt message]';
@@ -519,14 +529,18 @@ export function useMessages(
         addMessageToCache(transformedMessage);
       }
 
-      // Messenger pattern: auto-mark as delivered when received via WebSocket
-      // This ensures delivery status updates in real-time without page reload
+      // Messenger pattern: auto-mark messages as read/delivered when received via WebSocket
+      // Since useMessages is only mounted when the user has the conversation open,
+      // any incoming message is immediately visible — mark as read (not just delivered).
       if (currentUserId && transformedMessage.senderId !== currentUserId) {
-        markMessagesAsDelivered({
-          conversation_id: conversationId,
-          message_ids: [transformedMessage.id],
-        }).catch((err) => {
-          log.message.warn('Failed to mark message as delivered:', err);
+        // Mark as read (user is actively viewing this conversation)
+        conversationService.markConversationAsRead(conversationId).catch((err) => {
+          log.message.warn('Failed to mark conversation as read:', err);
+          // Fallback: at least mark as delivered
+          markMessagesAsDelivered({
+            conversation_id: conversationId,
+            message_ids: [transformedMessage.id],
+          }).catch(() => {});
         });
       }
 
@@ -553,13 +567,14 @@ export function useMessages(
             queryKey: queryKeys.conversations.all,
           });
 
-          // E2EE: Rotate sender key when group membership changes
+          // E2EE: Rotate group key when group membership changes
           if (eventType === 'member_added' || eventType === 'member_removed' || eventType === 'member_left') {
             import('@/features/encryption').then(async ({ encryptionService, groupCryptoService }) => {
               if (!encryptionService.isInitialized()) return;
               if (!currentUserId) return;
               try {
-                await groupCryptoService.rotateSenderKey(conversationId, currentUserId);
+                // Rotate to a new random key (old key stays for backward compat read, but new messages use new key)
+                await groupCryptoService.rotateGroupKey(conversationId);
                 setTimeout(async () => {
                   try {
                     const { getConversationById } = await import('@/features/conversations/services/conversationService');
@@ -568,9 +583,9 @@ export function useMessages(
                       const memberIds = conv.members.map((m: { userId: string }) => m.userId).filter((id: string) => id !== currentUserId);
                       await encryptionService.distributeSenderKey(conversationId, currentUserId, memberIds);
                     }
-                  } catch (err) { log.message.error('[useMessages] Sender key distribution failed:', err); }
+                  } catch (err) { log.message.error('[useMessages] Group key distribution failed:', err); }
                 }, 1000);
-              } catch (err) { log.message.error('[useMessages] Sender key rotation failed:', err); }
+              } catch (err) { log.message.error('[useMessages] Group key rotation failed:', err); }
             }).catch(() => {});
           }
         }

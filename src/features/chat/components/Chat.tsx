@@ -153,10 +153,11 @@ export function Chat({
     import('@/features/encryption').then(async ({ encryptionService }) => {
       if (!encryptionService.isInitialized()) return;
 
-      let newKeysStored = false;
+      let groupKeyLoaded = false;
 
-      // 1. Fetch existing sender keys from the server for all group members
-      //    (covers members who distributed their key before we connected)
+      // 1. Fetch existing group keys from the server for all group members.
+      //    In the static key model, public_signing_key carries the shared group key bytes.
+      //    chain_key is null (no chain in static model — field repurposed/unused).
       try {
         const { apiClient } = await import('@/lib/apiClient');
         const response = await apiClient.get<{
@@ -171,8 +172,9 @@ export function Chat({
 
         if (senderKeys && senderKeys.length > 0) {
           for (const sk of senderKeys) {
-            if (sk.sender_id === currentUserId) continue; // Skip own key
-            if (!sk.chain_key) continue; // Can't use key without chain_key
+            if (sk.sender_id === currentUserId) continue; // Skip own key entry
+            // Static key model: public_signing_key always carries the group key
+            // (chain_key is null — not needed for static symmetric key)
             await encryptionService.receiveSenderKeyDistribution({
               conversation_id: conversationId,
               sender_id: sk.sender_id,
@@ -180,31 +182,32 @@ export function Chat({
               public_signing_key: sk.public_signing_key,
               chain_key: sk.chain_key,
             });
-            newKeysStored = true;
+            groupKeyLoaded = true;
           }
-          log.debug(`[Chat] Loaded ${senderKeys.length} sender keys for group ${conversationId}`);
+          log.debug(`[Chat] Loaded group keys from server for ${conversationId}`);
         }
       } catch (err) {
         log.warn('[Chat] Failed to fetch group sender keys:', err);
       }
 
-      // 2. Distribute our own sender key to all members so they can decrypt our messages
+      // 2. Distribute our own group key to all members so they can decrypt our messages.
+      //    distributeSenderKey handles get-or-create, so this is idempotent.
       try {
         await encryptionService.distributeSenderKey(conversationId, currentUserId, memberIds);
-        log.debug(`[Chat] Distributed own sender key to ${memberIds.length} members`);
+        log.debug(`[Chat] Distributed group key to ${memberIds.length} members`);
       } catch (err) {
-        log.warn('[Chat] Failed to distribute own sender key:', err);
+        log.warn('[Chat] Failed to distribute group key:', err);
       }
 
-      // 3. If we got new keys, clear failed decryption cache and re-fetch messages
-      //    so previously-unreadable messages get a fresh decryption attempt.
-      if (newKeysStored) {
+      // 3. If we received a new group key, clear failed decryption cache and re-fetch.
+      //    Static key is idempotent — historical messages are now fully decryptable.
+      if (groupKeyLoaded) {
         const { clearFailedDecryptions } = await import('@/features/messaging/hooks/useMessagesQuery');
         clearFailedDecryptions();
         queryClient.invalidateQueries({
           queryKey: [...queryKeys.messages.lists(), conversationId],
         });
-        log.debug('[Chat] New sender keys stored — invalidated message cache for re-decryption');
+        log.debug('[Chat] Group key loaded — invalidated message cache for re-decryption');
       }
     }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps

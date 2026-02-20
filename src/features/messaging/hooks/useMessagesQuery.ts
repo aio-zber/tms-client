@@ -97,7 +97,7 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
 
         // 3. Sender's own messages — try decrypting (Messenger Labyrinth pattern)
         //    DM: conversation key is symmetric → recovered from server key backup on new device
-        //    Group: sender key with private key is in IndexedDB → decrypt directly; no backup
+        //    Group: shared static group key — same decryptGroupMessageContent path, recoverable from backup
         //    Fall back to placeholder if decryption fails.
         if (currentUserId && msg.senderId === currentUserId) {
           if (msg.content.startsWith('{"v":')) {
@@ -107,8 +107,7 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
                 const isGroup = !!msg.senderKeyId;
                 const decryptedContent = isGroup
                   ? await encryptionService.decryptGroupMessageContent(
-                      msg.conversationId, msg.senderId, msg.content,
-                      false // own message: don't advance sender's chain (only encryption does that)
+                      msg.conversationId, msg.senderId, msg.content
                     )
                   : await encryptionService.decryptOwnDirectMessage(
                       msg.conversationId, msg.content
@@ -118,7 +117,7 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
                 continue;
               }
             } catch {
-              // Decryption failed (no sender key / no backup) — show placeholder
+              // Decryption failed (no group key yet / no backup) — show placeholder
             }
           }
           processedMessages.push({ ...msg, content: '[Encrypted message]' });
@@ -131,7 +130,7 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
           continue;
         }
 
-        // 5. Attempt Double Ratchet decryption (recipient path) — sequential to preserve chain order
+        // 5. Attempt decryption (DM or group) — sequential to preserve chain order for DMs
         try {
           const { encryptionService } = await import('@/features/encryption');
           if (!encryptionService.isInitialized()) {
@@ -139,17 +138,18 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
             continue;
           }
 
-          // senderKeyId is the reliable group indicator — non-null only for group E2EE messages
           const isGroup = !!msg.senderKeyId;
-          const msgMeta = msg.metadata as Record<string, unknown> | undefined;
-          const encMeta = msgMeta?.encryption as Record<string, unknown> | undefined;
           let decryptedContent: string;
 
           if (isGroup) {
+            // Static group key — fully stateless, historical messages decryptable at any time
             decryptedContent = await encryptionService.decryptGroupMessageContent(
               msg.conversationId, msg.senderId, msg.content
             );
           } else {
+            const msgMeta = msg.metadata as Record<string, unknown> | undefined;
+            const encMeta = msgMeta?.encryption as Record<string, unknown> | undefined;
+
             const x3dhHeader = encMeta?.x3dhHeader
               ? encryptionService.deserializeX3DHHeader(encMeta.x3dhHeader as string)
               : undefined;
@@ -158,12 +158,12 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
             );
           }
 
-          // 6. Cache successful decryption (in-memory + IndexedDB persistent)
+          // 7. Cache successful decryption (in-memory + IndexedDB persistent)
           cacheDecryptedContent(msg.id, decryptedContent, msg.conversationId);
           processedMessages.push({ ...msg, content: decryptedContent });
         } catch (err) {
           log.message.error(`[useMessagesQuery] Failed to decrypt message ${msg.id}:`, err);
-          // 7. Mark as permanently failed — never retry this message
+          // 8. Mark as permanently failed — never retry this message
           failedDecryptionIds.add(msg.id);
           // Show friendly message for legacy v1 encryption vs genuine failures
           const isLegacy = err instanceof Error && 'code' in err && (err as { code: string }).code === 'LEGACY_VERSION';
