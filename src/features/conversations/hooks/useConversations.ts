@@ -10,8 +10,8 @@
  */
 
 import { log } from '@/lib/logger';
-import { useEffect, useRef } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useQueryClient, QueryClient } from '@tanstack/react-query';
 import { socketClient } from '@/lib/socket';
 import { authService } from '@/features/auth/services/authService';
 import { queryKeys } from '@/lib/queryClient';
@@ -121,17 +121,61 @@ function updateConversationCacheWithNewMessage(
   return { ...data, pages: newPages };
 }
 
+// ==================== Singleton Socket Manager ====================
+// useConversations is mounted in multiple components (ConversationList, UserProfileDialog).
+// If each instance registers its own socket.on('new_message') listener, Socket.IO
+// accumulates them — N instances × 1 message = N unread increments.
+//
+// Solution: a module-level singleton that registers exactly ONE socket listener
+// and fans out to all active hook instances via a Set of callbacks.
+// When the last instance unmounts, the socket listener is removed.
+
+type NewMessageCallback = (message: Record<string, unknown>) => void;
+type MessageStatusCallback = (data: Record<string, unknown>) => void;
+type ConversationUpdatedCallback = (data: Record<string, unknown>) => void;
+
+const newMessageCallbacks = new Set<NewMessageCallback>();
+const messageStatusCallbacks = new Set<MessageStatusCallback>();
+const conversationUpdatedCallbacks = new Set<ConversationUpdatedCallback>();
+
+// The actual socket handlers — registered once, fan out to all hook instances
+const socketNewMessageHandler = (message: Record<string, unknown>) => {
+  newMessageCallbacks.forEach(cb => cb(message));
+};
+const socketMessageStatusHandler = (data: Record<string, unknown>) => {
+  messageStatusCallbacks.forEach(cb => cb(data));
+};
+const socketConversationUpdatedHandler = (data: Record<string, unknown>) => {
+  conversationUpdatedCallbacks.forEach(cb => cb(data));
+};
+
+let socketListenersActive = false;
+
+function registerSocketListeners() {
+  if (socketListenersActive) return;
+  socketListenersActive = true;
+  socketClient.onNewMessage(socketNewMessageHandler);
+  socketClient.onMessageStatus(socketMessageStatusHandler);
+  socketClient.onConversationUpdated(socketConversationUpdatedHandler);
+  log.message.debug('[useConversations] Singleton socket listeners registered');
+}
+
+function unregisterSocketListeners() {
+  socketListenersActive = false;
+  socketClient.off('new_message', socketNewMessageHandler);
+  socketClient.off('message_status', socketMessageStatusHandler);
+  socketClient.off('conversation_updated', socketConversationUpdatedHandler);
+  log.message.debug('[useConversations] Singleton socket listeners removed');
+}
+
+// ==================== Hook ====================
+
 export function useConversations(
   options: UseConversationsOptions = {}
 ) {
   const { limit = 20, type, autoLoad = true } = options;
   const queryClient = useQueryClient();
   const socketReady = useSocketReady();
-
-  // Track whether WS listeners are currently attached to prevent duplicates.
-  // socketReady can toggle false→true multiple times (reconnects), but we must
-  // only call socket.on() once per mount — Socket.IO accumulates listeners.
-  const listenersAttachedRef = useRef(false);
 
   // Use TanStack Query infinite query
   const {
@@ -156,10 +200,9 @@ export function useConversations(
   // join_conversation is still called by useMessages when the user OPENS
   // a specific chat, which triggers mark-as-read on the server.
   useEffect(() => {
-    if (!socketReady || listenersAttachedRef.current) return;
+    if (!socketReady) return;
 
-    listenersAttachedRef.current = true;
-    log.message.debug('[useConversations] Attaching WebSocket listeners');
+    log.message.debug('[useConversations] Attaching instance callbacks');
 
     let currentUserId: string | null = null;
 
@@ -188,7 +231,7 @@ export function useConversations(
 
     const listQueryKey = queryKeys.conversations.list({ limit, offset: 0, type });
 
-    // Listen for new messages — direct cache update for instant sidebar rendering
+    // Per-instance new_message handler — runs inside the singleton fan-out
     const handleNewMessage = (message: Record<string, unknown>) => {
       const conversationId = (message.conversation_id || message.conversationId) as string;
       const senderId = (message.sender_id || message.senderId) as string;
@@ -210,14 +253,12 @@ export function useConversations(
 
       // For encrypted messages: attempt async decryption so the sidebar shows
       // the plaintext preview instead of the encrypted placeholder.
-      // Only for received messages (own messages are cached at send time).
       if (isEncrypted && messageId) {
         const rawContent = (message.content as string) || '';
         const metadataJson = message.metadata_json as Record<string, unknown> | undefined;
         const encMeta = metadataJson?.encryption as Record<string, unknown> | undefined;
         const x3dhHeaderRaw = encMeta?.x3dhHeader as string | undefined;
         // senderKeyId is the primary group indicator (non-null only for group E2EE).
-        // encMeta.isGroup is a secondary fallback set by the client at send time.
         const isGroup = !!(message.sender_key_id || message.senderKeyId || encMeta?.isGroup);
 
         // Only update lastMessage.content in-place — do NOT re-run the full
@@ -249,11 +290,7 @@ export function useConversations(
         import('@/features/encryption').then(async ({ encryptionService }) => {
           if (!encryptionService.isInitialized()) return;
 
-          // For own messages: use cache (populated at send time) or decrypt via key backup.
-          // The WS event may fire before useSendMessage caches the plaintext (race condition),
-          // so we retry once after a short delay for the cache, then fall back to decryption.
           if (isOwnMessage) {
-            // Short wait for send path to cache the plaintext
             await new Promise((r) => setTimeout(r, 200));
             const { cacheDecryptedContent, decryptedContentCache: cache } = await import('@/features/messaging/hooks/useMessages');
             const cached = cache.get(messageId);
@@ -261,7 +298,6 @@ export function useConversations(
               patchSidebarWithDecrypted(cached);
               return;
             }
-            // Cache miss even after delay (e.g. new device) — decrypt own DM message
             if (!isGroup) {
               try {
                 const decryptedContent = await encryptionService.decryptOwnDirectMessage(conversationId, rawContent);
@@ -304,10 +340,7 @@ export function useConversations(
       }
 
       // Background sync: invalidate to reconcile with server.
-      // IMPORTANT: Skip for encrypted messages — the server's last_message still
-      // contains raw ciphertext (encrypted: true). Invalidating here would trigger
-      // a refetch that overwrites the decrypted sidebar preview we just patched in.
-      // The decrypted patch from setQueryData above is the source of truth.
+      // Skip for encrypted messages — server's last_message still contains raw ciphertext.
       if (!isEncrypted) {
         queryClient.invalidateQueries({
           queryKey: queryKeys.conversations.all,
@@ -315,14 +348,13 @@ export function useConversations(
       }
     };
 
-    // Listen for message status updates (when messages are read)
+    // Per-instance message status handler
     const handleMessageStatus = (data: Record<string, unknown>) => {
       const status = data.status as string;
       const conversationId = data.conversation_id as string;
       const userId = data.user_id as string;
 
       if (status === 'read' && userId === currentUserId && conversationId) {
-        // Reset unread count to 0 instantly when current user marks as read
         queryClient.setQueryData(
           listQueryKey,
           (oldData: unknown) => {
@@ -354,12 +386,10 @@ export function useConversations(
       }
     };
 
-    // Listen for conversation updated events (name/avatar changes)
+    // Per-instance conversation updated handler
     const handleConversationUpdated = (data: Record<string, unknown>) => {
       const conversationId = data.conversation_id as string;
-
       log.message.debug('[useConversations] Conversation updated:', conversationId);
-
       queryClient.invalidateQueries({
         queryKey: queryKeys.conversations.detail(conversationId),
       });
@@ -368,17 +398,25 @@ export function useConversations(
       });
     };
 
-    socketClient.onNewMessage(handleNewMessage);
-    socketClient.onMessageStatus(handleMessageStatus);
-    socketClient.onConversationUpdated(handleConversationUpdated);
+    // Register this instance's callbacks into the singleton fan-out sets
+    newMessageCallbacks.add(handleNewMessage);
+    messageStatusCallbacks.add(handleMessageStatus);
+    conversationUpdatedCallbacks.add(handleConversationUpdated);
+
+    // Ensure the singleton socket listeners are active
+    registerSocketListeners();
 
     return () => {
-      log.message.debug('[useConversations] Cleaning up WebSocket listeners');
-      socketClient.off('new_message', handleNewMessage);
-      socketClient.off('message_status', handleMessageStatus);
-      socketClient.off('conversation_updated', handleConversationUpdated);
+      log.message.debug('[useConversations] Removing instance callbacks');
+      newMessageCallbacks.delete(handleNewMessage);
+      messageStatusCallbacks.delete(handleMessageStatus);
+      conversationUpdatedCallbacks.delete(handleConversationUpdated);
       socket?.off('connect', handleConnect);
-      listenersAttachedRef.current = false;
+
+      // If no more hook instances are active, remove the socket listeners entirely
+      if (newMessageCallbacks.size === 0) {
+        unregisterSocketListeners();
+      }
     };
   }, [queryClient, socketReady, limit, type]);
 
