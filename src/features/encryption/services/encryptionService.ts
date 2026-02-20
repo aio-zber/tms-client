@@ -721,7 +721,8 @@ export async function encryptGroupMessageContent(
 export async function decryptGroupMessageContent(
   conversationId: string,
   senderId: string,
-  encryptedContent: string
+  encryptedContent: string,
+  advanceChain = true
 ): Promise<string> {
   if (!isInitialized()) {
     await initialize();
@@ -733,7 +734,7 @@ export async function decryptGroupMessageContent(
   }
 
   const encrypted = deserializeEncryptedMessage(encryptedContent);
-  const plaintext = await decryptGroupMessage(conversationId, senderId, encrypted);
+  const plaintext = await decryptGroupMessage(conversationId, senderId, encrypted, advanceChain);
 
   return bytesToString(plaintext);
 }

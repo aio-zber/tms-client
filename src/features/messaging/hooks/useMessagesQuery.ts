@@ -107,7 +107,8 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
                 const isGroup = !!msg.senderKeyId;
                 const decryptedContent = isGroup
                   ? await encryptionService.decryptGroupMessageContent(
-                      msg.conversationId, msg.senderId, msg.content
+                      msg.conversationId, msg.senderId, msg.content,
+                      false // own message: don't advance sender's chain (only encryption does that)
                     )
                   : await encryptionService.decryptOwnDirectMessage(
                       msg.conversationId, msg.content

@@ -310,7 +310,15 @@ export function useConversations(
             return;
           }
 
-          // For received messages: decrypt normally
+          // For received messages: check cache first (useMessages may have already decrypted)
+          // This prevents double-advancing the group chain key on the same message.
+          const { cacheDecryptedContent, decryptedContentCache: rcvCache } = await import('@/features/messaging/hooks/useMessages');
+          const alreadyDecrypted = messageId ? rcvCache.get(messageId) : undefined;
+          if (alreadyDecrypted) {
+            patchSidebarWithDecrypted(alreadyDecrypted);
+            return;
+          }
+
           try {
             let decryptedContent: string;
             if (isGroup) {
@@ -320,7 +328,6 @@ export function useConversations(
               decryptedContent = await encryptionService.decryptDirectMessage(conversationId, senderId, rawContent, header);
             }
 
-            const { cacheDecryptedContent } = await import('@/features/messaging/hooks/useMessages');
             cacheDecryptedContent(messageId, decryptedContent, conversationId);
             patchSidebarWithDecrypted(decryptedContent);
           } catch {

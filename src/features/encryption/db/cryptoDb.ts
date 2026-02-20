@@ -118,6 +118,16 @@ export async function getDb(): Promise<IDBPDatabase<any>> {
         }
         log.encryption.info('Cleared sessions for v6 OPK fix');
       }
+
+      // v7: Fix group chain key lockstep — clear senderKeys so all parties
+      // re-distribute with the corrected encrypt/decrypt alignment.
+      // Sessions and identity keys are preserved.
+      if (oldVersion < 7 && oldVersion >= 1) {
+        if (db.objectStoreNames.contains(STORES.SENDER_KEY)) {
+          _transaction.objectStore(STORES.SENDER_KEY).clear();
+        }
+        log.encryption.info('Cleared sender keys for v7 group chain key fix');
+      }
     },
     blocked() {
       log.encryption.warn('Crypto DB upgrade blocked - close other tabs');

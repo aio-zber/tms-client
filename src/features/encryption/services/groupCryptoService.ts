@@ -41,6 +41,23 @@ import { log } from '@/lib/logger';
 const KDF_SENDER_CHAIN = 'TMA-SenderKey-Chain';
 const KDF_SENDER_MESSAGE = 'TMA-SenderKey-Message';
 
+// Per-sender-key mutex: chain key read-modify-write must be serialized.
+// Key = `${conversationId}:${userId}` (same as IndexedDB record ID).
+const senderKeyLocks = new Map<string, Promise<void>>();
+
+function withSenderKeyLock<T>(
+  conversationId: string,
+  userId: string,
+  fn: () => Promise<T>
+): Promise<T> {
+  const key = `${conversationId}:${userId}`;
+  const prev = senderKeyLocks.get(key) ?? Promise.resolve();
+  let resolve!: () => void;
+  const next = new Promise<void>((r) => { resolve = r; });
+  senderKeyLocks.set(key, next);
+  return prev.then(fn).finally(resolve) as Promise<T>;
+}
+
 // ==================== Sender Key Generation ====================
 
 /**
@@ -147,7 +164,15 @@ export async function processSenderKeyDistribution(
  * @param userId - Our user ID (sender)
  * @param plaintext - Message to encrypt
  */
-export async function encryptGroupMessage(
+export function encryptGroupMessage(
+  conversationId: string,
+  userId: string,
+  plaintext: Uint8Array
+): Promise<EncryptedMessage> {
+  return withSenderKeyLock(conversationId, userId, () => _encryptGroupMessage(conversationId, userId, plaintext));
+}
+
+async function _encryptGroupMessage(
   conversationId: string,
   userId: string,
   plaintext: Uint8Array
@@ -161,29 +186,24 @@ export async function encryptGroupMessage(
     );
   }
 
-  // Derive message key from chain key
-  const { messageKey, nextChainKey, chainIndex } = deriveGroupMessageKey(
-    senderKey.chainKey,
-    0 // Chain index stored in DB, simplified here
-  );
+  // Derive message key from current chain key (always at index 0 = current position)
+  const { messageKey, nextChainKey } = deriveGroupMessageKey(senderKey.chainKey);
 
   // Encrypt message
   const { ciphertext, nonce } = encrypt(plaintext, messageKey);
 
   // Sign the ciphertext for authenticity
-  // Note: In production, include signature in message for verification
   sign(ciphertext, senderKey.privateSigningKey);
 
-  // Update chain key (in production, persist this)
+  // Advance the chain key in DB — both sender and recipient advance in lockstep
   senderKey.chainKey = nextChainKey;
   await storeSenderKey(conversationId, userId, senderKey, true);
 
   return {
-    version: 1,
+    version: 2,
     ciphertext,
     nonce,
     senderKeyId: senderKey.keyId,
-    messageNumber: chainIndex,
   };
 }
 
@@ -193,11 +213,30 @@ export async function encryptGroupMessage(
  * @param conversationId - Group conversation ID
  * @param senderId - Sender's user ID
  * @param encrypted - Encrypted message
+ * @param advanceChain - Whether to advance the chain key after decryption.
+ *   Pass false for own messages (sender reads their own msg) — the sender's
+ *   chain is advanced only during encryption, never during self-reads.
  */
-export async function decryptGroupMessage(
+export function decryptGroupMessage(
   conversationId: string,
   senderId: string,
-  encrypted: EncryptedMessage
+  encrypted: EncryptedMessage,
+  advanceChain = true
+): Promise<Uint8Array> {
+  // Only lock when we'll actually advance the chain (non-idempotent operation)
+  if (advanceChain) {
+    return withSenderKeyLock(conversationId, senderId, () =>
+      _decryptGroupMessage(conversationId, senderId, encrypted, true)
+    );
+  }
+  return _decryptGroupMessage(conversationId, senderId, encrypted, false);
+}
+
+async function _decryptGroupMessage(
+  conversationId: string,
+  senderId: string,
+  encrypted: EncryptedMessage,
+  advanceChain: boolean
 ): Promise<Uint8Array> {
   if (!encrypted.senderKeyId) {
     throw new EncryptionError(
@@ -222,13 +261,13 @@ export async function decryptGroupMessage(
     );
   }
 
-  // Derive message key (may need to skip ahead)
-  const messageNumber = encrypted.messageNumber ?? 0;
-  const { messageKey } = deriveGroupMessageKey(senderKey.chainKey, messageNumber);
+  // Derive message key from current chain key (same as sender: always at current position)
+  const { messageKey, nextChainKey } = deriveGroupMessageKey(senderKey.chainKey);
 
   // Decrypt message
+  let plaintext: Uint8Array;
   try {
-    return decrypt(encrypted.ciphertext, encrypted.nonce, messageKey);
+    plaintext = decrypt(encrypted.ciphertext, encrypted.nonce, messageKey);
   } catch (error) {
     throw new EncryptionError(
       'Failed to decrypt group message',
@@ -236,33 +275,32 @@ export async function decryptGroupMessage(
       error as Error
     );
   }
+
+  // Advance the chain key in DB — keeps recipient in lockstep with sender.
+  // Skip for own-message reads: sender's chain is only advanced by encrypt.
+  if (advanceChain) {
+    senderKey.chainKey = nextChainKey;
+    await storeSenderKey(conversationId, senderId, senderKey, false);
+  }
+
+  return plaintext;
 }
 
 // ==================== Key Derivation ====================
 
 /**
- * Derive message key from sender chain key
+ * Derive message key and next chain key from the current chain key.
+ *
+ * Both sender and recipient call this at their current chain position,
+ * then store nextChainKey — keeping them in lockstep without needing
+ * to pass a chain index in the message envelope.
  */
 function deriveGroupMessageKey(
-  chainKey: Uint8Array,
-  targetIndex: number
-): { messageKey: Uint8Array; nextChainKey: Uint8Array; chainIndex: number } {
-  let currentChainKey = chainKey;
-  let chainIndex = 0;
-
-  // Ratchet forward to target index
-  while (chainIndex < targetIndex) {
-    currentChainKey = deriveKey(currentChainKey, KDF_SENDER_CHAIN, KEY_SIZE);
-    chainIndex++;
-  }
-
-  // Derive message key
-  const messageKey = deriveKey(currentChainKey, KDF_SENDER_MESSAGE, KEY_SIZE);
-
-  // Derive next chain key
-  const nextChainKey = deriveKey(currentChainKey, KDF_SENDER_CHAIN, KEY_SIZE);
-
-  return { messageKey, nextChainKey, chainIndex: chainIndex + 1 };
+  chainKey: Uint8Array
+): { messageKey: Uint8Array; nextChainKey: Uint8Array } {
+  const messageKey = deriveKey(chainKey, KDF_SENDER_MESSAGE, KEY_SIZE);
+  const nextChainKey = deriveKey(chainKey, KDF_SENDER_CHAIN, KEY_SIZE);
+  return { messageKey, nextChainKey };
 }
 
 // ==================== Group Management ====================
