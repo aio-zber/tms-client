@@ -4,6 +4,10 @@
  *
  * Links tab: Messenger-style OG preview cards (title, description, image, domain)
  * fetched server-side and cached in Redis for 24 h.
+ *
+ * Images: open in full-screen ImageLightbox (not downloaded)
+ * Videos: inline <video> player
+ * Encrypted messages: plaintext looked up from decryptedContentCache
  */
 
 'use client';
@@ -22,6 +26,8 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { messageService } from '@/features/messaging/services/messageService';
 import { apiClient } from '@/lib/apiClient';
+import { ImageLightbox } from '@/features/messaging/components/ImageLightbox';
+import { decryptedContentCache } from '@/features/messaging/hooks/useMessages';
 import type { Message, MessageMetadata } from '@/types/message';
 
 interface MediaHistoryTabProps {
@@ -43,6 +49,11 @@ function isImageMime(mimeType?: string) {
 
 function isVideoMime(mimeType?: string) {
   return mimeType?.startsWith('video/');
+}
+
+/** Resolve effective MIME type — encrypted messages store originalMimeType in metadata.encryption */
+function effectiveMimeType(metadata?: MessageMetadata): string | undefined {
+  return metadata?.mimeType || (metadata?.encryption as Record<string, unknown> | undefined)?.originalMimeType as string | undefined;
 }
 
 function formatBytes(bytes?: number): string {
@@ -87,6 +98,10 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
   const [previews, setPreviews] = useState<Record<string, LinkPreview>>({});
   const [previewsLoading, setPreviewsLoading] = useState(false);
 
+  // Lightbox state
+  const [lightboxImages, setLightboxImages] = useState<{ url: string; fileName?: string }[]>([]);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+
   // Fetch all messages up to 200 (4 pages of 50) — client-side filter
   const fetchAllMedia = useCallback(async () => {
     setLoading(true);
@@ -126,21 +141,28 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
 
   // Derive items per category
   const mediaMessages = messages.filter(
-    (m) => m.type === 'IMAGE' || (m.type === 'FILE' && isVideoMime(m.metadata?.mimeType))
+    (m) =>
+      m.type === 'IMAGE' ||
+      (m.type === 'FILE' && (isVideoMime(effectiveMimeType(m.metadata)) || isImageMime(effectiveMimeType(m.metadata))))
   );
 
   const fileMessages = messages.filter(
     (m) =>
       m.type === 'FILE' &&
-      !isVideoMime(m.metadata?.mimeType) &&
-      !isImageMime(m.metadata?.mimeType)
+      !isVideoMime(effectiveMimeType(m.metadata)) &&
+      !isImageMime(effectiveMimeType(m.metadata))
   );
 
+  // For links: use decryptedContentCache for encrypted messages
   const linkItems = messages
-    .filter((m) => m.type === 'TEXT' && m.content)
-    .flatMap((m) =>
-      extractUrls(m.content).map((url) => ({ url, message: m }))
-    )
+    .filter((m) => m.type === 'TEXT')
+    .flatMap((m) => {
+      const plaintext =
+        decryptedContentCache.get(m.id) ??
+        (m.encrypted ? null : m.content);
+      if (!plaintext) return [];
+      return extractUrls(plaintext).map((url) => ({ url, message: m }));
+    })
     .filter((item, idx, arr) => arr.findIndex((x) => x.url === item.url) === idx);
 
   // Fetch OG previews when the Links tab is opened
@@ -186,6 +208,24 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
     { key: 'links', label: 'Links', count: linkItems.length },
   ];
 
+  // Build lightbox image list from media messages
+  const openLightbox = (clickedMsg: Message) => {
+    const images = mediaMessages
+      .filter((m) => !isVideoMime(effectiveMimeType(m.metadata)))
+      .map((m) => ({
+        url: m.metadata?.fileUrl || '',
+        fileName: m.metadata?.fileName,
+      }))
+      .filter((img) => img.url);
+
+    const idx = mediaMessages
+      .filter((m) => !isVideoMime(effectiveMimeType(m.metadata)))
+      .findIndex((m) => m.id === clickedMsg.id);
+
+    setLightboxImages(images);
+    setLightboxIndex(Math.max(0, idx));
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -203,139 +243,166 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
   }
 
   return (
-    <div className="space-y-4">
-      {/* Sub-category tabs */}
-      <div className="flex border-b dark:border-dark-border">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setCategory(tab.key)}
-            className={`flex-1 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
-              category === tab.key
-                ? 'border-viber-purple text-viber-purple'
-                : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-dark-text-primary'
-            }`}
-          >
-            {tab.label}
-            {tab.count > 0 && (
-              <span className="ml-1 text-xs text-gray-400">({tab.count})</span>
+    <>
+      <div className="space-y-4">
+        {/* Sub-category tabs */}
+        <div className="flex border-b dark:border-dark-border">
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setCategory(tab.key)}
+              className={`flex-1 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                category === tab.key
+                  ? 'border-viber-purple text-viber-purple'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-dark-text-primary'
+              }`}
+            >
+              {tab.label}
+              {tab.count > 0 && (
+                <span className="ml-1 text-xs text-gray-400">({tab.count})</span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Media grid */}
+        {category === 'media' && (
+          <ScrollArea className="h-72">
+            {mediaMessages.length === 0 ? (
+              <EmptyState icon={<ImageIcon className="w-8 h-8" />} text="No media shared yet" />
+            ) : (
+              <div className="grid grid-cols-3 gap-1">
+                {mediaMessages.map((msg) => {
+                  const mime = effectiveMimeType(msg.metadata);
+                  const isVideo = isVideoMime(mime);
+                  const src = msg.metadata?.thumbnailUrl || msg.metadata?.fileUrl || '';
+                  const fileUrl = msg.metadata?.fileUrl || '';
+
+                  if (isVideo) {
+                    return (
+                      <div
+                        key={msg.id}
+                        className="relative aspect-square bg-gray-100 dark:bg-dark-surface rounded overflow-hidden"
+                      >
+                        <video
+                          src={fileUrl}
+                          className="w-full h-full object-cover"
+                          controls
+                          preload="metadata"
+                          title={msg.metadata?.fileName}
+                        >
+                          <Film className="w-8 h-8 text-gray-400" />
+                        </video>
+                      </div>
+                    );
+                  }
+
+                  // Image — open lightbox on click
+                  return (
+                    <button
+                      key={msg.id}
+                      onClick={() => openLightbox(msg)}
+                      className="relative aspect-square bg-gray-100 dark:bg-dark-surface rounded overflow-hidden group"
+                      title={msg.metadata?.fileName}
+                    >
+                      {src ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={src}
+                          alt={msg.metadata?.fileName || 'Image'}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <ImageIcon className="w-8 h-8 text-gray-300" />
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+                    </button>
+                  );
+                })}
+              </div>
             )}
-          </button>
-        ))}
+          </ScrollArea>
+        )}
+
+        {/* Files list */}
+        {category === 'files' && (
+          <ScrollArea className="h-72">
+            {fileMessages.length === 0 ? (
+              <EmptyState icon={<FileText className="w-8 h-8" />} text="No files shared yet" />
+            ) : (
+              <div className="space-y-1">
+                {fileMessages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-border transition-colors"
+                  >
+                    <div className="flex-shrink-0 w-9 h-9 bg-viber-purple/10 rounded-lg flex items-center justify-center">
+                      <FileText className="w-5 h-5 text-viber-purple" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {msg.metadata?.fileName || 'File'}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {formatBytes(msg.metadata?.fileSize)}
+                      </p>
+                    </div>
+                    {msg.metadata?.fileUrl && (
+                      <a
+                        href={msg.metadata.fileUrl}
+                        download={msg.metadata.fileName}
+                        className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center hover:bg-gray-100 dark:hover:bg-dark-border text-gray-400 hover:text-viber-purple transition-colors"
+                        title="Download"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Download className="w-4 h-4" />
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+        )}
+
+        {/* Links list — Messenger-style OG preview cards */}
+        {category === 'links' && (
+          <ScrollArea className="h-72">
+            {linkItems.length === 0 ? (
+              <EmptyState icon={<LinkIcon className="w-8 h-8" />} text="No links shared yet" />
+            ) : previewsLoading && Object.keys(previews).length === 0 ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {linkItems.map((item, idx) => {
+                  const preview = previews[item.url];
+                  return (
+                    <LinkPreviewCard key={idx} url={item.url} preview={preview} />
+                  );
+                })}
+              </div>
+            )}
+          </ScrollArea>
+        )}
       </div>
 
-      {/* Media grid */}
-      {category === 'media' && (
-        <ScrollArea className="h-72">
-          {mediaMessages.length === 0 ? (
-            <EmptyState icon={<ImageIcon className="w-8 h-8" />} text="No media shared yet" />
-          ) : (
-            <div className="grid grid-cols-3 gap-1">
-              {mediaMessages.map((msg) => {
-                const isVideo = isVideoMime(msg.metadata?.mimeType);
-                const src = msg.metadata?.thumbnailUrl || msg.metadata?.fileUrl || '';
-                return (
-                  <a
-                    key={msg.id}
-                    href={msg.metadata?.fileUrl || '#'}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="relative aspect-square bg-gray-100 dark:bg-dark-surface rounded overflow-hidden group"
-                    title={msg.metadata?.fileName}
-                  >
-                    {isVideo ? (
-                      <div className="w-full h-full flex items-center justify-center bg-gray-200 dark:bg-dark-border">
-                        <Film className="w-8 h-8 text-gray-400" />
-                      </div>
-                    ) : (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={src}
-                        alt={msg.metadata?.fileName || 'Image'}
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                        onError={(e) => {
-                          // Hide broken image — show icon fallback
-                          (e.currentTarget as HTMLImageElement).style.display = 'none';
-                        }}
-                      />
-                    )}
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
-                    {/* Fallback icon shown when image fails */}
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 peer-[img[style*='none']]:opacity-100 pointer-events-none">
-                      <ImageIcon className="w-8 h-8 text-gray-300" />
-                    </div>
-                  </a>
-                );
-              })}
-            </div>
-          )}
-        </ScrollArea>
+      {/* Image Lightbox */}
+      {lightboxImages.length > 0 && (
+        <ImageLightbox
+          images={lightboxImages}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxImages([])}
+        />
       )}
-
-      {/* Files list */}
-      {category === 'files' && (
-        <ScrollArea className="h-72">
-          {fileMessages.length === 0 ? (
-            <EmptyState icon={<FileText className="w-8 h-8" />} text="No files shared yet" />
-          ) : (
-            <div className="space-y-1 pr-1">
-              {fileMessages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-border transition-colors min-w-0"
-                >
-                  <div className="flex-shrink-0 w-9 h-9 bg-viber-purple/10 rounded-lg flex items-center justify-center">
-                    <FileText className="w-5 h-5 text-viber-purple" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">
-                      {msg.metadata?.fileName || 'File'}
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      {formatBytes(msg.metadata?.fileSize)}
-                    </p>
-                  </div>
-                  {msg.metadata?.fileUrl && (
-                    <a
-                      href={msg.metadata.fileUrl}
-                      download={msg.metadata.fileName}
-                      className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center hover:bg-gray-100 dark:hover:bg-dark-border text-gray-400 hover:text-viber-purple transition-colors"
-                      title="Download"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Download className="w-4 h-4" />
-                    </a>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </ScrollArea>
-      )}
-
-      {/* Links list — Messenger-style OG preview cards */}
-      {category === 'links' && (
-        <ScrollArea className="h-72">
-          {linkItems.length === 0 ? (
-            <EmptyState icon={<LinkIcon className="w-8 h-8" />} text="No links shared yet" />
-          ) : previewsLoading && Object.keys(previews).length === 0 ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
-            </div>
-          ) : (
-            <div className="space-y-2 pr-1">
-              {linkItems.map((item, idx) => {
-                const preview = previews[item.url];
-                return (
-                  <LinkPreviewCard key={idx} url={item.url} preview={preview} />
-                );
-              })}
-            </div>
-          )}
-        </ScrollArea>
-      )}
-    </div>
+    </>
   );
 }
 

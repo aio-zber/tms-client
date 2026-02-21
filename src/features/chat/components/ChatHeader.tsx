@@ -1,6 +1,6 @@
 'use client';
 
-import { Menu, MoreVertical, Search, Users, LogOut, User, Bell, BellOff, Lock, Images } from 'lucide-react';
+import { Menu, MoreVertical, Search, Users, LogOut, User, Bell, BellOff, Lock } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { OnlineIndicator } from '@/components/ui/OnlineIndicator';
 import {
@@ -134,15 +134,6 @@ export function ChatHeader({
                 <DropdownMenuItem onClick={() => onViewProfile(otherUserId)}>
                   <User className="w-4 h-4 mr-2" />
                   View Profile
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-              </>
-            )}
-            {conversation.type === 'dm' && (
-              <>
-                <DropdownMenuItem onClick={onOpenSettings}>
-                  <Images className="w-4 h-4 mr-2" />
-                  Media & Files
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
               </>

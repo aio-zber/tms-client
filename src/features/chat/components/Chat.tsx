@@ -546,6 +546,7 @@ export function Chat({
           open={showProfileDialog}
           onOpenChange={setShowProfileDialog}
           showSendMessageButton={selectedUserProfile !== currentUserId}
+          conversationId={conversation?.type === 'dm' ? conversation?.id : undefined}
         />
 
       </div>
