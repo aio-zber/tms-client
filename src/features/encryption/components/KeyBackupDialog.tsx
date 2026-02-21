@@ -2,9 +2,12 @@
  * Key Backup Dialog
  *
  * Three modes:
- * - 'backup'  — create/update a PIN-protected backup (two-step PIN confirmation)
+ * - 'backup'  — create/update a PIN-protected backup
  * - 'restore' — enter PIN to restore keys from server backup
  * - 'manage'  — unified view with tab switcher (backup + restore in one dialog)
+ *
+ * Backup flow: verify account password → enter PIN → confirm PIN → encrypt + upload
+ * Restore flow: enter PIN → decrypt (PIN itself proves identity)
  *
  * Viber-style: 6-digit PIN with show/hide toggle, loading during Argon2id KDF
  */
@@ -25,6 +28,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import toast from 'react-hot-toast';
 import { PIN_LENGTH } from '../constants';
+import { STORAGE_KEYS, getApiBaseUrl } from '@/lib/constants';
 
 interface KeyBackupDialogProps {
   open: boolean;
@@ -36,6 +40,38 @@ interface KeyBackupDialogProps {
   disableClose?: boolean;
   /** Pre-select which tab opens in 'manage' mode. Defaults to 'backup'. */
   hasExistingBackup?: boolean;
+}
+
+type Step = 'verify_password' | 'enter' | 'confirm';
+
+async function verifyAccountPassword(password: string): Promise<void> {
+  // Get user email from stored user data or /users/me
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || getApiBaseUrl();
+  const jwtToken = localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+
+  // Fetch email from /users/me
+  const meRes = await fetch(`${apiBaseUrl}/users/me`, {
+    headers: { Authorization: `Bearer ${jwtToken}` },
+  });
+  if (!meRes.ok) throw new Error('Could not retrieve account info');
+  const me = await meRes.json();
+  const email: string = me.email;
+
+  const res = await fetch(`${apiBaseUrl}/auth/verify-password`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${jwtToken}`,
+    },
+    body: JSON.stringify({ email, password }),
+  });
+
+  if (res.status === 401) {
+    throw new Error('Incorrect password');
+  }
+  if (!res.ok) {
+    throw new Error('Verification failed. Please try again.');
+  }
 }
 
 export function KeyBackupDialog({
@@ -51,11 +87,16 @@ export function KeyBackupDialog({
     mode === 'restore' ? 'restore' : 'backup'
   );
 
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [showPin, setShowPin] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState<'enter' | 'confirm'>('enter');
+  // Backup starts with password verification; restore goes straight to PIN entry
+  const [step, setStep] = useState<Step>(
+    mode === 'restore' ? 'enter' : 'verify_password'
+  );
 
   // Effective mode: in 'manage' mode use the active tab
   const effectiveMode = mode === 'manage' ? activeTab : mode;
@@ -64,16 +105,25 @@ export function KeyBackupDialog({
   const pinsMatch = pin === confirmPin;
 
   const resetState = useCallback(() => {
+    setPassword('');
+    setShowPassword(false);
     setPin('');
     setConfirmPin('');
     setShowPin(false);
     setLoading(false);
-    setStep('enter');
-  }, []);
+    // Backup starts at password verification; restore starts at PIN entry
+    setStep(isBackup ? 'verify_password' : 'enter');
+  }, [isBackup]);
 
   // When switching tabs in manage mode, reset form state
   const switchTab = (tab: 'backup' | 'restore') => {
-    resetState();
+    setPassword('');
+    setShowPassword(false);
+    setPin('');
+    setConfirmPin('');
+    setShowPin(false);
+    setLoading(false);
+    setStep(tab === 'backup' ? 'verify_password' : 'enter');
     setActiveTab(tab);
   };
 
@@ -83,7 +133,26 @@ export function KeyBackupDialog({
     else setConfirmPin(cleaned);
   };
 
+  const handlePasswordSubmit = async () => {
+    if (!password) return;
+    setLoading(true);
+    try {
+      await verifyAccountPassword(password);
+      setStep('enter');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Verification failed';
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async () => {
+    if (step === 'verify_password') {
+      await handlePasswordSubmit();
+      return;
+    }
+
     if (!isPinValid) return;
 
     if (isBackup && step === 'enter') {
@@ -186,48 +255,79 @@ export function KeyBackupDialog({
         )}
 
         <div className="space-y-4 pt-2">
-          {/* PIN Input */}
-          <div className="space-y-2">
-            <Label htmlFor="backup-pin">
-              {step === 'confirm' ? 'Confirm PIN' : `${PIN_LENGTH}-Digit PIN`}
-            </Label>
-            <div className="relative">
-              <Input
-                id="backup-pin"
-                type={showPin ? 'text' : 'password'}
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={PIN_LENGTH}
-                placeholder={'0'.repeat(PIN_LENGTH)}
-                value={step === 'confirm' ? confirmPin : pin}
-                onChange={(e) =>
-                  handlePinChange(e.target.value, step === 'confirm' ? 'confirm' : 'pin')
-                }
-                onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
-                disabled={loading}
-                className="pr-10 text-center text-lg tracking-[0.5em] font-mono"
-                autoFocus
-              />
-              <button
-                type="button"
-                onClick={() => setShowPin(!showPin)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                tabIndex={-1}
-              >
-                {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
+          {/* Step 1 (backup only): verify account password */}
+          {isBackup && step === 'verify_password' ? (
+            <div className="space-y-2">
+              <Label htmlFor="account-password">Account Password</Label>
+              <div className="relative">
+                <Input
+                  id="account-password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Enter your account password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
+                  disabled={loading}
+                  className="pr-10"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-dark-text-secondary">
+                Confirm your identity before updating encryption keys.
+              </p>
             </div>
-            {step === 'enter' && isBackup && (
-              <p className="text-xs text-gray-500 dark:text-dark-text-secondary">
-                Choose a PIN you can remember. If you lose this PIN, you cannot recover your keys.
-              </p>
-            )}
-            {step === 'confirm' && (
-              <p className="text-xs text-gray-500 dark:text-dark-text-secondary">
-                Re-enter your PIN to confirm.
-              </p>
-            )}
-          </div>
+          ) : (
+            /* Steps 2–3: PIN entry (backup) or PIN entry (restore) */
+            <div className="space-y-2">
+              <Label htmlFor="backup-pin">
+                {step === 'confirm' ? 'Confirm PIN' : `${PIN_LENGTH}-Digit PIN`}
+              </Label>
+              <div className="relative">
+                <Input
+                  id="backup-pin"
+                  type={showPin ? 'text' : 'password'}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={PIN_LENGTH}
+                  placeholder={'0'.repeat(PIN_LENGTH)}
+                  value={step === 'confirm' ? confirmPin : pin}
+                  onChange={(e) =>
+                    handlePinChange(e.target.value, step === 'confirm' ? 'confirm' : 'pin')
+                  }
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
+                  disabled={loading}
+                  className="pr-10 text-center text-lg tracking-[0.5em] font-mono"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPin(!showPin)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  tabIndex={-1}
+                >
+                  {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {step === 'enter' && isBackup && (
+                <p className="text-xs text-gray-500 dark:text-dark-text-secondary">
+                  Choose a PIN you can remember. If you lose this PIN, you cannot recover your keys.
+                </p>
+              )}
+              {step === 'confirm' && (
+                <p className="text-xs text-gray-500 dark:text-dark-text-secondary">
+                  Re-enter your PIN to confirm.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex gap-2">
@@ -241,16 +341,33 @@ export function KeyBackupDialog({
                 Back
               </Button>
             )}
+            {step === 'enter' && isBackup && (
+              <Button
+                variant="outline"
+                onClick={() => setStep('verify_password')}
+                disabled={loading}
+                className="flex-1"
+              >
+                Back
+              </Button>
+            )}
             <Button
               onClick={handleSubmit}
-              disabled={loading || !isPinValid || (step === 'confirm' && !pinsMatch)}
+              disabled={
+                loading ||
+                (step === 'verify_password' && !password) ||
+                (step !== 'verify_password' && !isPinValid) ||
+                (step === 'confirm' && !pinsMatch)
+              }
               className="flex-1 bg-viber-purple hover:bg-viber-purple-dark text-white"
             >
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  {isBackup ? 'Encrypting...' : 'Decrypting...'}
+                  {step === 'verify_password' ? 'Verifying...' : isBackup ? 'Encrypting...' : 'Decrypting...'}
                 </>
+              ) : step === 'verify_password' ? (
+                'Verify'
               ) : isBackup ? (
                 step === 'enter' ? 'Next' : (hasExistingBackup ? 'Update Backup' : 'Create Backup')
               ) : (
