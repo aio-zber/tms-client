@@ -1,16 +1,28 @@
 /**
  * Media History Tab
  * Shows shared media in three categories: Media (images/videos), Files, Links
- * Messenger-browser pattern: fetch all messages, filter client-side, display in grid/list
+ *
+ * Links tab: Messenger-style OG preview cards (title, description, image, domain)
+ * fetched server-side and cached in Redis for 24 h.
  */
 
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Download, FileText, Link as LinkIcon, Image as ImageIcon, Film, ExternalLink, Loader2 } from 'lucide-react';
+import {
+  Download,
+  FileText,
+  Link as LinkIcon,
+  Image as ImageIcon,
+  Film,
+  ExternalLink,
+  Loader2,
+  Globe,
+} from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { messageService } from '@/features/messaging/services/messageService';
-import type { Message } from '@/types/message';
+import { apiClient } from '@/lib/apiClient';
+import type { Message, MessageMetadata } from '@/types/message';
 
 interface MediaHistoryTabProps {
   conversationId: string;
@@ -18,7 +30,7 @@ interface MediaHistoryTabProps {
 
 type MediaCategory = 'media' | 'files' | 'links';
 
-// URL regex — same approach as Messenger for detecting links in text messages
+// URL regex for detecting links in text messages
 const URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`[\]]+/gi;
 
 function extractUrls(text: string): string[] {
@@ -40,13 +52,42 @@ function formatBytes(bytes?: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/** Normalise raw API response: server returns metadata_json, Message type expects metadata */
+function normaliseMetadata(msg: Record<string, unknown>): Message {
+  const raw = msg as Record<string, unknown>;
+  return {
+    ...raw,
+    metadata: (raw.metadata_json ?? raw.metadata) as MessageMetadata | undefined,
+    conversationId: (raw.conversation_id ?? raw.conversationId) as string,
+    senderId: (raw.sender_id ?? raw.senderId) as string,
+    isEdited: (raw.is_edited ?? raw.isEdited ?? false) as boolean,
+    sequenceNumber: (raw.sequence_number ?? raw.sequenceNumber ?? 0) as number,
+    createdAt: (raw.created_at ?? raw.createdAt) as string,
+    updatedAt: (raw.updated_at ?? raw.updatedAt) as string | undefined,
+    deletedAt: (raw.deleted_at ?? raw.deletedAt) as string | undefined,
+    replyToId: (raw.reply_to_id ?? raw.replyToId) as string | undefined,
+  } as Message;
+}
+
+interface LinkPreview {
+  url: string;
+  title?: string;
+  description?: string;
+  image?: string;
+  favicon?: string;
+  domain: string;
+}
+
 export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
   const [category, setCategory] = useState<MediaCategory>('media');
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // OG previews keyed by URL
+  const [previews, setPreviews] = useState<Record<string, LinkPreview>>({});
+  const [previewsLoading, setPreviewsLoading] = useState(false);
 
-  // Fetch all messages up to 200 (Messenger pattern: client-side filter, no extra endpoint needed)
+  // Fetch all messages up to 200 (4 pages of 50) — client-side filter
   const fetchAllMedia = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -54,14 +95,17 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
       const collected: Message[] = [];
       let cursor: string | undefined;
 
-      // Paginate up to 200 messages (4 pages of 50) — sufficient for media history
       for (let i = 0; i < 4; i++) {
         const response = await messageService.getConversationMessages(conversationId, {
           limit: 50,
           cursor,
         });
 
-        const filtered = (response.data || []).filter((m: Message) => !m.deletedAt);
+        // Normalise metadata_json → metadata for each message
+        const raw = (response.data || []) as unknown as Record<string, unknown>[];
+        const filtered = raw
+          .map(normaliseMetadata)
+          .filter((m) => !m.deletedAt);
         collected.push(...filtered);
 
         if (!response.pagination?.has_more || !response.pagination?.next_cursor) break;
@@ -92,17 +136,54 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
       !isImageMime(m.metadata?.mimeType)
   );
 
-  const linkMessages = messages
-    .filter((m) => m.type === 'TEXT')
+  const linkItems = messages
+    .filter((m) => m.type === 'TEXT' && m.content)
     .flatMap((m) =>
       extractUrls(m.content).map((url) => ({ url, message: m }))
     )
-    .filter((item, idx, arr) => arr.findIndex((x) => x.url === item.url) === idx); // deduplicate
+    .filter((item, idx, arr) => arr.findIndex((x) => x.url === item.url) === idx);
+
+  // Fetch OG previews when the Links tab is opened
+  useEffect(() => {
+    if (category !== 'links' || linkItems.length === 0) return;
+
+    const unfetched = linkItems.map((i) => i.url).filter((u) => !(u in previews));
+    if (unfetched.length === 0) return;
+
+    setPreviewsLoading(true);
+
+    // Fetch all unfetched URLs in parallel (server caches in Redis so fast on repeat)
+    Promise.allSettled(
+      unfetched.map(async (url) => {
+        try {
+          const data = await apiClient.get<LinkPreview>(
+            `/messages/link-preview`,
+            { url }
+          );
+          return { url, data };
+        } catch {
+          // Fallback: just show domain
+          const domain = new URL(url).hostname;
+          return { url, data: { url, domain } as LinkPreview };
+        }
+      })
+    ).then((results) => {
+      const map: Record<string, LinkPreview> = {};
+      for (const r of results) {
+        if (r.status === 'fulfilled') {
+          map[r.value.url] = r.value.data;
+        }
+      }
+      setPreviews((prev) => ({ ...prev, ...map }));
+      setPreviewsLoading(false);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [category, linkItems.length]);
 
   const tabs: { key: MediaCategory; label: string; count: number }[] = [
     { key: 'media', label: 'Media', count: mediaMessages.length },
     { key: 'files', label: 'Files', count: fileMessages.length },
-    { key: 'links', label: 'Links', count: linkMessages.length },
+    { key: 'links', label: 'Links', count: linkItems.length },
   ];
 
   if (loading) {
@@ -173,9 +254,17 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
                         alt={msg.metadata?.fileName || 'Image'}
                         className="w-full h-full object-cover"
                         loading="lazy"
+                        onError={(e) => {
+                          // Hide broken image — show icon fallback
+                          (e.currentTarget as HTMLImageElement).style.display = 'none';
+                        }}
                       />
                     )}
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+                    {/* Fallback icon shown when image fails */}
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 peer-[img[style*='none']]:opacity-100 pointer-events-none">
+                      <ImageIcon className="w-8 h-8 text-gray-300" />
+                    </div>
                   </a>
                 );
               })}
@@ -190,11 +279,11 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
           {fileMessages.length === 0 ? (
             <EmptyState icon={<FileText className="w-8 h-8" />} text="No files shared yet" />
           ) : (
-            <div className="space-y-1">
+            <div className="space-y-1 pr-1">
               {fileMessages.map((msg) => (
                 <div
                   key={msg.id}
-                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-border transition-colors"
+                  className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-border transition-colors min-w-0"
                 >
                   <div className="flex-shrink-0 w-9 h-9 bg-viber-purple/10 rounded-lg flex items-center justify-center">
                     <FileText className="w-5 h-5 text-viber-purple" />
@@ -213,6 +302,7 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
                       download={msg.metadata.fileName}
                       className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center hover:bg-gray-100 dark:hover:bg-dark-border text-gray-400 hover:text-viber-purple transition-colors"
                       title="Download"
+                      onClick={(e) => e.stopPropagation()}
                     >
                       <Download className="w-4 h-4" />
                     </a>
@@ -224,40 +314,91 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
         </ScrollArea>
       )}
 
-      {/* Links list */}
+      {/* Links list — Messenger-style OG preview cards */}
       {category === 'links' && (
         <ScrollArea className="h-72">
-          {linkMessages.length === 0 ? (
+          {linkItems.length === 0 ? (
             <EmptyState icon={<LinkIcon className="w-8 h-8" />} text="No links shared yet" />
+          ) : previewsLoading && Object.keys(previews).length === 0 ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+            </div>
           ) : (
-            <div className="space-y-1">
-              {linkMessages.map((item, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-border transition-colors"
-                >
-                  <div className="flex-shrink-0 w-9 h-9 bg-blue-50 dark:bg-blue-950/30 rounded-lg flex items-center justify-center">
-                    <LinkIcon className="w-5 h-5 text-blue-500" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-blue-600 dark:text-blue-400 truncate">{item.url}</p>
-                  </div>
-                  <a
-                    href={item.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center hover:bg-gray-100 dark:hover:bg-dark-border text-gray-400 hover:text-blue-500 transition-colors"
-                    title="Open link"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
-                </div>
-              ))}
+            <div className="space-y-2 pr-1">
+              {linkItems.map((item, idx) => {
+                const preview = previews[item.url];
+                return (
+                  <LinkPreviewCard key={idx} url={item.url} preview={preview} />
+                );
+              })}
             </div>
           )}
         </ScrollArea>
       )}
     </div>
+  );
+}
+
+/** Messenger-style link preview card */
+function LinkPreviewCard({ url, preview }: { url: string; preview?: LinkPreview }) {
+  const domain = preview?.domain ?? (() => {
+    try { return new URL(url).hostname; } catch { return url; }
+  })();
+
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex gap-3 p-3 rounded-xl border border-gray-100 dark:border-dark-border hover:bg-gray-50 dark:hover:bg-dark-border transition-colors group min-w-0"
+    >
+      {/* Thumbnail / favicon */}
+      <div className="flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden bg-gray-100 dark:bg-dark-surface flex items-center justify-center">
+        {preview?.image ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={preview.image}
+            alt=""
+            className="w-full h-full object-cover"
+            loading="lazy"
+            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+          />
+        ) : preview?.favicon ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={preview.favicon}
+            alt=""
+            className="w-6 h-6"
+            loading="lazy"
+            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+          />
+        ) : (
+          <Globe className="w-6 h-6 text-gray-300" />
+        )}
+      </div>
+
+      {/* Text content */}
+      <div className="flex-1 min-w-0">
+        {preview?.title ? (
+          <p className="text-sm font-medium text-gray-900 dark:text-dark-text line-clamp-2 leading-snug">
+            {preview.title}
+          </p>
+        ) : (
+          <p className="text-sm text-gray-500 dark:text-dark-text-secondary truncate">{url}</p>
+        )}
+        {preview?.description && (
+          <p className="text-xs text-gray-500 dark:text-dark-text-secondary mt-0.5 line-clamp-2">
+            {preview.description}
+          </p>
+        )}
+        <div className="flex items-center gap-1 mt-1">
+          <Globe className="w-3 h-3 text-gray-400 flex-shrink-0" />
+          <span className="text-xs text-gray-400 truncate">{domain}</span>
+        </div>
+      </div>
+
+      <ExternalLink className="flex-shrink-0 w-4 h-4 text-gray-300 group-hover:text-gray-500 self-start mt-0.5 transition-colors" />
+    </a>
   );
 }
 
