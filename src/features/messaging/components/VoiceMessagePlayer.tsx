@@ -1,13 +1,15 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Play, Pause } from 'lucide-react';
+import { Play, Pause, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { log } from '@/lib/logger';
 
 interface VoiceMessagePlayerProps {
   src: string;
   duration?: number;
   isSent: boolean;
+  fileName?: string;
 }
 
 // Generate random waveform bars for visualization
@@ -30,6 +32,7 @@ export function VoiceMessagePlayer({
   src,
   duration: initialDuration,
   isSent,
+  fileName,
 }: VoiceMessagePlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -89,6 +92,26 @@ export function VoiceMessagePlayer({
       setDuration(audioRef.current.duration);
     }
   }, [initialDuration]);
+
+  // Handle download
+  const handleDownload = useCallback(async () => {
+    try {
+      const response = await fetch(src);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName || `voice_message.webm`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      log.error('[VoiceMessagePlayer] Download failed:', err);
+      // Fallback: open in new tab
+      window.open(src, '_blank', 'noopener,noreferrer');
+    }
+  }, [src, fileName]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -167,6 +190,21 @@ export function VoiceMessagePlayer({
       >
         {displayTime}
       </span>
+
+      {/* Download button */}
+      <button
+        onClick={handleDownload}
+        className={cn(
+          'flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors',
+          isSent
+            ? 'hover:bg-white/20 text-white/70 hover:text-white'
+            : 'hover:bg-viber-purple/10 text-gray-400 hover:text-viber-purple'
+        )}
+        aria-label="Download voice message"
+        title="Download"
+      >
+        <Download className="w-3.5 h-3.5" />
+      </button>
     </div>
   );
 }

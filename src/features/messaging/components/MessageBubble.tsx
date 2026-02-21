@@ -61,6 +61,7 @@ export const MessageBubble = memo(function MessageBubble({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showTimestamp, setShowTimestamp] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const timestampTapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [videoLightboxOpen, setVideoLightboxOpen] = useState(false);
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
@@ -145,6 +146,13 @@ export const MessageBubble = memo(function MessageBubble({
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Cleanup timestamp tap timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timestampTapTimeoutRef.current) clearTimeout(timestampTapTimeoutRef.current);
+    };
   }, []);
 
   // DEBUG: Log context menu props when opened
@@ -309,7 +317,6 @@ export const MessageBubble = memo(function MessageBubble({
       if (contextMenuRef.current && !contextMenuRef.current.contains(target)) {
     log.message.debug('[MessageBubble] Click outside context menu - closing');
         setContextMenu(null);
-        setShowTimestamp(false);
       }
 
       // Close old emoji picker if clicking outside
@@ -334,7 +341,6 @@ export const MessageBubble = memo(function MessageBubble({
     log.message.debug('[MessageBubble] Scroll outside emoji picker - closing context menu');
       setContextMenu(null);
       setShowEmojiPicker(false);
-      setShowTimestamp(false); // Hide timestamp on scroll
     };
 
     if (contextMenu || showEmojiPicker) {
@@ -349,7 +355,6 @@ export const MessageBubble = memo(function MessageBubble({
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    setShowTimestamp(true); // Show timestamp on right-click
 
     // Calculate viewport-aware position to prevent overflow on mobile
     const menuWidth = 200; // Approximate width including padding
@@ -387,7 +392,6 @@ export const MessageBubble = memo(function MessageBubble({
 
   const handleMenuAction = (action: () => void) => {
     setContextMenu(null);
-    setShowTimestamp(false); // Hide timestamp when menu closes
     action();
   };
 
@@ -448,6 +452,22 @@ export const MessageBubble = memo(function MessageBubble({
             isSent ? 'items-end' : 'items-start'
           }`}
           onContextMenu={handleContextMenu}
+          onMouseEnter={() => { if (!isMobile) setShowTimestamp(true); }}
+          onMouseLeave={() => { if (!isMobile) setShowTimestamp(false); }}
+          onClick={() => {
+            if (isMobile) {
+              // Single tap toggles timestamp for 3 seconds, then auto-hides
+              setShowTimestamp((prev) => {
+                if (!prev) {
+                  if (timestampTapTimeoutRef.current) clearTimeout(timestampTapTimeoutRef.current);
+                  timestampTapTimeoutRef.current = setTimeout(() => setShowTimestamp(false), 3000);
+                  return true;
+                }
+                if (timestampTapTimeoutRef.current) clearTimeout(timestampTapTimeoutRef.current);
+                return false;
+              });
+            }
+          }}
         >
           {/* Sender Name (for group chats) */}
           {showSender && !isSent && senderName && (
@@ -682,6 +702,7 @@ export const MessageBubble = memo(function MessageBubble({
                 src={decryptedFileUrl || message.metadata.fileUrl}
                 duration={message.metadata.duration}
                 isSent={isSent}
+                fileName={message.metadata.fileName}
               />
 
               {/* Status indicator */}
@@ -753,7 +774,7 @@ export const MessageBubble = memo(function MessageBubble({
           />
         )}
 
-        {/* Timestamp (outside bubble, only shown on right-click) */}
+        {/* Timestamp: shown on hover (desktop) or single tap (mobile) */}
         {showTimestamp && (
           <div className={`text-[10px] text-gray-400 dark:text-dark-text-secondary mt-1 px-1 ${isSent ? 'text-right' : 'text-left'}`}>
             {formatMessageTimestamp(message.createdAt)}

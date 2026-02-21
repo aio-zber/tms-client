@@ -47,7 +47,7 @@ const ACCEPT_ATTRIBUTE = [
 ].join(',');
 
 interface FileUploadButtonProps {
-  onFileSelect: (file: File) => void;
+  onFileSelect: (files: File[]) => void;
   disabled?: boolean;
   className?: string;
 }
@@ -89,7 +89,7 @@ export function FileUploadButton({
     return false;
   }, []);
 
-  // Handle file selection
+  // Handle file selection (supports multiple)
   const handleFileChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const files = event.target.files;
@@ -98,32 +98,29 @@ export function FileUploadButton({
         return;
       }
 
-      const file = files[0];
+      const validFiles: File[] = [];
 
-      // Validate file size
-      if (file.size > MAX_FILE_SIZE) {
-        toast.error(
-          `File too large (${formatFileSize(file.size)}). Maximum size: ${formatFileSize(MAX_FILE_SIZE)}`
-        );
-        // Reset input
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
+      for (const file of Array.from(files)) {
+        // Validate file size
+        if (file.size > MAX_FILE_SIZE) {
+          toast.error(
+            `"${file.name}" is too large (${formatFileSize(file.size)}). Maximum: ${formatFileSize(MAX_FILE_SIZE)}`
+          );
+          continue;
         }
-        return;
+
+        // Validate file type
+        if (!isValidFileType(file)) {
+          toast.error(`"${file.name}" — file type not supported: ${file.type || 'unknown'}`);
+          continue;
+        }
+
+        validFiles.push(file);
       }
 
-      // Validate file type
-      if (!isValidFileType(file)) {
-        toast.error(`File type not supported: ${file.type || 'unknown'}`);
-        // Reset input
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
-        return;
+      if (validFiles.length > 0) {
+        onFileSelect(validFiles);
       }
-
-      // File is valid - pass to parent
-      onFileSelect(file);
 
       // Reset input for next selection
       if (fileInputRef.current) {
@@ -146,6 +143,7 @@ export function FileUploadButton({
         ref={fileInputRef}
         type="file"
         accept={ACCEPT_ATTRIBUTE}
+        multiple
         onChange={handleFileChange}
         className="hidden"
         aria-hidden="true"

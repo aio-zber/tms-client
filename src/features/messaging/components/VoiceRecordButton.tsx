@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { Mic, Square, Send, Trash2, Play, Pause } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -151,17 +151,24 @@ export function VoiceRecordButton({
     }
   }, [audioBlob, conversationId, duration, replyToId, clearRecording, onSendSuccess, onVoiceUploaded]);
 
-  // Create audio URL for preview
-  const audioUrl = audioBlob ? URL.createObjectURL(audioBlob) : null;
+  // Create a stable audio URL for preview — only recreated when the blob changes
+  // Using useMemo avoids creating a new object URL on every render
+  const audioUrl = useMemo(() => {
+    if (!audioBlob) return null;
+    return URL.createObjectURL(audioBlob);
+  }, [audioBlob]);
 
-  // Clean up audio URL on unmount or when blob changes
+  // Revoke the object URL when it changes or on unmount
   useEffect(() => {
     return () => {
-      if (audioUrl) {
-        URL.revokeObjectURL(audioUrl);
-      }
+      if (audioUrl) URL.revokeObjectURL(audioUrl);
     };
   }, [audioUrl]);
+
+  // Reset playing state whenever a new recording is loaded
+  useEffect(() => {
+    setIsPreviewPlaying(false);
+  }, [audioBlob]);
 
   // Toggle preview playback
   const togglePreviewPlayback = useCallback(() => {
@@ -179,12 +186,13 @@ export function VoiceRecordButton({
   if (audioBlob && audioUrl) {
     return (
       <div className="flex items-center gap-2 bg-gray-100 dark:bg-dark-bg rounded-2xl px-3 py-2 relative">
-        {/* Hidden audio element */}
+        {/* Hidden audio element — key forces remount when URL changes so the browser loads the new blob */}
         <audio
+          key={audioUrl}
           ref={audioRef}
-          src={audioUrl}
+          src={audioUrl ?? undefined}
           onEnded={() => setIsPreviewPlaying(false)}
-          preload="metadata"
+          preload="auto"
         />
 
         {/* Play/Pause button */}

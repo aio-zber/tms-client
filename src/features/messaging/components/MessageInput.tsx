@@ -55,8 +55,9 @@ export function MessageInput({
 }: MessageInputProps) {
   const [content, setContent] = useState('');
   const [showPollCreator, setShowPollCreator] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadingIndex, setUploadingIndex] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -229,8 +230,8 @@ export function MessageInput({
 
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      // If file is selected, send file; otherwise send text (Messenger/Telegram pattern)
-      if (selectedFile) {
+      // If files are selected, send files; otherwise send text (Messenger/Telegram pattern)
+      if (selectedFiles.length > 0) {
         handleFileUpload();
       } else {
         handleSend();
@@ -258,79 +259,91 @@ export function MessageInput({
     }
   };
 
-  // Handle file selection
-  const handleFileSelect = (file: File) => {
-    setSelectedFile(file);
+  // Handle file selection (multiple files)
+  const handleFileSelect = (files: File[]) => {
+    setSelectedFiles((prev) => [...prev, ...files]);
     setUploadProgress(0);
   };
 
-  // Handle file upload
+  // Upload a single file and return the message
+  const uploadOneFile = async (file: File): Promise<void> => {
+    let fileToUpload = file;
+    let encryptionMetadata: Record<string, string> | undefined;
+    let encrypted = false;
+
+    // E2EE: Encrypt file before upload if encryption is initialized
+    try {
+      const { encryptionService } = await import('@/features/encryption');
+      if (encryptionService.isInitialized()) {
+        const { encryptedBlob, fileKey, nonce, metadata } = await encryptionService.encryptFile(file);
+        const { toBase64 } = await import('@/features/encryption/services/cryptoService');
+        fileToUpload = new File([encryptedBlob], file.name, { type: 'application/octet-stream' });
+        encryptionMetadata = {
+          fileKey: toBase64(fileKey),
+          fileNonce: toBase64(nonce),
+          originalMimeType: metadata.mimeType,
+          originalSize: String(metadata.originalSize),
+        };
+        encrypted = true;
+      }
+    } catch (encErr) {
+      log.error('[MessageInput] File encryption failed, sending unencrypted:', encErr);
+    }
+
+    const rawMessage = await messageService.sendFileMessage({
+      conversationId,
+      file: fileToUpload,
+      replyToId: replyTo?.id,
+      onProgress: (progress) => setUploadProgress(progress),
+      encrypted,
+      encryptionMetadata,
+    });
+
+    if (rawMessage && onFileUploaded) {
+      const message = transformServerMessage(rawMessage as unknown as Record<string, unknown>);
+      log.info('[MessageInput] File uploaded, adding to UI:', message.id, message.type);
+      onFileUploaded(message);
+    }
+  };
+
+  // Handle file upload — sequential for multiple files
   const handleFileUpload = async () => {
-    if (!selectedFile) return;
+    if (selectedFiles.length === 0) return;
 
     setIsUploading(true);
     setUploadProgress(0);
 
-    try {
-      let fileToUpload = selectedFile;
-      let encryptionMetadata: Record<string, string> | undefined;
-      let encrypted = false;
+    const failed: string[] = [];
 
-      // E2EE: Encrypt file before upload if encryption is initialized
-      try {
-        const { encryptionService } = await import('@/features/encryption');
-        if (encryptionService.isInitialized()) {
-          const { encryptedBlob, fileKey, nonce, metadata } = await encryptionService.encryptFile(selectedFile);
-          const { toBase64 } = await import('@/features/encryption/services/cryptoService');
-          fileToUpload = new File([encryptedBlob], selectedFile.name, { type: 'application/octet-stream' });
-          encryptionMetadata = {
-            fileKey: toBase64(fileKey),
-            fileNonce: toBase64(nonce),
-            originalMimeType: metadata.mimeType,
-            originalSize: String(metadata.originalSize),
-          };
-          encrypted = true;
-        }
-      } catch (encErr) {
-        log.error('[MessageInput] File encryption failed, sending unencrypted:', encErr);
-      }
-
-      const rawMessage = await messageService.sendFileMessage({
-        conversationId,
-        file: fileToUpload,
-        replyToId: replyTo?.id,
-        onProgress: (progress) => setUploadProgress(progress),
-        encrypted,
-        encryptionMetadata,
-      });
-
-      // Transform and add to UI immediately (Messenger/Telegram pattern)
-      if (rawMessage && onFileUploaded) {
-        const message = transformServerMessage(rawMessage as unknown as Record<string, unknown>);
-        log.info('[MessageInput] File uploaded, adding to UI:', message.id, message.type);
-        onFileUploaded(message);
-      }
-
-      // Success - clear file and reply
-      setSelectedFile(null);
+    for (let i = 0; i < selectedFiles.length; i++) {
+      setUploadingIndex(i);
       setUploadProgress(0);
-      if (onCancelReply) onCancelReply();
-      toast.success('File uploaded successfully');
-    } catch (error) {
-      log.error('Failed to upload file:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to upload file');
-    } finally {
-      setIsUploading(false);
-      // Refocus after React render cycle completes (Messenger/Telegram pattern)
-      setTimeout(() => {
-        textareaRef.current?.focus();
-      }, 0);
+      try {
+        await uploadOneFile(selectedFiles[i]);
+      } catch (error) {
+        log.error(`Failed to upload file "${selectedFiles[i].name}":`, error);
+        failed.push(selectedFiles[i].name);
+      }
     }
+
+    setIsUploading(false);
+    setSelectedFiles([]);
+    setUploadProgress(0);
+    setUploadingIndex(0);
+
+    if (failed.length === 0) {
+      if (onCancelReply) onCancelReply();
+      toast.success(selectedFiles.length > 1 ? 'Files uploaded successfully' : 'File uploaded successfully');
+    } else {
+      toast.error(`Failed to upload: ${failed.join(', ')}`);
+    }
+
+    setTimeout(() => { textareaRef.current?.focus(); }, 0);
   };
 
-  // Remove selected file
-  const handleRemoveFile = () => {
-    setSelectedFile(null);
+  // Remove a single file from the selected list
+  const handleRemoveFile = (index: number) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
     setUploadProgress(0);
   };
 
@@ -384,15 +397,18 @@ export function MessageInput({
           </div>
         )}
 
-        {/* File Preview (when file selected) */}
-        {selectedFile && (
-          <div className="mb-2">
-            <FilePreview
-              file={selectedFile}
-              uploadProgress={uploadProgress}
-              isUploading={isUploading}
-              onRemove={handleRemoveFile}
-            />
+        {/* File Previews (when files selected) */}
+        {selectedFiles.length > 0 && (
+          <div className="mb-2 flex flex-col gap-2">
+            {selectedFiles.map((file, index) => (
+              <FilePreview
+                key={`${file.name}-${index}`}
+                file={file}
+                uploadProgress={isUploading && index === uploadingIndex ? uploadProgress : 0}
+                isUploading={isUploading && index === uploadingIndex}
+                onRemove={() => handleRemoveFile(index)}
+              />
+            ))}
           </div>
         )}
 
@@ -411,7 +427,7 @@ export function MessageInput({
             <VoiceRecordButton
               conversationId={conversationId}
               replyToId={replyTo?.id}
-              disabled={disabled || isUploading || !!selectedFile || editingMessage !== undefined}
+              disabled={disabled || isUploading || selectedFiles.length > 0 || editingMessage !== undefined}
               onRecordingStart={() => setIsVoiceRecording(true)}
               onRecordingEnd={() => setIsVoiceRecording(false)}
               onSendSuccess={() => {
@@ -471,10 +487,10 @@ export function MessageInput({
 
           {/* Send/Save Button */}
           <Button
-            onClick={selectedFile ? handleFileUpload : handleSend}
+            onClick={selectedFiles.length > 0 ? handleFileUpload : handleSend}
             disabled={
-              ((!content.trim() && !selectedFile) || sending || disabled || isUploading || isVoiceRecording) ||
-              (editingMessage && content === editingMessage.content)
+              ((!content.trim() && selectedFiles.length === 0) || sending || disabled || isUploading || isVoiceRecording) ||
+              !!(editingMessage && content === editingMessage.content)
             }
             className="bg-viber-purple hover:bg-viber-purple-dark text-white rounded-full px-4 md:px-6 h-11 md:h-12 transition disabled:opacity-50"
             type="button"
