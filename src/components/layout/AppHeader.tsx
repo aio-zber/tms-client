@@ -49,7 +49,6 @@ export function AppHeader() {
   const encryptionInitStatus = useEncryptionStore((s) => s.initStatus);
   const hasBackup = useEncryptionStore((s) => s.hasBackup);
   const [showBackupDialog, setShowBackupDialog] = useState(false);
-  const [backupMode, setBackupMode] = useState<'backup' | 'restore'>('backup');
   const isE2EEReady = encryptionInitStatus === 'ready';
 
   useEffect(() => {
@@ -301,30 +300,14 @@ export function AppHeader() {
 
               <DropdownMenuItem
                 className="cursor-pointer"
-                onClick={() => {
-                  setBackupMode('backup');
-                  setShowBackupDialog(true);
-                }}
+                onClick={() => setShowBackupDialog(true)}
               >
                 <Key className="w-4 h-4 mr-3" />
-                <span>{hasBackup ? 'Update Key Backup' : 'Back Up Encryption Keys'}</span>
+                <span>Encryption Keys</span>
                 {!hasBackup && (
                   <div className="ml-auto w-2 h-2 rounded-full bg-orange-400" />
                 )}
               </DropdownMenuItem>
-
-              {hasBackup && (
-                <DropdownMenuItem
-                  className="cursor-pointer"
-                  onClick={() => {
-                    setBackupMode('restore');
-                    setShowBackupDialog(true);
-                  }}
-                >
-                  <Shield className="w-4 h-4 mr-3" />
-                  <span>Restore Encryption Keys</span>
-                </DropdownMenuItem>
-              )}
             </>
           )}
 
@@ -352,18 +335,20 @@ export function AppHeader() {
         </DialogContent>
       </Dialog>
 
-      {/* Key Backup/Restore Dialog */}
+      {/* Unified Encryption Keys Dialog (backup + restore in one) */}
       <KeyBackupDialog
         open={showBackupDialog}
         onOpenChange={setShowBackupDialog}
-        mode={backupMode}
+        mode="manage"
+        hasExistingBackup={hasBackup === true}
         onComplete={async () => {
-          if (backupMode === 'restore') {
-            try {
-              const { encryptionService } = await import('@/features/encryption');
+          // Re-initialize encryption after restore so messages decrypt immediately
+          try {
+            const { encryptionService } = await import('@/features/encryption');
+            if (!encryptionService.isInitialized()) {
               await encryptionService.initialize();
-            } catch { /* will retry on next message */ }
-          }
+            }
+          } catch { /* will retry on next message */ }
           useEncryptionStore.getState().setHasBackup(true);
         }}
       />

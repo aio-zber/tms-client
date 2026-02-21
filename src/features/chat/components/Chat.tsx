@@ -32,7 +32,6 @@ import { ChatHeader } from './ChatHeader';
 import { UserProfileDialog } from '@/features/users/components/UserProfileDialog';
 import { useEncryptionStore } from '@/features/encryption/stores/keyStore';
 import { KeyChangeBanner } from '@/features/encryption/components/KeyChangeBanner';
-import { KeyBackupDialog } from '@/features/encryption/components/KeyBackupDialog';
 
 interface ChatProps {
   conversationId: string;
@@ -71,14 +70,10 @@ export function Chat({
   useSocket(); // Initialize WebSocket connection
   useConversationEvents({ conversationId }); // Handle real-time conversation updates
 
-  // E2EE: Key change detection and backup prompts
+  // E2EE: Key change detection (backup prompts moved to EncryptionGate)
   const encryptionInitStatus = useEncryptionStore((s) => s.initStatus);
   const identityKeyChanges = useEncryptionStore((s) => s.identityKeyChanges);
-  const hasBackup = useEncryptionStore((s) => s.hasBackup);
   const clearIdentityKeyChanged = useEncryptionStore((s) => s.clearIdentityKeyChanged);
-
-  const [showBackupDialog, setShowBackupDialog] = useState(false);
-  const [backupMode, setBackupMode] = useState<'backup' | 'restore'>('backup');
 
   // Determine if other user's key changed (DM only)
   const otherDmUserId = conversation?.type === 'dm'
@@ -89,42 +84,8 @@ export function Chat({
     : '';
   const keyChanged = otherDmUserId ? (identityKeyChanges.get(otherDmUserId) ?? false) : false;
 
-  // NOTE: Restore dialog moved to EncryptionGate (app-level, Messenger pattern).
-  // Chat.tsx only handles backup prompts now.
-
-  // Prompt for backup if no backup exists and E2EE is ready
-  // Viber pattern: delay prompt so user can start chatting first
-  const [backupPromptShown, setBackupPromptShown] = useState(false);
-  useEffect(() => {
-    // Check if user already dismissed/completed backup in this session
-    const BACKUP_PROMPT_KEY = 'tma_backup_prompt_dismissed';
-    const alreadyDismissed = sessionStorage.getItem(BACKUP_PROMPT_KEY) === 'true';
-
-    log.debug('[Chat] Backup prompt check:', {
-      encryptionInitStatus,
-      hasBackup,
-      backupPromptShown,
-      alreadyDismissed,
-    });
-
-    if (
-      encryptionInitStatus === 'ready' &&
-      hasBackup === false &&
-      !backupPromptShown &&
-      !alreadyDismissed
-    ) {
-      log.debug('[Chat] Showing backup prompt in 3 seconds...');
-      // Delay 3 seconds so user can start chatting first (Viber-style)
-      const timer = setTimeout(() => {
-        log.debug('[Chat] Showing backup dialog now');
-        setBackupPromptShown(true);
-        setBackupMode('backup');
-        setShowBackupDialog(true);
-      }, 3000);
-
-      return () => clearTimeout(timer);
-    }
-  }, [encryptionInitStatus, hasBackup, backupPromptShown]);
+  // NOTE: Backup onboarding and restore prompts are both handled by EncryptionGate
+  // (app-level, fires right after login — Messenger pattern).
 
   // Mark conversation as read when opening (Messenger-style pattern)
   // This triggers the backend to update all unread messages to READ status
@@ -587,23 +548,6 @@ export function Chat({
           showSendMessageButton={selectedUserProfile !== currentUserId}
         />
 
-        {/* Key Backup/Restore Dialog */}
-        <KeyBackupDialog
-          open={showBackupDialog}
-          onOpenChange={(open) => {
-            setShowBackupDialog(open);
-            // Mark as dismissed when user closes dialog (don't nag again this session)
-            if (!open && backupMode === 'backup') {
-              sessionStorage.setItem('tma_backup_prompt_dismissed', 'true');
-            }
-          }}
-          mode={backupMode}
-          onComplete={async () => {
-            // Mark as complete (don't prompt again this session)
-            sessionStorage.setItem('tma_backup_prompt_dismissed', 'true');
-            useEncryptionStore.getState().setHasBackup(true);
-          }}
-        />
       </div>
     </>
   );
