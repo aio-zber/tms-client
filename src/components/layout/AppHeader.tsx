@@ -30,7 +30,6 @@ import {
   LogOut,
   ChevronDown,
   Settings,
-  Shield,
   Key,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
