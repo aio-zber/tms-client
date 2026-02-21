@@ -178,6 +178,12 @@ export function transformServerMessage(wsMessage: Record<string, unknown>): Mess
     createdAt: (r.created_at || r.createdAt) as string,
   }));
 
+  // Transform nested reply_to object if present (server includes full object in broadcast)
+  const rawReplyTo = (wsMessage.reply_to || wsMessage.replyTo) as Record<string, unknown> | undefined;
+  const replyTo: Message | undefined = rawReplyTo
+    ? transformServerMessage(rawReplyTo)
+    : undefined;
+
   return {
     id: wsMessage.id as string,
     conversationId: (wsMessage.conversation_id || wsMessage.conversationId) as string,
@@ -187,6 +193,7 @@ export function transformServerMessage(wsMessage: Record<string, unknown>): Mess
     status: (wsMessage.status || 'sent') as Message['status'],
     metadata: (wsMessage.metadata_json || wsMessage.metadata) as Message['metadata'],
     replyToId: (wsMessage.reply_to_id || wsMessage.replyToId) as string | undefined,
+    replyTo,
     reactions,
     isEdited: (wsMessage.is_edited || wsMessage.isEdited || false) as boolean,
     sequenceNumber: (wsMessage.sequence_number || wsMessage.sequenceNumber || 0) as number,

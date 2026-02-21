@@ -34,6 +34,7 @@ import type { Conversation, ConversationMember } from '@/types/conversation';
 import type { UserSearchResult } from '@/types/user';
 import toast from 'react-hot-toast';
 import { Loader2 } from 'lucide-react';
+import { MediaHistoryTab } from './MediaHistoryTab';
 
 const SecurityTab = lazy(() => import('@/features/encryption/components/SecurityTab'));
 
@@ -290,7 +291,7 @@ export default function ConversationSettingsDialog({
   const currentUserMember = members.find((m: ConversationMember) => m.userId === currentUserId);
   const currentUserIsAdmin = currentUserMember?.role === 'admin';
 
-  // Check if E2EE is initialized to show Security tab
+  // Security tab: only for DMs (safety numbers are per-pair), not groups
   const [isE2EEReady, setIsE2EEReady] = useState(false);
   useEffect(() => {
     import('@/features/encryption')
@@ -299,8 +300,9 @@ export default function ConversationSettingsDialog({
       })
       .catch(() => setIsE2EEReady(false));
   }, [open]);
-  const showSecurityTab = isE2EEReady;
-  const tabCount = (isGroup ? 2 : 1) + (showSecurityTab ? 1 : 0);
+  const showSecurityTab = isE2EEReady && !isGroup;
+  // tabCount: Details + (Members if group) + Media + (Security if DM + E2EE ready)
+  const tabCount = (isGroup ? 2 : 1) + 1 + (showSecurityTab ? 1 : 0);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -316,6 +318,7 @@ export default function ConversationSettingsDialog({
           <TabsList className={`grid w-full grid-cols-${tabCount}`}>
             <TabsTrigger value="details">Details</TabsTrigger>
             {isGroup && <TabsTrigger value="members">Members ({members.length})</TabsTrigger>}
+            <TabsTrigger value="media">Media</TabsTrigger>
             {showSecurityTab && (
               <TabsTrigger value="security" className="flex items-center gap-1.5">
                 <Shield className="w-3.5 h-3.5" />
@@ -638,6 +641,11 @@ export default function ConversationSettingsDialog({
               </div>
             </TabsContent>
           )}
+
+          {/* Media History Tab */}
+          <TabsContent value="media">
+            <MediaHistoryTab conversationId={conversation.id} />
+          </TabsContent>
 
           {/* Security Tab */}
           {showSecurityTab && (
