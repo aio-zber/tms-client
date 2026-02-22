@@ -1,13 +1,9 @@
 /**
  * Media History Tab
- * Shows shared media in three categories: Media (images/videos), Files, Links
+ * Shows shared media: Media (images/videos), Files, Links
  *
- * Links tab: Messenger-style OG preview cards (title, description, image, domain)
- * fetched server-side and cached in Redis for 24 h.
- *
- * Images: open in full-screen ImageLightbox (not downloaded)
- * Videos: inline <video> player
- * Encrypted messages: plaintext looked up from decryptedContentCache
+ * All OSS media is loaded through the backend /files/proxy endpoint to bypass
+ * Alibaba OSS CORS restrictions — same pattern as MessageBubble E2EE file decryption.
  */
 
 'use client';
@@ -30,7 +26,14 @@ import { apiClient } from '@/lib/apiClient';
 import { ImageLightbox } from '@/features/messaging/components/ImageLightbox';
 import { VideoLightbox } from '@/features/messaging/components/VideoLightbox';
 import { decryptedContentCache } from '@/features/messaging/hooks/useMessages';
+import { STORAGE_KEYS } from '@/lib/constants';
 import type { Message, MessageMetadata } from '@/types/message';
+
+/** Read the auth token from localStorage (safe to call synchronously) */
+function getAuthToken(): string {
+  if (typeof window === 'undefined') return '';
+  return localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN) || '';
+}
 
 interface MediaHistoryTabProps {
   conversationId: string;
@@ -38,7 +41,6 @@ interface MediaHistoryTabProps {
 
 type MediaCategory = 'media' | 'files' | 'links';
 
-// URL regex for detecting links in text messages
 const URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`[\]]+/gi;
 
 function extractUrls(text: string): string[] {
@@ -53,9 +55,12 @@ function isVideoMime(mimeType?: string) {
   return mimeType?.startsWith('video/');
 }
 
-/** Resolve effective MIME type — encrypted messages store originalMimeType in metadata.encryption */
 function effectiveMimeType(metadata?: MessageMetadata): string | undefined {
-  return metadata?.mimeType || (metadata?.encryption as Record<string, unknown> | undefined)?.originalMimeType as string | undefined;
+  return (
+    metadata?.mimeType ||
+    (metadata?.encryption as Record<string, unknown> | undefined)
+      ?.originalMimeType as string | undefined
+  );
 }
 
 function formatBytes(bytes?: number): string {
@@ -65,21 +70,51 @@ function formatBytes(bytes?: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/** Normalise raw API response: server returns metadata_json, Message type expects metadata */
 function normaliseMetadata(msg: Record<string, unknown>): Message {
-  const raw = msg as Record<string, unknown>;
   return {
-    ...raw,
-    metadata: (raw.metadata_json ?? raw.metadata) as MessageMetadata | undefined,
-    conversationId: (raw.conversation_id ?? raw.conversationId) as string,
-    senderId: (raw.sender_id ?? raw.senderId) as string,
-    isEdited: (raw.is_edited ?? raw.isEdited ?? false) as boolean,
-    sequenceNumber: (raw.sequence_number ?? raw.sequenceNumber ?? 0) as number,
-    createdAt: (raw.created_at ?? raw.createdAt) as string,
-    updatedAt: (raw.updated_at ?? raw.updatedAt) as string | undefined,
-    deletedAt: (raw.deleted_at ?? raw.deletedAt) as string | undefined,
-    replyToId: (raw.reply_to_id ?? raw.replyToId) as string | undefined,
+    ...msg,
+    metadata: (msg.metadata_json ?? msg.metadata) as MessageMetadata | undefined,
+    conversationId: (msg.conversation_id ?? msg.conversationId) as string,
+    senderId: (msg.sender_id ?? msg.senderId) as string,
+    isEdited: (msg.is_edited ?? msg.isEdited ?? false) as boolean,
+    sequenceNumber: (msg.sequence_number ?? msg.sequenceNumber ?? 0) as number,
+    createdAt: (msg.created_at ?? msg.createdAt) as string,
+    updatedAt: (msg.updated_at ?? msg.updatedAt) as string | undefined,
+    deletedAt: (msg.deleted_at ?? msg.deletedAt) as string | undefined,
+    replyToId: (msg.reply_to_id ?? msg.replyToId) as string | undefined,
   } as Message;
+}
+
+/**
+ * Build backend proxy URL for an OSS asset.
+ * Includes ?token= so <img src> and <video src> can authenticate
+ * (browsers can't send Authorization headers for media elements).
+ */
+function makeProxyUrl(apiBase: string, ossUrl: string): string {
+  const token = getAuthToken();
+  const params = new URLSearchParams({ url: ossUrl });
+  if (token) params.set('token', token);
+  return `${apiBase}/files/proxy?${params.toString()}`;
+}
+
+async function downloadViaProxy(ossUrl: string, fileName: string) {
+  try {
+    const { getApiBaseUrl } = await import('@/lib/constants');
+    const proxyUrl = makeProxyUrl(getApiBaseUrl(), ossUrl);
+    // Token already embedded in URL via makeProxyUrl; fetch still sends it in query param
+    const res = await fetch(proxyUrl);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch {
+    window.open(ossUrl, '_blank');
+  }
 }
 
 interface LinkPreview {
@@ -96,17 +131,26 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // OG previews keyed by URL
   const [previews, setPreviews] = useState<Record<string, LinkPreview>>({});
   const [previewsLoading, setPreviewsLoading] = useState(false);
 
-  // Lightbox state
+  // Resolve the API base URL once — used to build proxy src URLs for <img>/<video>
+  const [apiBase, setApiBase] = useState('');
+  useEffect(() => {
+    import('@/lib/constants').then(({ getApiBaseUrl }) => {
+      setApiBase(getApiBaseUrl());
+    });
+  }, []);
+
   const [lightboxImages, setLightboxImages] = useState<{ url: string; fileName?: string }[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
-  // Video lightbox state
-  const [videoLightbox, setVideoLightbox] = useState<{ src: string; mimeType?: string; fileName?: string; thumbnailUrl?: string } | null>(null);
+  const [videoLightbox, setVideoLightbox] = useState<{
+    src: string;
+    mimeType?: string;
+    fileName?: string;
+    thumbnailUrl?: string;
+  } | null>(null);
 
-  // Fetch all messages up to 200 (4 pages of 50) — client-side filter
   const fetchAllMedia = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -119,14 +163,9 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
           limit: 50,
           cursor,
         });
-
-        // Normalise metadata_json → metadata for each message
         const raw = (response.data || []) as unknown as Record<string, unknown>[];
-        const filtered = raw
-          .map(normaliseMetadata)
-          .filter((m) => !m.deletedAt);
+        const filtered = raw.map(normaliseMetadata).filter((m) => !m.deletedAt);
         collected.push(...filtered);
-
         if (!response.pagination?.has_more || !response.pagination?.next_cursor) break;
         cursor = response.pagination.next_cursor;
       }
@@ -143,11 +182,12 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
     fetchAllMedia();
   }, [fetchAllMedia]);
 
-  // Derive items per category
   const mediaMessages = messages.filter(
     (m) =>
       m.type === 'IMAGE' ||
-      (m.type === 'FILE' && (isVideoMime(effectiveMimeType(m.metadata)) || isImageMime(effectiveMimeType(m.metadata))))
+      (m.type === 'FILE' &&
+        (isVideoMime(effectiveMimeType(m.metadata)) ||
+          isImageMime(effectiveMimeType(m.metadata))))
   );
 
   const fileMessages = messages.filter(
@@ -157,48 +197,36 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
       !isImageMime(effectiveMimeType(m.metadata))
   );
 
-  // For links: use decryptedContentCache for encrypted messages
   const linkItems = messages
     .filter((m) => m.type === 'TEXT')
     .flatMap((m) => {
       const plaintext =
-        decryptedContentCache.get(m.id) ??
-        (m.encrypted ? null : m.content);
+        decryptedContentCache.get(m.id) ?? (m.encrypted ? null : m.content);
       if (!plaintext) return [];
       return extractUrls(plaintext).map((url) => ({ url, message: m }));
     })
     .filter((item, idx, arr) => arr.findIndex((x) => x.url === item.url) === idx);
 
-  // Fetch OG previews when the Links tab is opened
   useEffect(() => {
     if (category !== 'links' || linkItems.length === 0) return;
-
     const unfetched = linkItems.map((i) => i.url).filter((u) => !(u in previews));
     if (unfetched.length === 0) return;
 
     setPreviewsLoading(true);
-
-    // Fetch all unfetched URLs in parallel (server caches in Redis so fast on repeat)
     Promise.allSettled(
       unfetched.map(async (url) => {
         try {
-          const data = await apiClient.get<LinkPreview>(
-            `/messages/link-preview`,
-            { url }
-          );
+          const data = await apiClient.get<LinkPreview>(`/messages/link-preview`, { url });
           return { url, data };
         } catch {
-          // Fallback: just show domain
-          const domain = new URL(url).hostname;
+          const domain = (() => { try { return new URL(url).hostname; } catch { return url; } })();
           return { url, data: { url, domain } as LinkPreview };
         }
       })
     ).then((results) => {
       const map: Record<string, LinkPreview> = {};
       for (const r of results) {
-        if (r.status === 'fulfilled') {
-          map[r.value.url] = r.value.data;
-        }
+        if (r.status === 'fulfilled') map[r.value.url] = r.value.data;
       }
       setPreviews((prev) => ({ ...prev, ...map }));
       setPreviewsLoading(false);
@@ -212,20 +240,24 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
     { key: 'links', label: 'Links', count: linkItems.length },
   ];
 
-  // Build lightbox image list from media messages
+  /** Build proxied URL for OSS assets — only once apiBase is resolved */
+  const proxied = (ossUrl?: string): string => {
+    if (!ossUrl || !apiBase) return '';
+    return makeProxyUrl(apiBase, ossUrl);
+  };
+
   const openLightbox = (clickedMsg: Message) => {
-    const images = mediaMessages
-      .filter((m) => !isVideoMime(effectiveMimeType(m.metadata)))
+    const imageMessages = mediaMessages.filter(
+      (m) => !isVideoMime(effectiveMimeType(m.metadata))
+    );
+    const images = imageMessages
       .map((m) => ({
-        url: m.metadata?.fileUrl || '',
+        url: proxied(m.metadata?.fileUrl),
         fileName: m.metadata?.fileName,
       }))
       .filter((img) => img.url);
 
-    const idx = mediaMessages
-      .filter((m) => !isVideoMime(effectiveMimeType(m.metadata)))
-      .findIndex((m) => m.id === clickedMsg.id);
-
+    const idx = imageMessages.findIndex((m) => m.id === clickedMsg.id);
     setLightboxImages(images);
     setLightboxIndex(Math.max(0, idx));
   };
@@ -248,7 +280,7 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
 
   return (
     <>
-      <div className="space-y-4">
+      <div className="space-y-3">
         {/* Sub-category tabs */}
         <div className="flex border-b dark:border-dark-border">
           {tabs.map((tab) => (
@@ -275,32 +307,33 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
             {mediaMessages.length === 0 ? (
               <EmptyState icon={<ImageIcon className="w-8 h-8" />} text="No media shared yet" />
             ) : (
-              <div className="grid grid-cols-3 gap-1">
+              <div className="grid grid-cols-3 gap-1 pr-1">
                 {mediaMessages.map((msg) => {
                   const mime = effectiveMimeType(msg.metadata);
                   const isVideo = isVideoMime(mime);
-                  const src = msg.metadata?.thumbnailUrl || msg.metadata?.fileUrl || '';
-                  const fileUrl = msg.metadata?.fileUrl || '';
+                  const ossFileUrl = msg.metadata?.fileUrl || '';
+                  const ossThumbUrl = msg.metadata?.thumbnailUrl || '';
 
                   if (isVideo) {
-                    // Show thumbnail/play-icon preview — click opens VideoLightbox (same as chat)
-                    const thumbSrc = msg.metadata?.thumbnailUrl || '';
                     return (
                       <button
                         key={msg.id}
-                        onClick={() => setVideoLightbox({
-                          src: fileUrl,
-                          mimeType: mime,
-                          fileName: msg.metadata?.fileName,
-                          thumbnailUrl: msg.metadata?.thumbnailUrl,
-                        })}
+                        onClick={() =>
+                          setVideoLightbox({
+                            // Pass proxied URLs to VideoLightbox
+                            src: proxied(ossFileUrl),
+                            mimeType: mime,
+                            fileName: msg.metadata?.fileName,
+                            thumbnailUrl: proxied(ossThumbUrl) || undefined,
+                          })
+                        }
                         className="relative aspect-square bg-gray-900 rounded overflow-hidden group"
                         title={msg.metadata?.fileName}
                       >
-                        {thumbSrc ? (
+                        {ossThumbUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
-                            src={thumbSrc}
+                            src={proxied(ossThumbUrl)}
                             alt={msg.metadata?.fileName || 'Video'}
                             className="w-full h-full object-cover opacity-80"
                             loading="lazy"
@@ -310,7 +343,6 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
                             <Film className="w-8 h-8 text-gray-500" />
                           </div>
                         )}
-                        {/* Play icon overlay */}
                         <div className="absolute inset-0 flex items-center justify-center">
                           <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center group-hover:bg-black/80 transition-colors">
                             <Play className="w-5 h-5 text-white fill-white ml-0.5" />
@@ -320,11 +352,11 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
                     );
                   }
 
-                  // Image — open lightbox on click
+                  // Image — proxied src, open lightbox on click
                   return (
                     <MediaImageCell
                       key={msg.id}
-                      src={src}
+                      src={proxied(ossFileUrl) || proxied(ossThumbUrl)}
                       fileName={msg.metadata?.fileName}
                       onClick={() => openLightbox(msg)}
                     />
@@ -341,11 +373,11 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
             {fileMessages.length === 0 ? (
               <EmptyState icon={<FileText className="w-8 h-8" />} text="No files shared yet" />
             ) : (
-              <div className="space-y-1">
+              <div className="space-y-1 pr-1">
                 {fileMessages.map((msg) => (
                   <div
                     key={msg.id}
-                    className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-border transition-colors"
+                    className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-border transition-colors overflow-hidden"
                   >
                     <div className="flex-shrink-0 w-9 h-9 bg-viber-purple/10 rounded-lg flex items-center justify-center">
                       <FileText className="w-5 h-5 text-viber-purple" />
@@ -360,30 +392,14 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
                     </div>
                     {msg.metadata?.fileUrl && (
                       <button
-                        className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center hover:bg-gray-100 dark:hover:bg-dark-border text-gray-400 hover:text-viber-purple transition-colors"
+                        className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 dark:hover:bg-dark-border text-gray-400 hover:text-viber-purple transition-colors"
                         title="Download"
-                        onClick={async (e) => {
+                        onClick={(e) => {
                           e.stopPropagation();
-                          try {
-                            const { getApiBaseUrl } = await import('@/lib/constants');
-                            const token = localStorage.getItem('auth_token');
-                            const proxyUrl = `${getApiBaseUrl()}/files/proxy?url=${encodeURIComponent(msg.metadata!.fileUrl!)}`;
-                            const res = await fetch(proxyUrl, {
-                              headers: token ? { Authorization: `Bearer ${token}` } : {},
-                            });
-                            const blob = await res.blob();
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = msg.metadata?.fileName || 'file';
-                            document.body.appendChild(a);
-                            a.click();
-                            document.body.removeChild(a);
-                            URL.revokeObjectURL(url);
-                          } catch {
-                            // Fallback: open directly
-                            window.open(msg.metadata?.fileUrl, '_blank');
-                          }
+                          downloadViaProxy(
+                            msg.metadata!.fileUrl!,
+                            msg.metadata?.fileName || 'file'
+                          );
                         }}
                       >
                         <Download className="w-4 h-4" />
@@ -396,7 +412,7 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
           </ScrollArea>
         )}
 
-        {/* Links list — Messenger-style OG preview cards */}
+        {/* Links list */}
         {category === 'links' && (
           <ScrollArea className="h-72">
             {linkItems.length === 0 ? (
@@ -406,20 +422,17 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
                 <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
               </div>
             ) : (
-              <div className="space-y-2">
-                {linkItems.map((item, idx) => {
-                  const preview = previews[item.url];
-                  return (
-                    <LinkPreviewCard key={idx} url={item.url} preview={preview} />
-                  );
-                })}
+              <div className="space-y-2 pr-1">
+                {linkItems.map((item, idx) => (
+                  <LinkPreviewCard key={idx} url={item.url} preview={previews[item.url]} />
+                ))}
               </div>
             )}
           </ScrollArea>
         )}
       </div>
 
-      {/* Image Lightbox */}
+      {/* Image Lightbox — URLs already proxied in openLightbox() */}
       {lightboxImages.length > 0 && (
         <ImageLightbox
           images={lightboxImages}
@@ -428,7 +441,7 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
         />
       )}
 
-      {/* Video Lightbox */}
+      {/* Video Lightbox — URLs already proxied */}
       {videoLightbox && (
         <VideoLightbox
           src={videoLightbox.src}
@@ -442,8 +455,16 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
   );
 }
 
-/** Image cell with error fallback — needs its own state so hooks work correctly */
-function MediaImageCell({ src, fileName, onClick }: { src: string; fileName?: string; onClick: () => void }) {
+/** Image grid cell — separate component so useState (error tracking) obeys hooks rules */
+function MediaImageCell({
+  src,
+  fileName,
+  onClick,
+}: {
+  src: string;
+  fileName?: string;
+  onClick: () => void;
+}) {
   const [failed, setFailed] = useState(false);
   return (
     <button
@@ -470,7 +491,6 @@ function MediaImageCell({ src, fileName, onClick }: { src: string; fileName?: st
   );
 }
 
-/** Messenger-style link preview card */
 function LinkPreviewCard({ url, preview }: { url: string; preview?: LinkPreview }) {
   const domain = preview?.domain ?? (() => {
     try { return new URL(url).hostname; } catch { return url; }
@@ -481,9 +501,8 @@ function LinkPreviewCard({ url, preview }: { url: string; preview?: LinkPreview 
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex gap-3 p-3 rounded-xl border border-gray-100 dark:border-dark-border hover:bg-gray-50 dark:hover:bg-dark-border transition-colors group min-w-0"
+      className="flex gap-3 p-3 rounded-xl border border-gray-100 dark:border-dark-border hover:bg-gray-50 dark:hover:bg-dark-border transition-colors group min-w-0 overflow-hidden"
     >
-      {/* Thumbnail / favicon */}
       <div className="flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden bg-gray-100 dark:bg-dark-surface flex items-center justify-center">
         {preview?.image ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -507,9 +526,7 @@ function LinkPreviewCard({ url, preview }: { url: string; preview?: LinkPreview 
           <Globe className="w-6 h-6 text-gray-300" />
         )}
       </div>
-
-      {/* Text content */}
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 overflow-hidden">
         {preview?.title ? (
           <p className="text-sm font-medium text-gray-900 dark:text-dark-text line-clamp-2 leading-snug">
             {preview.title}
@@ -527,7 +544,6 @@ function LinkPreviewCard({ url, preview }: { url: string; preview?: LinkPreview 
           <span className="text-xs text-gray-400 truncate">{domain}</span>
         </div>
       </div>
-
       <ExternalLink className="flex-shrink-0 w-4 h-4 text-gray-300 group-hover:text-gray-500 self-start mt-0.5 transition-colors" />
     </a>
   );
