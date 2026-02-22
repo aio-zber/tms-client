@@ -523,11 +523,16 @@ export const MessageBubble = memo(function MessageBubble({
             <div className="font-semibold mb-0.5 text-viber-purple">
               {getUserName ? getUserName(message.replyTo.senderId) : 'User'}
             </div>
-            {/* Message content in gray */}
+            {/* Message content in gray — use decrypted cache if the replied-to message was encrypted */}
             <div className="truncate text-gray-700 dark:text-dark-text-secondary">
-              {message.replyTo.content.length > 50
-                ? message.replyTo.content.slice(0, 50) + '...'
-                : message.replyTo.content}
+              {(() => {
+                const replyContent =
+                  decryptedContentCache.get(message.replyTo.id) || message.replyTo.content;
+                // If still looks like ciphertext, show a neutral placeholder
+                const display =
+                  replyContent.startsWith('{"v":') ? '[Encrypted message]' : replyContent;
+                return display.length > 50 ? display.slice(0, 50) + '...' : display;
+              })()}
             </div>
           </div>
         )}

@@ -226,7 +226,11 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
     initialPageParam: undefined as string | undefined,
     enabled: enabled && !!conversationId,
     refetchOnWindowFocus: true,
-    staleTime: 10000,
+    // 60s staleTime: cached messages render instantly on conversation revisit.
+    // Real-time updates arrive via WebSocket (useMessages hook), so the cache
+    // only needs to be refreshed from the server after 60s of staleness.
+    // This is the key to instant conversation switching (Messenger pattern).
+    staleTime: 60000,
   });
 
   // Flatten pages into a single array and ensure proper ordering
