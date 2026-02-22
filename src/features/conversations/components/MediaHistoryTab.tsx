@@ -8,7 +8,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Download,
   FileText,
@@ -26,10 +26,10 @@ import { apiClient } from '@/lib/apiClient';
 import { ImageLightbox } from '@/features/messaging/components/ImageLightbox';
 import { VideoLightbox } from '@/features/messaging/components/VideoLightbox';
 import { decryptedContentCache } from '@/features/messaging/hooks/useMessages';
-import { STORAGE_KEYS } from '@/lib/constants';
+import { getApiBaseUrl, STORAGE_KEYS } from '@/lib/constants';
 import type { Message, MessageMetadata } from '@/types/message';
 
-/** Read the auth token from localStorage (safe to call synchronously) */
+/** Read the auth token from localStorage (safe to call synchronously client-side) */
 function getAuthToken(): string {
   if (typeof window === 'undefined') return '';
   return localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN) || '';
@@ -89,19 +89,18 @@ function normaliseMetadata(msg: Record<string, unknown>): Message {
  * Build backend proxy URL for an OSS asset.
  * Includes ?token= so <img src> and <video src> can authenticate
  * (browsers can't send Authorization headers for media elements).
+ * getApiBaseUrl() is synchronous — safe to call at render time.
  */
-function makeProxyUrl(apiBase: string, ossUrl: string): string {
+function makeProxyUrl(ossUrl: string): string {
   const token = getAuthToken();
   const params = new URLSearchParams({ url: ossUrl });
   if (token) params.set('token', token);
-  return `${apiBase}/files/proxy?${params.toString()}`;
+  return `${getApiBaseUrl()}/files/proxy?${params.toString()}`;
 }
 
 async function downloadViaProxy(ossUrl: string, fileName: string) {
   try {
-    const { getApiBaseUrl } = await import('@/lib/constants');
-    const proxyUrl = makeProxyUrl(getApiBaseUrl(), ossUrl);
-    // Token already embedded in URL via makeProxyUrl; fetch still sends it in query param
+    const proxyUrl = makeProxyUrl(ossUrl);
     const res = await fetch(proxyUrl);
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
@@ -133,14 +132,6 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
   const [error, setError] = useState<string | null>(null);
   const [previews, setPreviews] = useState<Record<string, LinkPreview>>({});
   const [previewsLoading, setPreviewsLoading] = useState(false);
-
-  // Resolve the API base URL once — used to build proxy src URLs for <img>/<video>
-  const [apiBase, setApiBase] = useState('');
-  useEffect(() => {
-    import('@/lib/constants').then(({ getApiBaseUrl }) => {
-      setApiBase(getApiBaseUrl());
-    });
-  }, []);
 
   const [lightboxImages, setLightboxImages] = useState<{ url: string; fileName?: string }[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
@@ -240,24 +231,22 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
     { key: 'links', label: 'Links', count: linkItems.length },
   ];
 
-  /** Build proxied URL for OSS assets — only once apiBase is resolved */
-  const proxied = (ossUrl?: string): string => {
-    if (!ossUrl || !apiBase) return '';
-    return makeProxyUrl(apiBase, ossUrl);
-  };
-
-  const openLightbox = (clickedMsg: Message) => {
-    const imageMessages = mediaMessages.filter(
-      (m) => !isVideoMime(effectiveMimeType(m.metadata))
-    );
-    const images = imageMessages
+  // Pre-build proxied lightbox images so openLightbox() can find the index synchronously
+  const lightboxImageList = useMemo(() => {
+    return mediaMessages
+      .filter((m) => !isVideoMime(effectiveMimeType(m.metadata)))
       .map((m) => ({
-        url: proxied(m.metadata?.fileUrl),
+        id: m.id,
+        url: m.metadata?.fileUrl ? makeProxyUrl(m.metadata.fileUrl) : '',
         fileName: m.metadata?.fileName,
       }))
       .filter((img) => img.url);
+  }, [mediaMessages]);
 
-    const idx = imageMessages.findIndex((m) => m.id === clickedMsg.id);
+  const openLightbox = (clickedMsg: Message) => {
+    const images = lightboxImageList.map(({ url, fileName }) => ({ url, fileName }));
+    const idx = lightboxImageList.findIndex((img) => img.id === clickedMsg.id);
+
     setLightboxImages(images);
     setLightboxIndex(Math.max(0, idx));
   };
@@ -320,11 +309,10 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
                         key={msg.id}
                         onClick={() =>
                           setVideoLightbox({
-                            // Pass proxied URLs to VideoLightbox
-                            src: proxied(ossFileUrl),
+                            src: ossFileUrl ? makeProxyUrl(ossFileUrl) : '',
                             mimeType: mime,
                             fileName: msg.metadata?.fileName,
-                            thumbnailUrl: proxied(ossThumbUrl) || undefined,
+                            thumbnailUrl: ossThumbUrl ? makeProxyUrl(ossThumbUrl) : undefined,
                           })
                         }
                         className="relative aspect-square bg-gray-900 rounded overflow-hidden group"
@@ -333,7 +321,7 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
                         {ossThumbUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
-                            src={proxied(ossThumbUrl)}
+                            src={makeProxyUrl(ossThumbUrl)}
                             alt={msg.metadata?.fileName || 'Video'}
                             className="w-full h-full object-cover opacity-80"
                             loading="lazy"
@@ -353,10 +341,11 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
                   }
 
                   // Image — proxied src, open lightbox on click
+                  const imgSrc = ossFileUrl ? makeProxyUrl(ossFileUrl) : (ossThumbUrl ? makeProxyUrl(ossThumbUrl) : '');
                   return (
                     <MediaImageCell
                       key={msg.id}
-                      src={proxied(ossFileUrl) || proxied(ossThumbUrl)}
+                      src={imgSrc}
                       fileName={msg.metadata?.fileName}
                       onClick={() => openLightbox(msg)}
                     />
