@@ -8,7 +8,7 @@
 import { log } from '@/lib/logger';
 import { useState, useRef, useEffect, memo, useMemo } from 'react';
 import { formatMessageTimestamp } from '@/lib/dateUtils';
-import { Check, CheckCheck, Reply, Trash2, Smile, Edit, Download, File, FileText, FileSpreadsheet, Play } from 'lucide-react';
+import { Check, CheckCheck, Reply, Trash2, Smile, Edit, Download, File, FileText, FileSpreadsheet, Play, Copy } from 'lucide-react';
 import { motion } from 'framer-motion';
 import * as Dialog from '@radix-ui/react-dialog';
 import type { Message } from '@/types/message';
@@ -20,6 +20,7 @@ import { ImageLightbox } from './ImageLightbox';
 import { VideoPlayer } from './VideoPlayer';
 import { VideoLightbox } from './VideoLightbox';
 import { VoiceMessagePlayer } from './VoiceMessagePlayer';
+import { decryptedContentCache } from '../hooks/useMessages';
 
 interface MessageBubbleProps {
   message: Message;
@@ -235,7 +236,8 @@ export const MessageBubble = memo(function MessageBubble({
 
     if (!message.content) return message.content;
 
-    // Highlight @mentions + search query
+    // URL pattern for linkification (Messenger-style clickable links)
+    const urlSource = 'https?://[^\\s<>"{}|\\\\^`[\\]]+';
     // Mention pattern (non-capturing inner groups): @all, @everyone, or @Word Word...
     const mentionSource = '@(?:all|everyone|\\w+(?:\\s\\w+)*)';
     const escapedSearch = searchQuery?.trim()
@@ -243,10 +245,9 @@ export const MessageBubble = memo(function MessageBubble({
       : null;
 
     // Build a single regex with ONE capture group to split on
-    // split() includes captured text in results, so exactly one group is needed
     const patternSource = escapedSearch
-      ? `(${mentionSource}|${escapedSearch})`
-      : `(${mentionSource})`;
+      ? `(${urlSource}|${mentionSource}|${escapedSearch})`
+      : `(${urlSource}|${mentionSource})`;
     const splitRegex = new RegExp(patternSource, 'gi');
 
     // Quick check: does content have anything to highlight?
@@ -261,6 +262,24 @@ export const MessageBubble = memo(function MessageBubble({
       <>
         {parts.map((part, index) => {
           if (!part) return null;
+
+          // Check if this part is a URL — make it a clickable link (Messenger pattern)
+          if (/^https?:\/\//i.test(part)) {
+            return (
+              <a
+                key={index}
+                href={part}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className={`underline break-all ${
+                  isSent ? 'text-white/90 hover:text-white' : 'text-viber-purple hover:text-viber-purple-dark'
+                }`}
+              >
+                {part}
+              </a>
+            );
+          }
 
           // Check if this part is a @mention
           if (new RegExp(`^${mentionSource}$`, 'i').test(part)) {
@@ -652,18 +671,30 @@ export const MessageBubble = memo(function MessageBubble({
                   onClick={async (e) => {
                     e.stopPropagation();
                     try {
-                      const downloadUrl = decryptedFileUrl || message.metadata?.fileUrl || '';
-                      const response = await fetch(downloadUrl);
-                      const blob = await response.blob();
-                      const url = window.URL.createObjectURL(blob);
+                      // If we have a decrypted blob URL (E2EE), use it directly (same origin, no CORS)
+                      // Otherwise route through backend proxy to avoid OSS CORS restrictions
+                      let downloadUrl: string;
+                      if (decryptedFileUrl) {
+                        downloadUrl = decryptedFileUrl;
+                      } else {
+                        const { getApiBaseUrl } = await import('@/lib/constants');
+                        const token = localStorage.getItem('auth_token');
+                        const ossUrl = message.metadata?.fileUrl || '';
+                        const proxyUrl = `${getApiBaseUrl()}/files/proxy?url=${encodeURIComponent(ossUrl)}`;
+                        const res = await fetch(proxyUrl, {
+                          headers: token ? { Authorization: `Bearer ${token}` } : {},
+                        });
+                        const blob = await res.blob();
+                        downloadUrl = window.URL.createObjectURL(blob);
+                      }
                       const link = document.createElement('a');
-                      link.href = url;
+                      link.href = downloadUrl;
                       link.download = message.metadata?.fileName || 'file';
                       document.body.appendChild(link);
                       link.click();
                       document.body.removeChild(link);
-                      window.URL.revokeObjectURL(url);
-                    } catch (err) {
+                      if (!decryptedFileUrl) window.URL.revokeObjectURL(downloadUrl);
+                    } catch {
                       window.open(message.metadata?.fileUrl, '_blank');
                     }
                   }}
@@ -884,6 +915,20 @@ export const MessageBubble = memo(function MessageBubble({
             >
               <Reply className="w-4 h-4 md:w-5 md:h-5" />
               Reply
+            </button>
+          )}
+
+          {/* Copy — for text messages (uses decrypted plaintext if E2EE) */}
+          {message.type === 'TEXT' && !message.deletedAt && (
+            <button
+              onClick={() => handleMenuAction(() => {
+                const text = decryptedContentCache.get(message.id) ?? message.content;
+                if (text) navigator.clipboard.writeText(text).catch(() => {});
+              })}
+              className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-gray-100 dark:hover:bg-dark-border flex items-center gap-2 text-gray-700 dark:text-dark-text transition"
+            >
+              <Copy className="w-4 h-4 md:w-5 md:h-5" />
+              Copy
             </button>
           )}
 

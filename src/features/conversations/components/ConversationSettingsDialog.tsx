@@ -285,7 +285,9 @@ export default function ConversationSettingsDialog({
 
           {/* Members Tab (groups only) — includes group name, avatar, mute, leave */}
           {isGroup && (
-            <TabsContent value="members" className="space-y-4">
+            <TabsContent value="members">
+              <ScrollArea className="max-h-[55vh]">
+              <div className="space-y-4 pr-1">
               {/* Group Identity: Avatar + Name */}
               <div className="flex items-center gap-4">
                 <div className="relative flex-shrink-0">
@@ -562,6 +564,8 @@ export default function ConversationSettingsDialog({
                   </Button>
                 </div>
               )}
+              </div>
+              </ScrollArea>
             </TabsContent>
           )}
 

@@ -19,6 +19,7 @@ import {
   Link as LinkIcon,
   Image as ImageIcon,
   Film,
+  Play,
   ExternalLink,
   Loader2,
   Globe,
@@ -27,6 +28,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { messageService } from '@/features/messaging/services/messageService';
 import { apiClient } from '@/lib/apiClient';
 import { ImageLightbox } from '@/features/messaging/components/ImageLightbox';
+import { VideoLightbox } from '@/features/messaging/components/VideoLightbox';
 import { decryptedContentCache } from '@/features/messaging/hooks/useMessages';
 import type { Message, MessageMetadata } from '@/types/message';
 
@@ -101,6 +103,8 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
   // Lightbox state
   const [lightboxImages, setLightboxImages] = useState<{ url: string; fileName?: string }[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  // Video lightbox state
+  const [videoLightbox, setVideoLightbox] = useState<{ src: string; mimeType?: string; fileName?: string; thumbnailUrl?: string } | null>(null);
 
   // Fetch all messages up to 200 (4 pages of 50) — client-side filter
   const fetchAllMedia = useCallback(async () => {
@@ -279,50 +283,51 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
                   const fileUrl = msg.metadata?.fileUrl || '';
 
                   if (isVideo) {
+                    // Show thumbnail/play-icon preview — click opens VideoLightbox (same as chat)
+                    const thumbSrc = msg.metadata?.thumbnailUrl || '';
                     return (
-                      <div
+                      <button
                         key={msg.id}
-                        className="relative aspect-square bg-gray-100 dark:bg-dark-surface rounded overflow-hidden"
+                        onClick={() => setVideoLightbox({
+                          src: fileUrl,
+                          mimeType: mime,
+                          fileName: msg.metadata?.fileName,
+                          thumbnailUrl: msg.metadata?.thumbnailUrl,
+                        })}
+                        className="relative aspect-square bg-gray-900 rounded overflow-hidden group"
+                        title={msg.metadata?.fileName}
                       >
-                        <video
-                          src={fileUrl}
-                          className="w-full h-full object-cover"
-                          controls
-                          preload="metadata"
-                          title={msg.metadata?.fileName}
-                        >
-                          <Film className="w-8 h-8 text-gray-400" />
-                        </video>
-                      </div>
+                        {thumbSrc ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={thumbSrc}
+                            alt={msg.metadata?.fileName || 'Video'}
+                            className="w-full h-full object-cover opacity-80"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Film className="w-8 h-8 text-gray-500" />
+                          </div>
+                        )}
+                        {/* Play icon overlay */}
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center group-hover:bg-black/80 transition-colors">
+                            <Play className="w-5 h-5 text-white fill-white ml-0.5" />
+                          </div>
+                        </div>
+                      </button>
                     );
                   }
 
                   // Image — open lightbox on click
                   return (
-                    <button
+                    <MediaImageCell
                       key={msg.id}
+                      src={src}
+                      fileName={msg.metadata?.fileName}
                       onClick={() => openLightbox(msg)}
-                      className="relative aspect-square bg-gray-100 dark:bg-dark-surface rounded overflow-hidden group"
-                      title={msg.metadata?.fileName}
-                    >
-                      {src ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={src}
-                          alt={msg.metadata?.fileName || 'Image'}
-                          className="w-full h-full object-cover"
-                          loading="lazy"
-                          onError={(e) => {
-                            (e.currentTarget as HTMLImageElement).style.display = 'none';
-                          }}
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <ImageIcon className="w-8 h-8 text-gray-300" />
-                        </div>
-                      )}
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
-                    </button>
+                    />
                   );
                 })}
               </div>
@@ -345,24 +350,44 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
                     <div className="flex-shrink-0 w-9 h-9 bg-viber-purple/10 rounded-lg flex items-center justify-center">
                       <FileText className="w-5 h-5 text-viber-purple" />
                     </div>
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 overflow-hidden">
                       <p className="text-sm font-medium truncate">
                         {msg.metadata?.fileName || 'File'}
                       </p>
-                      <p className="text-xs text-gray-400">
+                      <p className="text-xs text-gray-400 truncate">
                         {formatBytes(msg.metadata?.fileSize)}
                       </p>
                     </div>
                     {msg.metadata?.fileUrl && (
-                      <a
-                        href={msg.metadata.fileUrl}
-                        download={msg.metadata.fileName}
+                      <button
                         className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center hover:bg-gray-100 dark:hover:bg-dark-border text-gray-400 hover:text-viber-purple transition-colors"
                         title="Download"
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          try {
+                            const { getApiBaseUrl } = await import('@/lib/constants');
+                            const token = localStorage.getItem('auth_token');
+                            const proxyUrl = `${getApiBaseUrl()}/files/proxy?url=${encodeURIComponent(msg.metadata!.fileUrl!)}`;
+                            const res = await fetch(proxyUrl, {
+                              headers: token ? { Authorization: `Bearer ${token}` } : {},
+                            });
+                            const blob = await res.blob();
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = msg.metadata?.fileName || 'file';
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                          } catch {
+                            // Fallback: open directly
+                            window.open(msg.metadata?.fileUrl, '_blank');
+                          }
+                        }}
                       >
                         <Download className="w-4 h-4" />
-                      </a>
+                      </button>
                     )}
                   </div>
                 ))}
@@ -402,7 +427,46 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
           onClose={() => setLightboxImages([])}
         />
       )}
+
+      {/* Video Lightbox */}
+      {videoLightbox && (
+        <VideoLightbox
+          src={videoLightbox.src}
+          mimeType={videoLightbox.mimeType}
+          fileName={videoLightbox.fileName}
+          thumbnailUrl={videoLightbox.thumbnailUrl}
+          onClose={() => setVideoLightbox(null)}
+        />
+      )}
     </>
+  );
+}
+
+/** Image cell with error fallback — needs its own state so hooks work correctly */
+function MediaImageCell({ src, fileName, onClick }: { src: string; fileName?: string; onClick: () => void }) {
+  const [failed, setFailed] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      className="relative aspect-square bg-gray-100 dark:bg-dark-surface rounded overflow-hidden group"
+      title={fileName}
+    >
+      {src && !failed ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src}
+          alt={fileName || 'Image'}
+          className="w-full h-full object-cover"
+          loading="lazy"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center">
+          <ImageIcon className="w-8 h-8 text-gray-300" />
+        </div>
+      )}
+      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+    </button>
   );
 }
 
