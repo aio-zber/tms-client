@@ -27,6 +27,7 @@ import { useLeaveConversation } from '@/features/conversations/hooks/useLeaveCon
 import { useUserDisplayName } from '@/features/users/hooks/useUserDisplayName';
 import ConversationSettingsDialog from '@/features/conversations/components/ConversationSettingsDialog';
 import { useConversationEvents } from '@/features/conversations/hooks/useConversationEvents';
+import { patchSidebarLastMessageContent } from '@/features/conversations/hooks/useConversations';
 import { conversationService } from '@/features/conversations/services/conversationService';
 import { ChatHeader } from './ChatHeader';
 import { UserProfileDialog } from '@/features/users/components/UserProfileDialog';
@@ -61,7 +62,7 @@ export function Chat({
   const { user: currentUser } = useCurrentUser();
   const currentUserId = currentUser?.id || '';
 
-  const { messages, loading, hasMore, loadMore, addOptimisticMessage } = useMessages(conversationId);
+  const { messages, loading, hasMore, loadMore, addOptimisticMessage, replaceOptimisticMessage } = useMessages(conversationId);
   const { sendMessage, sending } = useSendMessage();
   const { editMessage, deleteMessage, addReaction, removeReaction, switchReaction } = useMessageActions({ currentUserId });
   const handleLeaveConversationWithNav = useLeaveConversation(conversationId);
@@ -253,8 +254,11 @@ export function Chat({
   const handleSendMessage = async (content: string, replyToId?: string) => {
     log.debug('[Chat] Sending message:', content);
 
-    // Determine encryption options based on E2EE initialization status
-    let encryptionOptions: { encrypted?: boolean; recipientId?: string; isGroup?: boolean; currentUserId?: string; memberIds?: string[] } | undefined;
+    // Determine encryption options based on E2EE initialization status.
+    // Always include currentUserId so the temp optimistic message has the correct senderId.
+    let encryptionOptions: { encrypted?: boolean; recipientId?: string; isGroup?: boolean; currentUserId?: string; memberIds?: string[] } = {
+      currentUserId,
+    };
     try {
       const { encryptionService } = await import('@/features/encryption');
       if (encryptionService.isInitialized() && conversation) {
@@ -266,7 +270,7 @@ export function Chat({
         } else {
           const otherMember = conversation.members.find(m => m.userId !== currentUserId);
           if (otherMember) {
-            encryptionOptions = { encrypted: true, recipientId: otherMember.userId };
+            encryptionOptions = { encrypted: true, recipientId: otherMember.userId, currentUserId };
           }
         }
       }
@@ -279,13 +283,21 @@ export function Chat({
         type: 'TEXT',
         reply_to_id: replyToId,
       },
-      // Optimistic update callback - add message immediately to UI
-      (sentMessage) => {
-        log.debug('[Chat] Message sent successfully, adding to UI optimistically:', sentMessage);
-        addOptimisticMessage(sentMessage);
-        onMessageSent?.(sentMessage);
+      // onOptimisticAdd: called immediately with temp message (Messenger pattern)
+      (optimisticMessage) => {
+        addOptimisticMessage(optimisticMessage);
+        // Only fire onMessageSent for the real message (checked by id prefix below)
       },
       encryptionOptions,
+      // onReplaceOptimistic: called after send completes — swaps temp with real message
+      // and patches the sidebar to show plaintext immediately (no more "Encrypted Message")
+      (tempId, realMessage) => {
+        replaceOptimisticMessage(tempId, realMessage);
+        // Patch sidebar to show decrypted content — decryptedContentCache is already
+        // populated by cacheDecryptedContent() in useSendMessage at this point
+        patchSidebarLastMessageContent(queryClient, conversationId, realMessage.id, realMessage.content);
+        onMessageSent?.(realMessage);
+      },
     );
 
     if (message) {

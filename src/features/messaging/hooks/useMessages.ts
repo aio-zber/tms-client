@@ -247,6 +247,7 @@ interface UseMessagesReturn {
   loadMore: () => Promise<void>;
   refresh: () => Promise<void>;
   addOptimisticMessage: (message: Message) => void;
+  replaceOptimisticMessage: (tempId: string, realMessage: Message) => void;
 }
 
 export function useMessages(
@@ -353,6 +354,31 @@ export function useMessages(
           ...data,
           pages: newPages,
         };
+      }
+    );
+  }, [queryClient, conversationId, limit]);
+
+  // Replace a temp optimistic message with the real server message (Messenger pattern)
+  const replaceOptimisticMessage = useCallback((tempId: string, realMessage: Message) => {
+    log.message.info('[replaceOptimisticMessage] Replacing temp message:', tempId, '→', realMessage.id);
+    queryClient.setQueryData(
+      queryKeys.messages.list(conversationId, { limit }),
+      (oldData: unknown) => {
+        if (!oldData || typeof oldData !== 'object') return oldData;
+        const data = oldData as { pages: Array<{ data: Message[] }>; pageParams: unknown[] };
+        if (!data.pages || data.pages.length === 0) return oldData;
+
+        // Check if real message is already in cache (WebSocket may have added it)
+        const realExists = data.pages.some(page => page.data.some(m => m.id === realMessage.id));
+
+        const newPages = data.pages.map((page) => ({
+          ...page,
+          data: page.data.flatMap((m) => {
+            if (m.id === tempId) return realExists ? [] : [realMessage];
+            return [m];
+          }),
+        }));
+        return { ...data, pages: newPages };
       }
     );
   }, [queryClient, conversationId, limit]);
@@ -1002,5 +1028,6 @@ export function useMessages(
     loadMore: async () => { await fetchNextPage(); },
     refresh: async () => { await refetch(); },
     addOptimisticMessage,
+    replaceOptimisticMessage,
   };
 }

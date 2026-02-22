@@ -122,6 +122,41 @@ function updateConversationCacheWithNewMessage(
   return { ...data, pages: newPages };
 }
 
+/**
+ * Patch the sidebar conversation list cache to show decrypted content for own sent messages.
+ * Called from Chat.tsx after send completes — at that point cacheDecryptedContent has been
+ * populated, so the sidebar shows the plaintext immediately instead of "Encrypted Message".
+ */
+export function patchSidebarLastMessageContent(
+  queryClient: import('@tanstack/react-query').QueryClient,
+  conversationId: string,
+  messageId: string,
+  decryptedContent: string,
+  limit: number = 20
+): void {
+  const listQueryKey = queryKeys.conversations.list({ limit, offset: 0, type: undefined });
+  queryClient.setQueryData(
+    listQueryKey,
+    (oldData: unknown) => {
+      if (!oldData || typeof oldData !== 'object') return oldData;
+      const data = oldData as { pages: Array<{ data: Conversation[] }>; pageParams: unknown[] };
+      if (!data.pages) return oldData;
+      const newPages = data.pages.map((page) => ({
+        ...page,
+        data: page.data.map((conv) => {
+          if (conv.id !== conversationId) return conv;
+          if (!conv.lastMessage || conv.lastMessage.id !== messageId) return conv;
+          return {
+            ...conv,
+            lastMessage: { ...conv.lastMessage, content: decryptedContent, encrypted: false },
+          };
+        }),
+      }));
+      return { ...data, pages: newPages };
+    }
+  );
+}
+
 // ==================== Singleton Socket Manager ====================
 // useConversations is mounted in multiple components (ConversationList, UserProfileDialog).
 // If each instance registers its own socket.on('new_message') listener, Socket.IO

@@ -31,6 +31,7 @@ import { VideoLightbox } from '@/features/messaging/components/VideoLightbox';
 import { decryptedContentCache } from '@/features/messaging/hooks/useMessages';
 import { useMessagesQuery } from '@/features/messaging/hooks/useMessagesQuery';
 import { getApiBaseUrl, STORAGE_KEYS } from '@/lib/constants';
+import { log } from '@/lib/logger';
 import type { Message, MessageMetadata } from '@/types/message';
 
 /** Read the auth token from localStorage (safe to call synchronously client-side) */
@@ -87,11 +88,37 @@ function makeProxyUrl(ossUrl: string): string {
   return `${getApiBaseUrl()}/files/proxy?${params.toString()}`;
 }
 
-async function downloadViaProxy(ossUrl: string, fileName: string) {
+/**
+ * Download a file, decrypting it first if E2EE metadata is present.
+ * Messenger pattern: fetch encrypted bytes, decrypt in-browser, save plaintext.
+ */
+async function downloadViaProxy(
+  ossUrl: string,
+  fileName: string,
+  encMeta?: { fileKey?: string; fileNonce?: string; originalMimeType?: string }
+) {
   try {
     const proxyUrl = makeProxyUrl(ossUrl);
     const res = await fetch(proxyUrl);
-    const blob = await res.blob();
+    const arrayBuffer = await res.arrayBuffer();
+
+    let blob: Blob;
+
+    if (encMeta?.fileKey && encMeta?.fileNonce) {
+      // E2EE file — decrypt before saving
+      const { encryptionService } = await import('@/features/encryption');
+      const { fromBase64 } = await import('@/features/encryption/services/cryptoService');
+      const mimeType = encMeta.originalMimeType || 'application/octet-stream';
+      blob = await encryptionService.decryptFile(
+        arrayBuffer,
+        fromBase64(encMeta.fileKey),
+        fromBase64(encMeta.fileNonce),
+        mimeType
+      );
+    } else {
+      blob = new Blob([arrayBuffer]);
+    }
+
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -100,7 +127,8 @@ async function downloadViaProxy(ossUrl: string, fileName: string) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  } catch {
+  } catch (err) {
+    log.error('[MediaHistoryTab] Download failed:', err);
     window.open(ossUrl, '_blank');
   }
 }
@@ -127,6 +155,9 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
     fileName?: string;
     thumbnailUrl?: string;
   } | null>(null);
+
+  // Track decrypted blob URLs per message ID — populated by DecryptedMediaItem components
+  const [decryptedMediaUrls, setDecryptedMediaUrls] = useState<Record<string, string>>({});
 
   // Read from the same TanStack Query cache that Chat.tsx uses.
   // When the dialog opens from an active chat, data is instant (zero extra requests).
@@ -197,17 +228,19 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
     { key: 'links', label: 'Links', count: linkItems.length },
   ];
 
-  // Pre-build proxied lightbox images so openLightbox() can find the index synchronously
+  // Pre-build lightbox image list — prefer decrypted blob URLs for E2EE images
   const lightboxImageList = useMemo(() => {
     return mediaMessages
       .filter((m) => !isVideoMime(effectiveMimeType(m.metadata)))
       .map((m) => ({
         id: m.id,
-        url: m.metadata?.fileUrl ? makeProxyUrl(m.metadata.fileUrl) : '',
+        // Use decrypted blob URL if available (E2EE), fall back to proxy URL
+        url: decryptedMediaUrls[m.id] || (m.metadata?.fileUrl ? makeProxyUrl(m.metadata.fileUrl) : ''),
         fileName: m.metadata?.fileName,
       }))
       .filter((img) => img.url);
-  }, [mediaMessages]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mediaMessages, decryptedMediaUrls]);
 
   const openLightbox = (clickedMsg: Message) => {
     const images = lightboxImageList.map(({ url, fileName }) => ({ url, fileName }));
@@ -266,53 +299,43 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
                 {mediaMessages.map((msg) => {
                   const mime = effectiveMimeType(msg.metadata);
                   const isVideo = isVideoMime(mime);
+                  const encMeta = msg.metadata?.encryption as { fileKey?: string; fileNonce?: string; originalMimeType?: string } | undefined;
                   const ossFileUrl = msg.metadata?.fileUrl || '';
                   const ossThumbUrl = msg.metadata?.thumbnailUrl || '';
 
                   if (isVideo) {
                     return (
-                      <button
+                      <DecryptedVideoCell
                         key={msg.id}
-                        onClick={() =>
+                        ossFileUrl={ossFileUrl}
+                        ossThumbUrl={ossThumbUrl}
+                        mimeType={mime}
+                        fileName={msg.metadata?.fileName}
+                        encMeta={encMeta}
+                        onPlay={(src, thumbUrl) =>
                           setVideoLightbox({
-                            src: ossFileUrl ? makeProxyUrl(ossFileUrl) : '',
+                            src,
                             mimeType: mime,
                             fileName: msg.metadata?.fileName,
-                            thumbnailUrl: ossThumbUrl ? makeProxyUrl(ossThumbUrl) : undefined,
+                            thumbnailUrl: thumbUrl,
                           })
                         }
-                        className="relative aspect-square bg-gray-900 rounded overflow-hidden group"
-                        title={msg.metadata?.fileName}
-                      >
-                        {ossThumbUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={makeProxyUrl(ossThumbUrl)}
-                            alt={msg.metadata?.fileName || 'Video'}
-                            className="w-full h-full object-cover opacity-80"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <Film className="w-8 h-8 text-gray-500" />
-                          </div>
-                        )}
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center group-hover:bg-black/80 transition-colors">
-                            <Play className="w-5 h-5 text-white fill-white ml-0.5" />
-                          </div>
-                        </div>
-                      </button>
+                      />
                     );
                   }
 
-                  // Image — proxied src, open lightbox on click
-                  const imgSrc = ossFileUrl ? makeProxyUrl(ossFileUrl) : (ossThumbUrl ? makeProxyUrl(ossThumbUrl) : '');
+                  // Image — use DecryptedMediaItem to handle E2EE decryption
                   return (
-                    <MediaImageCell
+                    <DecryptedMediaItem
                       key={msg.id}
-                      src={imgSrc}
+                      messageId={msg.id}
+                      ossFileUrl={ossFileUrl}
+                      ossThumbUrl={ossThumbUrl}
                       fileName={msg.metadata?.fileName}
+                      encMeta={encMeta}
+                      onDecrypted={(msgId, blobUrl) =>
+                        setDecryptedMediaUrls((prev) => ({ ...prev, [msgId]: blobUrl }))
+                      }
                       onClick={() => openLightbox(msg)}
                     />
                   );
@@ -351,9 +374,11 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
                         title="Download"
                         onClick={(e) => {
                           e.stopPropagation();
+                          const encMeta = msg.metadata?.encryption as { fileKey?: string; fileNonce?: string; originalMimeType?: string } | undefined;
                           downloadViaProxy(
                             msg.metadata!.fileUrl!,
-                            msg.metadata?.fileName || 'file'
+                            msg.metadata?.fileName || 'file',
+                            encMeta
                           );
                         }}
                       >
@@ -410,24 +435,93 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
   );
 }
 
-/** Image grid cell — separate component so useState (error tracking) obeys hooks rules */
-function MediaImageCell({
-  src,
+interface EncMeta {
+  fileKey?: string;
+  fileNonce?: string;
+  originalMimeType?: string;
+}
+
+/**
+ * E2EE-aware image grid cell.
+ * If encMeta is present, fetches + decrypts the file and shows the blob URL.
+ * Notifies parent via onDecrypted so the lightbox can use the same blob URL.
+ */
+function DecryptedMediaItem({
+  messageId,
+  ossFileUrl,
+  ossThumbUrl,
   fileName,
+  encMeta,
+  onDecrypted,
   onClick,
 }: {
-  src: string;
+  messageId: string;
+  ossFileUrl: string;
+  ossThumbUrl: string;
   fileName?: string;
+  encMeta?: EncMeta;
+  onDecrypted: (msgId: string, blobUrl: string) => void;
   onClick: () => void;
 }) {
+  const [src, setSrc] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  const [decrypting, setDecrypting] = useState(false);
+
+  useEffect(() => {
+    const rawUrl = ossFileUrl || ossThumbUrl;
+    if (!rawUrl) return;
+
+    let objectUrl: string | null = null;
+
+    if (encMeta?.fileKey && encMeta?.fileNonce) {
+      // E2EE: fetch encrypted bytes through proxy, decrypt in-browser
+      setDecrypting(true);
+      const proxyUrl = makeProxyUrl(rawUrl);
+      (async () => {
+        try {
+          const res = await fetch(proxyUrl);
+          const arrayBuffer = await res.arrayBuffer();
+          const { encryptionService } = await import('@/features/encryption');
+          const { fromBase64 } = await import('@/features/encryption/services/cryptoService');
+          const mimeType = encMeta.originalMimeType || 'image/jpeg';
+          const blob = await encryptionService.decryptFile(
+            arrayBuffer,
+            fromBase64(encMeta.fileKey!),
+            fromBase64(encMeta.fileNonce!),
+            mimeType
+          );
+          objectUrl = URL.createObjectURL(blob);
+          setSrc(objectUrl);
+          onDecrypted(messageId, objectUrl);
+        } catch (err) {
+          log.error('[MediaHistoryTab] Image decryption failed:', err);
+          setFailed(true);
+        } finally {
+          setDecrypting(false);
+        }
+      })();
+    } else {
+      // Non-E2EE: use proxy URL directly
+      setSrc(makeProxyUrl(rawUrl));
+    }
+
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messageId, ossFileUrl, ossThumbUrl, encMeta?.fileKey]);
+
   return (
     <button
       onClick={onClick}
       className="relative aspect-square bg-gray-100 dark:bg-dark-surface rounded overflow-hidden group"
       title={fileName}
     >
-      {src && !failed ? (
+      {decrypting ? (
+        <div className="w-full h-full flex items-center justify-center">
+          <Loader2 className="w-6 h-6 animate-spin text-viber-purple" />
+        </div>
+      ) : src && !failed ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={src}
@@ -442,6 +536,94 @@ function MediaImageCell({
         </div>
       )}
       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+    </button>
+  );
+}
+
+/**
+ * E2EE-aware video thumbnail cell.
+ * Thumbnail is non-E2EE (uploaded as plain thumbnail), file is E2EE.
+ * On play, decrypts the video and opens the lightbox with the blob URL.
+ */
+function DecryptedVideoCell({
+  ossFileUrl,
+  ossThumbUrl,
+  mimeType,
+  fileName,
+  encMeta,
+  onPlay,
+}: {
+  ossFileUrl: string;
+  ossThumbUrl: string;
+  mimeType?: string;
+  fileName?: string;
+  encMeta?: EncMeta;
+  onPlay: (src: string, thumbnailUrl?: string) => void;
+}) {
+  const [loading, setLoading] = useState(false);
+
+  const handleClick = async () => {
+    if (!ossFileUrl) return;
+
+    if (encMeta?.fileKey && encMeta?.fileNonce) {
+      setLoading(true);
+      try {
+        const proxyUrl = makeProxyUrl(ossFileUrl);
+        const res = await fetch(proxyUrl);
+        const arrayBuffer = await res.arrayBuffer();
+        const { encryptionService } = await import('@/features/encryption');
+        const { fromBase64 } = await import('@/features/encryption/services/cryptoService');
+        const mime = encMeta.originalMimeType || mimeType || 'video/mp4';
+        const blob = await encryptionService.decryptFile(
+          arrayBuffer,
+          fromBase64(encMeta.fileKey!),
+          fromBase64(encMeta.fileNonce!),
+          mime
+        );
+        const objectUrl = URL.createObjectURL(blob);
+        const thumbUrl = ossThumbUrl ? makeProxyUrl(ossThumbUrl) : undefined;
+        onPlay(objectUrl, thumbUrl);
+      } catch (err) {
+        log.error('[MediaHistoryTab] Video decryption failed:', err);
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      onPlay(makeProxyUrl(ossFileUrl), ossThumbUrl ? makeProxyUrl(ossThumbUrl) : undefined);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleClick}
+      className="relative aspect-square bg-gray-900 rounded overflow-hidden group"
+      title={fileName}
+      disabled={loading}
+    >
+      {ossThumbUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={makeProxyUrl(ossThumbUrl)}
+          alt={fileName || 'Video'}
+          className="w-full h-full object-cover opacity-80"
+          loading="lazy"
+        />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center">
+          <Film className="w-8 h-8 text-gray-500" />
+        </div>
+      )}
+      <div className="absolute inset-0 flex items-center justify-center">
+        {loading ? (
+          <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center">
+            <Loader2 className="w-5 h-5 text-white animate-spin" />
+          </div>
+        ) : (
+          <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center group-hover:bg-black/80 transition-colors">
+            <Play className="w-5 h-5 text-white fill-white ml-0.5" />
+          </div>
+        )}
+      </div>
     </button>
   );
 }

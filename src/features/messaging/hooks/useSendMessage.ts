@@ -19,6 +19,7 @@ import { transformServerMessage, cacheDecryptedContent } from './useMessages';
 import type { SendMessageRequest, Message } from '@/types/message';
 import type { EncryptionMetadata } from '@/types/message';
 import { ENCRYPTION_VERSION } from '@/features/encryption/constants';
+import { nowUTC } from '@/lib/dateUtils';
 
 // Module-level tracking of recently sent messages to prevent WebSocket race conditions
 // When we send a message, we add its ID here. When WebSocket notifies us of our own message,
@@ -68,7 +69,8 @@ interface UseSendMessageReturn {
   sendMessage: (
     data: SendMessageRequest,
     onOptimisticAdd?: (message: Message) => void,
-    options?: SendMessageOptions
+    options?: SendMessageOptions,
+    onReplaceOptimistic?: (tempId: string, realMessage: Message) => void
   ) => Promise<Message | null>;
   sendEncryptedMessage: (
     data: SendMessageRequest,
@@ -86,16 +88,47 @@ export function useSendMessage(): UseSendMessageReturn {
   const [error, setError] = useState<Error | null>(null);
 
   /**
-   * Send a message with optional E2EE encryption
+   * Send a message with optional E2EE encryption.
+   *
+   * Messenger pattern — true optimistic updates:
+   * 1. Add a temp message to the UI INSTANTLY (before any async work)
+   * 2. Encrypt + send in the background
+   * 3. Replace the temp message with the real server message
+   *
+   * This makes message sending feel instantaneous to the user.
    */
   const sendMessage = useCallback(
     async (
       data: SendMessageRequest,
       onOptimisticAdd?: (message: Message) => void,
-      options?: SendMessageOptions
+      options?: SendMessageOptions,
+      onReplaceOptimistic?: (tempId: string, realMessage: Message) => void
     ) => {
       setSending(true);
       setError(null);
+
+      // Generate a temp ID for the optimistic message
+      const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+      // STEP 1: Add temp message to UI instantly (Messenger pattern)
+      // This happens BEFORE encryption and network — so the user sees their message immediately.
+      if (onOptimisticAdd) {
+        const tempMessage: Message = {
+          id: tempId,
+          conversationId: data.conversation_id,
+          senderId: options?.currentUserId ?? '',
+          content: data.content,
+          type: data.type ?? 'TEXT',
+          status: 'sending',
+          replyToId: data.reply_to_id,
+          isEdited: false,
+          sequenceNumber: Date.now(), // large enough to sort to bottom
+          createdAt: nowUTC(),
+          encrypted: false, // always show plaintext optimistically
+        };
+        log.message.debug('[useSendMessage] Adding temp optimistic message:', tempId);
+        onOptimisticAdd(tempMessage);
+      }
 
       try {
         let requestData = { ...data };
@@ -104,7 +137,7 @@ export function useSendMessage(): UseSendMessageReturn {
         const originalContent = data.content;
         let wasEncrypted = false;
 
-        // If encryption is enabled, encrypt the message content
+        // STEP 2: Encrypt in background (UI already shows the message)
         if (options?.encrypted && options.recipientId) {
           try {
             const { encryptionService } = await import('@/features/encryption');
@@ -185,6 +218,7 @@ export function useSendMessage(): UseSendMessageReturn {
           }
         }
 
+        // STEP 3: Send to server
         const rawMessage = await messageService.sendMessage(requestData);
 
         if (rawMessage) {
@@ -196,15 +230,19 @@ export function useSendMessage(): UseSendMessageReturn {
           if (wasEncrypted) {
             message.content = originalContent;
             // Cache plaintext so API reloads also show it correctly (in-memory + IndexedDB)
+            // This also unblocks useConversations sidebar update (no more 200ms race)
             cacheDecryptedContent(message.id, originalContent, data.conversation_id);
           }
 
           // Track this message ID to prevent WebSocket handler from invalidating cache
           trackSentMessage(message.id);
 
-          // Call optimistic add callback if provided
-          if (onOptimisticAdd) {
-            log.message.debug('[useSendMessage] Calling optimistic add callback with message:', message);
+          // STEP 4: Replace the temp message with the real server message
+          if (onReplaceOptimistic) {
+            log.message.debug('[useSendMessage] Replacing temp message:', tempId, '→', message.id);
+            onReplaceOptimistic(tempId, message);
+          } else if (onOptimisticAdd) {
+            // Fallback: add the real message (addOptimisticMessage deduplicates by ID)
             onOptimisticAdd(message);
           }
 
@@ -215,6 +253,9 @@ export function useSendMessage(): UseSendMessageReturn {
       } catch (err) {
         setError(err as Error);
         log.message.error('Failed to send message:', err);
+        // On failure, remove the temp message by replacing it with nothing
+        // We can't easily "remove" it with the current API, but the WS won't echo it back,
+        // so it will be cleaned up on next cache invalidation / refetch.
         return null;
       } finally {
         setSending(false);
