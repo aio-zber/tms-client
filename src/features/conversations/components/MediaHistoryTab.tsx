@@ -8,7 +8,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Download,
   FileText,
@@ -142,36 +142,42 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
     thumbnailUrl?: string;
   } | null>(null);
 
-  const fetchAllMedia = useCallback(async () => {
+  useEffect(() => {
+    let cancelled = false;
     setLoading(true);
     setError(null);
-    try {
-      const collected: Message[] = [];
-      let cursor: string | undefined;
+    setMessages([]);
 
-      for (let i = 0; i < 4; i++) {
-        const response = await messageService.getConversationMessages(conversationId, {
-          limit: 50,
-          cursor,
-        });
-        const raw = (response.data || []) as unknown as Record<string, unknown>[];
-        const filtered = raw.map(normaliseMetadata).filter((m) => !m.deletedAt);
-        collected.push(...filtered);
-        if (!response.pagination?.has_more || !response.pagination?.next_cursor) break;
-        cursor = response.pagination.next_cursor;
+    const run = async () => {
+      try {
+        const collected: Message[] = [];
+        let cursor: string | undefined;
+
+        for (let i = 0; i < 4; i++) {
+          if (cancelled) return;
+          const response = await messageService.getConversationMessages(conversationId, {
+            limit: 50,
+            cursor,
+          });
+          if (cancelled) return;
+          const raw = (response.data || []) as unknown as Record<string, unknown>[];
+          const filtered = raw.map(normaliseMetadata).filter((m) => !m.deletedAt);
+          collected.push(...filtered);
+          if (!response.pagination?.has_more || !response.pagination?.next_cursor) break;
+          cursor = response.pagination.next_cursor;
+        }
+
+        if (!cancelled) setMessages(collected);
+      } catch {
+        if (!cancelled) setError('Failed to load media history');
+      } finally {
+        if (!cancelled) setLoading(false);
       }
+    };
 
-      setMessages(collected);
-    } catch {
-      setError('Failed to load media history');
-    } finally {
-      setLoading(false);
-    }
+    run();
+    return () => { cancelled = true; };
   }, [conversationId]);
-
-  useEffect(() => {
-    fetchAllMedia();
-  }, [fetchAllMedia]);
 
   const mediaMessages = messages.filter(
     (m) =>

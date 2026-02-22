@@ -21,6 +21,15 @@ import { VideoPlayer } from './VideoPlayer';
 import { VideoLightbox } from './VideoLightbox';
 import { VoiceMessagePlayer } from './VoiceMessagePlayer';
 import { decryptedContentCache } from '../hooks/useMessages';
+import { getApiBaseUrl, STORAGE_KEYS } from '@/lib/constants';
+
+/** Build a proxy URL for a raw OSS file URL (avoids CORS; works with <img src> via ?token=). */
+function ossProxyUrl(ossUrl: string): string {
+  const token = typeof window !== 'undefined' ? (localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN) || '') : '';
+  const params = new URLSearchParams({ url: ossUrl });
+  if (token) params.set('token', token);
+  return `${getApiBaseUrl()}/files/proxy?${params.toString()}`;
+}
 
 interface MessageBubbleProps {
   message: Message;
@@ -69,25 +78,33 @@ export const MessageBubble = memo(function MessageBubble({
   const [decryptedFileUrl, setDecryptedFileUrl] = useState<string | null>(null);
   const [isDecryptingFile, setIsDecryptingFile] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  // Proxy URL for the file — used when decryptedFileUrl is not yet available.
+  // Routes OSS URLs through the backend to avoid CORS failures on <img>/<video> elements.
+  // For E2EE files this is the fetch source; for non-E2EE it's the display source.
+  const proxyFileUrl = useMemo(() => {
+    const url = message.metadata?.fileUrl;
+    return url ? ossProxyUrl(url) : null;
+  }, [message.metadata?.fileUrl]);
+
+  const proxyThumbnailUrl = useMemo(() => {
+    const url = message.metadata?.thumbnailUrl;
+    return url ? ossProxyUrl(url) : null;
+  }, [message.metadata?.thumbnailUrl]);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const { voteOnPoll, closePoll } = usePollActions();
 
   // E2EE: Decrypt encrypted file content for display
   useEffect(() => {
     const encMeta = message.metadata?.encryption;
-    if (!encMeta?.fileKey || !encMeta?.fileNonce || !message.metadata?.fileUrl) return;
+    if (!encMeta?.fileKey || !encMeta?.fileNonce || !proxyFileUrl) return;
 
     let objectUrl: string | null = null;
     const decryptFileContent = async () => {
       setIsDecryptingFile(true);
       try {
-        // Use backend proxy to avoid CORS blocks on direct OSS access
-        const { getApiBaseUrl } = await import('@/lib/constants');
-        const proxyUrl = `${getApiBaseUrl()}/files/proxy?url=${encodeURIComponent(message.metadata!.fileUrl!)}`;
-        const token = localStorage.getItem('auth_token');
-        const response = await fetch(proxyUrl, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
+        // Fetch through backend proxy (token embedded in URL via proxyFileUrl)
+        const response = await fetch(proxyFileUrl);
         const encryptedData = await response.arrayBuffer();
         const { encryptionService } = await import('@/features/encryption');
         const { fromBase64 } = await import('@/features/encryption/services/cryptoService');
@@ -106,7 +123,7 @@ export const MessageBubble = memo(function MessageBubble({
     decryptFileContent();
     return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [message.id, message.metadata?.encryption?.fileKey]);
+  }, [message.id, message.metadata?.encryption?.fileKey, proxyFileUrl]);
 
   // Helper function to format file size
   const formatFileSize = (bytes?: number): string => {
@@ -562,14 +579,15 @@ export const MessageBubble = memo(function MessageBubble({
                   <div className="w-8 h-8 border-2 border-viber-purple border-t-transparent rounded-full animate-spin" />
                 </div>
               ) : (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={decryptedFileUrl || (thumbnailFailed ? message.metadata.fileUrl : (message.metadata.thumbnailUrl || message.metadata.fileUrl))}
+                src={decryptedFileUrl || (thumbnailFailed ? proxyFileUrl! : (proxyThumbnailUrl || proxyFileUrl!))}
                 alt={message.metadata.fileName || 'Image'}
                 className="max-w-xs md:max-w-sm max-h-64 md:max-h-80 object-cover"
                 loading="lazy"
-                onError={(e) => {
-                  // If thumbnail fails, fall back to main file URL
-                  if (!decryptedFileUrl && !thumbnailFailed && message.metadata?.thumbnailUrl && e.currentTarget.src !== message.metadata.fileUrl) {
+                onError={() => {
+                  // If proxied thumbnail fails, fall back to proxied main file URL
+                  if (!decryptedFileUrl && !thumbnailFailed && proxyThumbnailUrl) {
                     setThumbnailFailed(true);
                   }
                 }}
@@ -598,8 +616,8 @@ export const MessageBubble = memo(function MessageBubble({
               } overflow-hidden`}
             >
               <VideoPlayer
-                src={decryptedFileUrl || message.metadata.fileUrl}
-                thumbnailUrl={decryptedFileUrl ? undefined : message.metadata.thumbnailUrl}
+                src={decryptedFileUrl || proxyFileUrl!}
+                thumbnailUrl={decryptedFileUrl ? undefined : proxyThumbnailUrl || undefined}
                 mimeType={message.metadata.encryption?.originalMimeType || message.metadata.mimeType}
                 fileName={message.metadata.fileName}
                 isSent={isSent}
@@ -671,21 +689,19 @@ export const MessageBubble = memo(function MessageBubble({
                   onClick={async (e) => {
                     e.stopPropagation();
                     try {
-                      // If we have a decrypted blob URL (E2EE), use it directly (same origin, no CORS)
-                      // Otherwise route through backend proxy to avoid OSS CORS restrictions
+                      // E2EE: use the already-decrypted blob URL directly
+                      // Non-E2EE: fetch through proxy (token in URL, no CORS issue)
                       let downloadUrl: string;
+                      let isBlobCreated = false;
                       if (decryptedFileUrl) {
                         downloadUrl = decryptedFileUrl;
-                      } else {
-                        const { getApiBaseUrl } = await import('@/lib/constants');
-                        const token = localStorage.getItem('auth_token');
-                        const ossUrl = message.metadata?.fileUrl || '';
-                        const proxyUrl = `${getApiBaseUrl()}/files/proxy?url=${encodeURIComponent(ossUrl)}`;
-                        const res = await fetch(proxyUrl, {
-                          headers: token ? { Authorization: `Bearer ${token}` } : {},
-                        });
+                      } else if (proxyFileUrl) {
+                        const res = await fetch(proxyFileUrl);
                         const blob = await res.blob();
                         downloadUrl = window.URL.createObjectURL(blob);
+                        isBlobCreated = true;
+                      } else {
+                        return;
                       }
                       const link = document.createElement('a');
                       link.href = downloadUrl;
@@ -693,9 +709,9 @@ export const MessageBubble = memo(function MessageBubble({
                       document.body.appendChild(link);
                       link.click();
                       document.body.removeChild(link);
-                      if (!decryptedFileUrl) window.URL.revokeObjectURL(downloadUrl);
+                      if (isBlobCreated) window.URL.revokeObjectURL(downloadUrl);
                     } catch {
-                      window.open(message.metadata?.fileUrl, '_blank');
+                      if (proxyFileUrl) window.open(proxyFileUrl, '_blank');
                     }
                   }}
                   onContextMenu={(e) => {
@@ -781,11 +797,11 @@ export const MessageBubble = memo(function MessageBubble({
         </div>
 
         {/* Image Lightbox */}
-        {lightboxOpen && message.type === 'IMAGE' && message.metadata?.fileUrl && (
+        {lightboxOpen && message.type === 'IMAGE' && proxyFileUrl && message.metadata && (
           <ImageLightbox
             images={[{
-              url: decryptedFileUrl || message.metadata.fileUrl,
-              thumbnailUrl: decryptedFileUrl ? undefined : message.metadata.thumbnailUrl,
+              url: decryptedFileUrl || proxyFileUrl,
+              thumbnailUrl: decryptedFileUrl ? undefined : proxyThumbnailUrl || undefined,
               fileName: message.metadata.fileName,
               caption: message.content !== message.metadata.fileName ? message.content : undefined,
             }]}
@@ -795,12 +811,12 @@ export const MessageBubble = memo(function MessageBubble({
         )}
 
         {/* Video Lightbox */}
-        {videoLightboxOpen && message.type === 'FILE' && message.metadata?.fileUrl && (message.metadata?.mimeType?.startsWith('video/') || message.metadata?.encryption?.originalMimeType?.startsWith('video/')) && (
+        {videoLightboxOpen && message.type === 'FILE' && proxyFileUrl && (message.metadata?.mimeType?.startsWith('video/') || message.metadata?.encryption?.originalMimeType?.startsWith('video/')) && (
           <VideoLightbox
-            src={decryptedFileUrl || message.metadata.fileUrl}
+            src={decryptedFileUrl || proxyFileUrl}
             mimeType={message.metadata.encryption?.originalMimeType || message.metadata.mimeType}
             fileName={message.metadata.fileName}
-            thumbnailUrl={decryptedFileUrl ? undefined : message.metadata.thumbnailUrl}
+            thumbnailUrl={decryptedFileUrl ? undefined : proxyThumbnailUrl || undefined}
             onClose={() => setVideoLightboxOpen(false)}
           />
         )}
