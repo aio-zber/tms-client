@@ -358,24 +358,24 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
 
         {/* Files list */}
         {category === 'files' && (
-          <ScrollArea className="h-72">
+          <ScrollArea className="h-72 w-full">
             {fileMessages.length === 0 ? (
               <EmptyState icon={<FileText className="w-8 h-8" />} text="No files shared yet" />
             ) : (
-              <div className="space-y-1 pr-1">
+              <div className="space-y-1 pr-3">
                 {fileMessages.map((msg) => (
                   <div
                     key={msg.id}
-                    className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-border transition-colors overflow-hidden"
+                    className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-border transition-colors min-w-0"
                   >
                     <div className="flex-shrink-0 w-9 h-9 bg-viber-purple/10 rounded-lg flex items-center justify-center">
                       <FileText className="w-5 h-5 text-viber-purple" />
                     </div>
-                    <div className="flex-1 min-w-0 overflow-hidden">
+                    <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">
                         {msg.metadata?.fileName || 'File'}
                       </p>
-                      <p className="text-xs text-gray-400 truncate">
+                      <p className="text-xs text-gray-400">
                         {formatBytes(msg.metadata?.fileSize)}
                       </p>
                     </div>
