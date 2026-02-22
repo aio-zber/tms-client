@@ -2,6 +2,10 @@
  * Media History Tab
  * Shows shared media: Media (images/videos), Files, Links
  *
+ * Reads directly from the TanStack Query cache populated by useMessagesQuery —
+ * no duplicate network requests. If the user opens the dialog before messages
+ * are loaded the hook fetches them, otherwise data is instant from cache.
+ *
  * All OSS media is loaded through the backend /files/proxy endpoint to bypass
  * Alibaba OSS CORS restrictions — same pattern as MessageBubble E2EE file decryption.
  */
@@ -21,11 +25,11 @@ import {
   Globe,
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { messageService } from '@/features/messaging/services/messageService';
 import { apiClient } from '@/lib/apiClient';
 import { ImageLightbox } from '@/features/messaging/components/ImageLightbox';
 import { VideoLightbox } from '@/features/messaging/components/VideoLightbox';
 import { decryptedContentCache } from '@/features/messaging/hooks/useMessages';
+import { useMessagesQuery } from '@/features/messaging/hooks/useMessagesQuery';
 import { getApiBaseUrl, STORAGE_KEYS } from '@/lib/constants';
 import type { Message, MessageMetadata } from '@/types/message';
 
@@ -70,21 +74,6 @@ function formatBytes(bytes?: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function normaliseMetadata(msg: Record<string, unknown>): Message {
-  return {
-    ...msg,
-    metadata: (msg.metadata_json ?? msg.metadata) as MessageMetadata | undefined,
-    conversationId: (msg.conversation_id ?? msg.conversationId) as string,
-    senderId: (msg.sender_id ?? msg.senderId) as string,
-    isEdited: (msg.is_edited ?? msg.isEdited ?? false) as boolean,
-    sequenceNumber: (msg.sequence_number ?? msg.sequenceNumber ?? 0) as number,
-    createdAt: (msg.created_at ?? msg.createdAt) as string,
-    updatedAt: (msg.updated_at ?? msg.updatedAt) as string | undefined,
-    deletedAt: (msg.deleted_at ?? msg.deletedAt) as string | undefined,
-    replyToId: (msg.reply_to_id ?? msg.replyToId) as string | undefined,
-  } as Message;
-}
-
 /**
  * Build backend proxy URL for an OSS asset.
  * Includes ?token= so <img src> and <video src> can authenticate
@@ -127,9 +116,6 @@ interface LinkPreview {
 
 export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
   const [category, setCategory] = useState<MediaCategory>('media');
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [previews, setPreviews] = useState<Record<string, LinkPreview>>({});
   const [previewsLoading, setPreviewsLoading] = useState(false);
 
@@ -142,68 +128,42 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
     thumbnailUrl?: string;
   } | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setMessages([]);
-
-    const run = async () => {
-      try {
-        const collected: Message[] = [];
-        let cursor: string | undefined;
-
-        for (let i = 0; i < 4; i++) {
-          if (cancelled) return;
-          const response = await messageService.getConversationMessages(conversationId, {
-            limit: 50,
-            cursor,
-          });
-          if (cancelled) return;
-          const raw = (response.data || []) as unknown as Record<string, unknown>[];
-          const filtered = raw.map(normaliseMetadata).filter((m) => !m.deletedAt);
-          collected.push(...filtered);
-          if (!response.pagination?.has_more || !response.pagination?.next_cursor) break;
-          cursor = response.pagination.next_cursor;
-        }
-
-        if (!cancelled) setMessages(collected);
-      } catch {
-        if (!cancelled) setError('Failed to load media history');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-
-    run();
-    return () => { cancelled = true; };
-  }, [conversationId]);
+  // Read from the same TanStack Query cache that Chat.tsx uses.
+  // When the dialog opens from an active chat, data is instant (zero extra requests).
+  // If messages haven't been fetched yet, the hook fetches them with proper E2EE decryption.
+  const { messages, isLoading, error } = useMessagesQuery({ conversationId });
 
   const mediaMessages = messages.filter(
     (m) =>
-      m.type === 'IMAGE' ||
-      (m.type === 'FILE' &&
-        (isVideoMime(effectiveMimeType(m.metadata)) ||
-          isImageMime(effectiveMimeType(m.metadata))))
+      !m.deletedAt &&
+      (m.type === 'IMAGE' ||
+        (m.type === 'FILE' &&
+          (isVideoMime(effectiveMimeType(m.metadata)) ||
+            isImageMime(effectiveMimeType(m.metadata)))))
   );
 
   const fileMessages = messages.filter(
     (m) =>
+      !m.deletedAt &&
       m.type === 'FILE' &&
       !isVideoMime(effectiveMimeType(m.metadata)) &&
       !isImageMime(effectiveMimeType(m.metadata))
   );
 
   const linkItems = messages
-    .filter((m) => m.type === 'TEXT')
+    .filter((m) => !m.deletedAt && m.type === 'TEXT')
     .flatMap((m) => {
+      // useMessagesQuery already decrypts content; also check in-memory cache as fallback
       const plaintext =
-        decryptedContentCache.get(m.id) ?? (m.encrypted ? null : m.content);
-      if (!plaintext) return [];
+        m.content ||
+        decryptedContentCache.get(m.id) ||
+        (m.encrypted ? null : m.content);
+      if (!plaintext || plaintext.startsWith('[')) return [];
       return extractUrls(plaintext).map((url) => ({ url, message: m }));
     })
     .filter((item, idx, arr) => arr.findIndex((x) => x.url === item.url) === idx);
 
+  // Load link previews when Links tab is active
   useEffect(() => {
     if (category !== 'links' || linkItems.length === 0) return;
     const unfetched = linkItems.map((i) => i.url).filter((u) => !(u in previews));
@@ -257,7 +217,7 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
     setLightboxIndex(Math.max(0, idx));
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center py-16">
         <Loader2 className="w-6 h-6 animate-spin text-viber-purple" />
@@ -268,7 +228,7 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
   if (error) {
     return (
       <div className="flex items-center justify-center py-16 text-sm text-gray-500">
-        {error}
+        Failed to load media history
       </div>
     );
   }

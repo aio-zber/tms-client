@@ -20,6 +20,12 @@ import { decryptedContentCache, cacheDecryptedContent } from './useMessages';
 import type { Message } from '@/types/message';
 import { log } from '@/lib/logger';
 
+/** Next.js dynamic imports throw a ChunkLoadError when the chunk hash has changed after deploy. */
+function isChunkLoadError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return err.name === 'ChunkLoadError' || err.message.includes('Loading chunk');
+}
+
 // Track message IDs that permanently failed decryption so we never retry
 // Exported so useMessages (WS path) can also check/update this set
 export const failedDecryptionIds = new Set<string>();
@@ -46,10 +52,21 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
   const query = useInfiniteQuery({
     queryKey: queryKeys.messages.list(conversationId, { limit }),
     queryFn: async ({ pageParam }) => {
-      const response = await messageService.getConversationMessages(conversationId, {
-        limit,
-        cursor: pageParam ? (pageParam as string) : undefined,
-      });
+      let response;
+      try {
+        response = await messageService.getConversationMessages(conversationId, {
+          limit,
+          cursor: pageParam ? (pageParam as string) : undefined,
+        });
+      } catch (err) {
+        if (isChunkLoadError(err)) {
+          // Stale Next.js chunks after redeployment — reload to get fresh chunks
+          window.location.reload();
+          // Return empty page so TanStack Query doesn't mark this as a fatal error
+          return { data: [] as Message[], pagination: { has_more: false, next_cursor: null } };
+        }
+        throw err;
+      }
 
       // Process messages: replace encrypted content BEFORE returning to UI
       // This ensures raw ciphertext never flashes in the UI
@@ -116,7 +133,8 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
                 processedMessages.push({ ...msg, content: decryptedContent });
                 continue;
               }
-            } catch {
+            } catch (ownMsgErr) {
+              if (isChunkLoadError(ownMsgErr)) { window.location.reload(); }
               // Decryption failed (no group key yet / no backup) — show placeholder
             }
           }
@@ -162,6 +180,8 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
           cacheDecryptedContent(msg.id, decryptedContent, msg.conversationId);
           processedMessages.push({ ...msg, content: decryptedContent });
         } catch (err) {
+          // ChunkLoadError means the encryption module chunk hash changed after deploy — reload
+          if (isChunkLoadError(err)) { window.location.reload(); }
           log.message.error(`[useMessagesQuery] Failed to decrypt message ${msg.id}:`, err);
           // 8. Mark as permanently failed — never retry this message
           failedDecryptionIds.add(msg.id);
