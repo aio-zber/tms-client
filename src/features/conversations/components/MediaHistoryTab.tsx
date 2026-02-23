@@ -378,7 +378,7 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
 
         {/* Files list — Viber pattern: whole row taps to download, name truncates */}
         {category === 'files' && (
-          <ScrollArea className="h-72">
+          <ScrollArea className="h-72 overflow-x-hidden">
             {fileMessages.length === 0 ? (
               <EmptyState icon={<FileText className="w-8 h-8" />} text="No files shared yet" />
             ) : (
