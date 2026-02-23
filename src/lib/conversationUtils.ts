@@ -93,3 +93,24 @@ export function getOtherUserId(
   );
   return otherMember?.userId;
 }
+
+/**
+ * Get a meaningful preview label for encrypted messages (Messenger pattern).
+ * Uses message type to show "Photo", "Voice message", etc. instead of "Encrypted message".
+ */
+export function getEncryptedMessagePreview(type?: string): string {
+  switch (type?.toUpperCase()) {
+    case 'IMAGE':
+      return 'Photo';
+    case 'VIDEO':
+      return 'Video';
+    case 'VOICE':
+      return 'Voice message';
+    case 'FILE':
+      return 'File';
+    case 'POLL':
+      return 'Poll';
+    default:
+      return 'Encrypted message';
+  }
+}

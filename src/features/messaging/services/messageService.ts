@@ -168,8 +168,10 @@ export async function sendFileMessage(params: {
   file: File;
   replyToId?: string;
   onProgress?: (progress: number) => void;
+  encrypted?: boolean;
+  encryptionMetadata?: Record<string, string>;
 }): Promise<Message> {
-  const { conversationId, file, replyToId, onProgress } = params;
+  const { conversationId, file, replyToId, onProgress, encrypted, encryptionMetadata } = params;
 
   return new Promise((resolve, reject) => {
     const formData = new FormData();
@@ -177,6 +179,12 @@ export async function sendFileMessage(params: {
     formData.append('conversation_id', conversationId);
     if (replyToId) {
       formData.append('reply_to_id', replyToId);
+    }
+    if (encrypted) {
+      formData.append('encrypted', 'true');
+    }
+    if (encryptionMetadata) {
+      formData.append('encryption_metadata', JSON.stringify(encryptionMetadata));
     }
 
     const xhr = new XMLHttpRequest();
@@ -243,8 +251,10 @@ export async function sendVoiceMessage(params: {
   duration: number;
   replyToId?: string;
   onProgress?: (progress: number) => void;
+  encrypted?: boolean;
+  encryptionMetadata?: Record<string, string>;
 }): Promise<Message> {
-  const { conversationId, audioFile, duration, replyToId, onProgress } = params;
+  const { conversationId, audioFile, duration, replyToId, onProgress, encrypted, encryptionMetadata } = params;
 
   return new Promise((resolve, reject) => {
     const formData = new FormData();
@@ -253,6 +263,12 @@ export async function sendVoiceMessage(params: {
     formData.append('duration', duration.toString());
     if (replyToId) {
       formData.append('reply_to_id', replyToId);
+    }
+    if (encrypted) {
+      formData.append('encrypted', 'true');
+    }
+    if (encryptionMetadata) {
+      formData.append('encryption_metadata', JSON.stringify(encryptionMetadata));
     }
 
     const xhr = new XMLHttpRequest();

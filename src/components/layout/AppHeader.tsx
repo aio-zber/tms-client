@@ -30,9 +30,12 @@ import {
   LogOut,
   ChevronDown,
   Settings,
+  Key,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NotificationBadge, NotificationSettings } from '@/features/notifications';
+import { useEncryptionStore } from '@/features/encryption/stores/keyStore';
+import { KeyBackupDialog } from '@/features/encryption/components/KeyBackupDialog';
 
 export function AppHeader() {
   const [user, setUser] = useState<User | null>(null);
@@ -40,6 +43,12 @@ export function AppHeader() {
   const { theme, setTheme } = useTheme();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [notificationSettingsOpen, setNotificationSettingsOpen] = useState(false);
+
+  // E2EE state
+  const encryptionInitStatus = useEncryptionStore((s) => s.initStatus);
+  const hasBackup = useEncryptionStore((s) => s.hasBackup);
+  const [showBackupDialog, setShowBackupDialog] = useState(false);
+  const isE2EEReady = encryptionInitStatus === 'ready';
 
   useEffect(() => {
     const loadUser = async () => {
@@ -49,7 +58,7 @@ export function AppHeader() {
 
         if (!jwtToken) {
           // No token, redirect to login
-          window.location.href = '/login';
+          window.location.href = '/';
           return;
         }
 
@@ -71,7 +80,7 @@ export function AppHeader() {
           // Token expired, clear storage and redirect to login
           localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
           localStorage.removeItem('tms_session_active');
-          window.location.href = '/login';
+          window.location.href = '/';
         } else {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
@@ -80,7 +89,7 @@ export function AppHeader() {
         // On error, clear auth and redirect to login
         localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
         localStorage.removeItem('tms_session_active');
-        window.location.href = '/login';
+        window.location.href = '/';
       } finally {
         setLoading(false);
       }
@@ -102,12 +111,20 @@ export function AppHeader() {
     try {
       await authService.logout();
       setUser(null);
-      // Redirect to login page
-      window.location.href = '/login';
     } catch (error) {
       log.error('Logout failed:', error);
-      // Even if logout fails, redirect to login for security
-      window.location.href = '/login';
+    } finally {
+      // Redirect to GCGC signout to clear the NextAuth session cookie.
+      // Without this, the SSO flow auto-logs the user back in immediately.
+      // After GCGC signout, redirect back to TMS root which shows the SSO login.
+      const gcgcUrl = process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL || '';
+      const tmsClientUrl = process.env.NEXT_PUBLIC_TMS_CLIENT_URL ||
+        (typeof window !== 'undefined' ? window.location.origin : '');
+      if (gcgcUrl) {
+        window.location.href = `${gcgcUrl}/api/auth/signout?callbackUrl=${encodeURIComponent(tmsClientUrl)}`;
+      } else {
+        window.location.href = '/';
+      }
     }
   };
 
@@ -272,6 +289,27 @@ export function AppHeader() {
             <span>Notification Settings</span>
           </DropdownMenuItem>
 
+          {/* Security Section - shown when E2EE is ready */}
+          {isE2EEReady && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-xs text-gray-500 dark:text-dark-text-secondary uppercase font-semibold">
+                Security
+              </DropdownMenuLabel>
+
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onClick={() => setShowBackupDialog(true)}
+              >
+                <Key className="w-4 h-4 mr-3" />
+                <span>Encryption Keys</span>
+                {!hasBackup && (
+                  <div className="ml-auto w-2 h-2 rounded-full bg-orange-400" />
+                )}
+              </DropdownMenuItem>
+            </>
+          )}
+
           <DropdownMenuSeparator />
 
           {/* Logout */}
@@ -295,6 +333,24 @@ export function AppHeader() {
           <NotificationSettings />
         </DialogContent>
       </Dialog>
+
+      {/* Unified Encryption Keys Dialog (backup + restore in one) */}
+      <KeyBackupDialog
+        open={showBackupDialog}
+        onOpenChange={setShowBackupDialog}
+        mode="manage"
+        hasExistingBackup={hasBackup === true}
+        onComplete={async () => {
+          // Re-initialize encryption after restore so messages decrypt immediately
+          try {
+            const { encryptionService } = await import('@/features/encryption');
+            if (!encryptionService.isInitialized()) {
+              await encryptionService.initialize();
+            }
+          } catch { /* will retry on next message */ }
+          useEncryptionStore.getState().setHasBackup(true);
+        }}
+      />
     </header>
   );
 }

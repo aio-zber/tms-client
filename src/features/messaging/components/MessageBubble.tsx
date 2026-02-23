@@ -8,7 +8,7 @@
 import { log } from '@/lib/logger';
 import { useState, useRef, useEffect, memo, useMemo } from 'react';
 import { formatMessageTimestamp } from '@/lib/dateUtils';
-import { Check, CheckCheck, Reply, Trash2, Smile, Edit, Download, File, FileText, FileSpreadsheet, Play } from 'lucide-react';
+import { Check, CheckCheck, Reply, Trash2, Smile, Edit, Download, File, FileText, FileSpreadsheet, Play, Copy } from 'lucide-react';
 import { motion } from 'framer-motion';
 import * as Dialog from '@radix-ui/react-dialog';
 import type { Message } from '@/types/message';
@@ -20,6 +20,16 @@ import { ImageLightbox } from './ImageLightbox';
 import { VideoPlayer } from './VideoPlayer';
 import { VideoLightbox } from './VideoLightbox';
 import { VoiceMessagePlayer } from './VoiceMessagePlayer';
+import { decryptedContentCache } from '../hooks/useMessages';
+import { getApiBaseUrl, STORAGE_KEYS } from '@/lib/constants';
+
+/** Build a proxy URL for a raw OSS file URL (avoids CORS; works with <img src> via ?token=). */
+function ossProxyUrl(ossUrl: string): string {
+  const token = typeof window !== 'undefined' ? (localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN) || '') : '';
+  const params = new URLSearchParams({ url: ossUrl });
+  if (token) params.set('token', token);
+  return `${getApiBaseUrl()}/files/proxy?${params.toString()}`;
+}
 
 interface MessageBubbleProps {
   message: Message;
@@ -61,12 +71,78 @@ export const MessageBubble = memo(function MessageBubble({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showTimestamp, setShowTimestamp] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const timestampTapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [videoLightboxOpen, setVideoLightboxOpen] = useState(false);
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
+  const [decryptedFileUrl, setDecryptedFileUrl] = useState<string | null>(null);
+  const [isDecryptingFile, setIsDecryptingFile] = useState(false);
+  const [isInView, setIsInView] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  const bubbleRef = useRef<HTMLDivElement>(null);
+
+  // Proxy URL for the file — used when decryptedFileUrl is not yet available.
+  // Routes OSS URLs through the backend to avoid CORS failures on <img>/<video> elements.
+  // For E2EE files this is the fetch source; for non-E2EE it's the display source.
+  const proxyFileUrl = useMemo(() => {
+    const url = message.metadata?.fileUrl;
+    return url ? ossProxyUrl(url) : null;
+  }, [message.metadata?.fileUrl]);
+
+  const proxyThumbnailUrl = useMemo(() => {
+    const url = message.metadata?.thumbnailUrl;
+    return url ? ossProxyUrl(url) : null;
+  }, [message.metadata?.thumbnailUrl]);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const { voteOnPoll, closePoll } = usePollActions();
+
+  // Messenger pattern: only decrypt E2EE media when the bubble enters the viewport.
+  // Prevents fetching+decrypting all files on conversation open (saturates HTTP/2 connection).
+  useEffect(() => {
+    const encMeta = message.metadata?.encryption;
+    if (!encMeta?.fileKey) return; // Only need observer for E2EE messages
+    const el = bubbleRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) setIsInView(true); },
+      { rootMargin: '200px' }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [message.id, message.metadata?.encryption?.fileKey]);
+
+  // E2EE: Decrypt encrypted file content for display — gated on viewport visibility
+  useEffect(() => {
+    const encMeta = message.metadata?.encryption;
+    if (!encMeta?.fileKey || !encMeta?.fileNonce || !proxyFileUrl) return;
+    if (!isInView) return; // Wait until bubble is near viewport
+
+    let objectUrl: string | null = null;
+    const decryptFileContent = async () => {
+      setIsDecryptingFile(true);
+      try {
+        // Fetch through backend proxy (token embedded in URL via proxyFileUrl)
+        const response = await fetch(proxyFileUrl);
+        const encryptedData = await response.arrayBuffer();
+        const { encryptionService } = await import('@/features/encryption');
+        const { fromBase64 } = await import('@/features/encryption/services/cryptoService');
+        const mimeType = encMeta.originalMimeType || message.metadata!.mimeType || 'application/octet-stream';
+        const decryptedBlob = await encryptionService.decryptFile(
+          encryptedData, fromBase64(encMeta.fileKey!), fromBase64(encMeta.fileNonce!), mimeType
+        );
+        objectUrl = URL.createObjectURL(decryptedBlob);
+        setDecryptedFileUrl(objectUrl);
+      } catch (err) {
+        log.message.error('[MessageBubble] File decryption failed:', err);
+      } finally {
+        setIsDecryptingFile(false);
+      }
+    };
+    decryptFileContent();
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [message.id, message.metadata?.encryption?.fileKey, proxyFileUrl, isInView]);
 
   // Helper function to format file size
   const formatFileSize = (bytes?: number): string => {
@@ -107,6 +183,13 @@ export const MessageBubble = memo(function MessageBubble({
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Cleanup timestamp tap timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timestampTapTimeoutRef.current) clearTimeout(timestampTapTimeoutRef.current);
+    };
   }, []);
 
   // DEBUG: Log context menu props when opened
@@ -189,7 +272,8 @@ export const MessageBubble = memo(function MessageBubble({
 
     if (!message.content) return message.content;
 
-    // Highlight @mentions + search query
+    // URL pattern for linkification (Messenger-style clickable links)
+    const urlSource = 'https?://[^\\s<>"{}|\\\\^`[\\]]+';
     // Mention pattern (non-capturing inner groups): @all, @everyone, or @Word Word...
     const mentionSource = '@(?:all|everyone|\\w+(?:\\s\\w+)*)';
     const escapedSearch = searchQuery?.trim()
@@ -197,10 +281,9 @@ export const MessageBubble = memo(function MessageBubble({
       : null;
 
     // Build a single regex with ONE capture group to split on
-    // split() includes captured text in results, so exactly one group is needed
     const patternSource = escapedSearch
-      ? `(${mentionSource}|${escapedSearch})`
-      : `(${mentionSource})`;
+      ? `(${urlSource}|${mentionSource}|${escapedSearch})`
+      : `(${urlSource}|${mentionSource})`;
     const splitRegex = new RegExp(patternSource, 'gi');
 
     // Quick check: does content have anything to highlight?
@@ -215,6 +298,24 @@ export const MessageBubble = memo(function MessageBubble({
       <>
         {parts.map((part, index) => {
           if (!part) return null;
+
+          // Check if this part is a URL — make it a clickable link (Messenger pattern)
+          if (/^https?:\/\//i.test(part)) {
+            return (
+              <a
+                key={index}
+                href={part}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className={`underline break-all ${
+                  isSent ? 'text-white/90 hover:text-white' : 'text-viber-purple hover:text-viber-purple-dark'
+                }`}
+              >
+                {part}
+              </a>
+            );
+          }
 
           // Check if this part is a @mention
           if (new RegExp(`^${mentionSource}$`, 'i').test(part)) {
@@ -271,7 +372,6 @@ export const MessageBubble = memo(function MessageBubble({
       if (contextMenuRef.current && !contextMenuRef.current.contains(target)) {
     log.message.debug('[MessageBubble] Click outside context menu - closing');
         setContextMenu(null);
-        setShowTimestamp(false);
       }
 
       // Close old emoji picker if clicking outside
@@ -296,7 +396,6 @@ export const MessageBubble = memo(function MessageBubble({
     log.message.debug('[MessageBubble] Scroll outside emoji picker - closing context menu');
       setContextMenu(null);
       setShowEmojiPicker(false);
-      setShowTimestamp(false); // Hide timestamp on scroll
     };
 
     if (contextMenu || showEmojiPicker) {
@@ -311,7 +410,6 @@ export const MessageBubble = memo(function MessageBubble({
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    setShowTimestamp(true); // Show timestamp on right-click
 
     // Calculate viewport-aware position to prevent overflow on mobile
     const menuWidth = 200; // Approximate width including padding
@@ -349,7 +447,6 @@ export const MessageBubble = memo(function MessageBubble({
 
   const handleMenuAction = (action: () => void) => {
     setContextMenu(null);
-    setShowTimestamp(false); // Hide timestamp when menu closes
     action();
   };
 
@@ -403,13 +500,29 @@ export const MessageBubble = memo(function MessageBubble({
 
   return (
     <>
-      <div className={`flex gap-2 ${isSent ? 'justify-end' : 'justify-start'}`}>
+      <div className={`flex gap-2 ${isSent ? 'justify-end' : 'justify-start'}`} ref={bubbleRef}>
         {/* Message Content - relative positioning for absolute reactions */}
         <div
           className={`max-w-[85%] sm:max-w-[75%] md:max-w-[70%] lg:max-w-[60%] flex flex-col relative ${
             isSent ? 'items-end' : 'items-start'
           }`}
           onContextMenu={handleContextMenu}
+          onMouseEnter={() => { if (!isMobile) setShowTimestamp(true); }}
+          onMouseLeave={() => { if (!isMobile) setShowTimestamp(false); }}
+          onClick={() => {
+            if (isMobile) {
+              // Single tap toggles timestamp for 3 seconds, then auto-hides
+              setShowTimestamp((prev) => {
+                if (!prev) {
+                  if (timestampTapTimeoutRef.current) clearTimeout(timestampTapTimeoutRef.current);
+                  timestampTapTimeoutRef.current = setTimeout(() => setShowTimestamp(false), 3000);
+                  return true;
+                }
+                if (timestampTapTimeoutRef.current) clearTimeout(timestampTapTimeoutRef.current);
+                return false;
+              });
+            }
+          }}
         >
           {/* Sender Name (for group chats) */}
           {showSender && !isSent && senderName && (
@@ -429,11 +542,16 @@ export const MessageBubble = memo(function MessageBubble({
             <div className="font-semibold mb-0.5 text-viber-purple">
               {getUserName ? getUserName(message.replyTo.senderId) : 'User'}
             </div>
-            {/* Message content in gray */}
+            {/* Message content in gray — use decrypted cache if the replied-to message was encrypted */}
             <div className="truncate text-gray-700 dark:text-dark-text-secondary">
-              {message.replyTo.content.length > 50
-                ? message.replyTo.content.slice(0, 50) + '...'
-                : message.replyTo.content}
+              {(() => {
+                const replyContent =
+                  decryptedContentCache.get(message.replyTo.id) || message.replyTo.content;
+                // If still looks like ciphertext, show a neutral placeholder
+                const display =
+                  replyContent.startsWith('{"v":') ? '[Encrypted message]' : replyContent;
+                return display.length > 50 ? display.slice(0, 50) + '...' : display;
+              })()}
             </div>
           </div>
         )}
@@ -478,20 +596,27 @@ export const MessageBubble = memo(function MessageBubble({
                   ? 'bg-viber-purple rounded-br-sm order-1'
                   : 'bg-gray-100 dark:bg-dark-received-bubble rounded-bl-sm order-2'
               } overflow-hidden cursor-pointer transition-all hover:opacity-90`}
-              onClick={() => setLightboxOpen(true)}
+              onClick={() => !isDecryptingFile && setLightboxOpen(true)}
             >
+              {isDecryptingFile && !decryptedFileUrl ? (
+                <div className="max-w-xs md:max-w-sm h-48 flex items-center justify-center">
+                  <div className="w-8 h-8 border-2 border-viber-purple border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={thumbnailFailed ? message.metadata.fileUrl : (message.metadata.thumbnailUrl || message.metadata.fileUrl)}
+                src={decryptedFileUrl || (thumbnailFailed ? proxyFileUrl! : (proxyThumbnailUrl || proxyFileUrl!))}
                 alt={message.metadata.fileName || 'Image'}
                 className="max-w-xs md:max-w-sm max-h-64 md:max-h-80 object-cover"
                 loading="lazy"
-                onError={(e) => {
-                  // If thumbnail fails, fall back to main file URL
-                  if (!thumbnailFailed && message.metadata?.thumbnailUrl && e.currentTarget.src !== message.metadata.fileUrl) {
+                onError={() => {
+                  // If proxied thumbnail fails, fall back to proxied main file URL
+                  if (!decryptedFileUrl && !thumbnailFailed && proxyThumbnailUrl) {
                     setThumbnailFailed(true);
                   }
                 }}
               />
+              )}
               {/* Caption if present */}
               {message.content && message.content !== message.metadata.fileName && (
                 <div className={`px-3 py-2 text-sm ${isSent ? 'text-white' : 'text-gray-900'}`}>
@@ -515,9 +640,9 @@ export const MessageBubble = memo(function MessageBubble({
               } overflow-hidden`}
             >
               <VideoPlayer
-                src={message.metadata.fileUrl}
-                thumbnailUrl={message.metadata.thumbnailUrl}
-                mimeType={message.metadata.mimeType}
+                src={decryptedFileUrl || proxyFileUrl!}
+                thumbnailUrl={decryptedFileUrl ? undefined : proxyThumbnailUrl || undefined}
+                mimeType={message.metadata.encryption?.originalMimeType || message.metadata.mimeType}
                 fileName={message.metadata.fileName}
                 isSent={isSent}
                 onExpandClick={() => setVideoLightboxOpen(true)}
@@ -556,7 +681,7 @@ export const MessageBubble = memo(function MessageBubble({
                   onClick={(e) => {
                     e.stopPropagation();
                     // Open file in new tab - browser handles viewing (PDFs show inline, others download)
-                    window.open(message.metadata?.fileUrl, '_blank', 'noopener,noreferrer');
+                    window.open(decryptedFileUrl || message.metadata?.fileUrl, '_blank', 'noopener,noreferrer');
                   }}
                   onContextMenu={(e) => {
                     e.stopPropagation();
@@ -588,18 +713,29 @@ export const MessageBubble = memo(function MessageBubble({
                   onClick={async (e) => {
                     e.stopPropagation();
                     try {
-                      const response = await fetch(message.metadata?.fileUrl || '');
-                      const blob = await response.blob();
-                      const url = window.URL.createObjectURL(blob);
+                      // E2EE: use the already-decrypted blob URL directly
+                      // Non-E2EE: fetch through proxy (token in URL, no CORS issue)
+                      let downloadUrl: string;
+                      let isBlobCreated = false;
+                      if (decryptedFileUrl) {
+                        downloadUrl = decryptedFileUrl;
+                      } else if (proxyFileUrl) {
+                        const res = await fetch(proxyFileUrl);
+                        const blob = await res.blob();
+                        downloadUrl = window.URL.createObjectURL(blob);
+                        isBlobCreated = true;
+                      } else {
+                        return;
+                      }
                       const link = document.createElement('a');
-                      link.href = url;
+                      link.href = downloadUrl;
                       link.download = message.metadata?.fileName || 'file';
                       document.body.appendChild(link);
                       link.click();
                       document.body.removeChild(link);
-                      window.URL.revokeObjectURL(url);
-                    } catch (err) {
-                      window.open(message.metadata?.fileUrl, '_blank');
+                      if (isBlobCreated) window.URL.revokeObjectURL(downloadUrl);
+                    } catch {
+                      if (proxyFileUrl) window.open(proxyFileUrl, '_blank');
                     }
                   }}
                   onContextMenu={(e) => {
@@ -634,9 +770,10 @@ export const MessageBubble = memo(function MessageBubble({
               } transition-all`}
             >
               <VoiceMessagePlayer
-                src={message.metadata.fileUrl}
+                src={decryptedFileUrl || message.metadata.fileUrl}
                 duration={message.metadata.duration}
                 isSent={isSent}
+                fileName={message.metadata.fileName}
               />
 
               {/* Status indicator */}
@@ -684,11 +821,11 @@ export const MessageBubble = memo(function MessageBubble({
         </div>
 
         {/* Image Lightbox */}
-        {lightboxOpen && message.type === 'IMAGE' && message.metadata?.fileUrl && (
+        {lightboxOpen && message.type === 'IMAGE' && proxyFileUrl && message.metadata && (
           <ImageLightbox
             images={[{
-              url: message.metadata.fileUrl,
-              thumbnailUrl: message.metadata.thumbnailUrl,
+              url: decryptedFileUrl || proxyFileUrl,
+              thumbnailUrl: decryptedFileUrl ? undefined : proxyThumbnailUrl || undefined,
               fileName: message.metadata.fileName,
               caption: message.content !== message.metadata.fileName ? message.content : undefined,
             }]}
@@ -698,17 +835,17 @@ export const MessageBubble = memo(function MessageBubble({
         )}
 
         {/* Video Lightbox */}
-        {videoLightboxOpen && message.type === 'FILE' && message.metadata?.fileUrl && message.metadata?.mimeType?.startsWith('video/') && (
+        {videoLightboxOpen && message.type === 'FILE' && proxyFileUrl && (message.metadata?.mimeType?.startsWith('video/') || message.metadata?.encryption?.originalMimeType?.startsWith('video/')) && (
           <VideoLightbox
-            src={message.metadata.fileUrl}
-            mimeType={message.metadata.mimeType}
+            src={decryptedFileUrl || proxyFileUrl}
+            mimeType={message.metadata.encryption?.originalMimeType || message.metadata.mimeType}
             fileName={message.metadata.fileName}
-            thumbnailUrl={message.metadata.thumbnailUrl}
+            thumbnailUrl={decryptedFileUrl ? undefined : proxyThumbnailUrl || undefined}
             onClose={() => setVideoLightboxOpen(false)}
           />
         )}
 
-        {/* Timestamp (outside bubble, only shown on right-click) */}
+        {/* Timestamp: shown on hover (desktop) or single tap (mobile) */}
         {showTimestamp && (
           <div className={`text-[10px] text-gray-400 dark:text-dark-text-secondary mt-1 px-1 ${isSent ? 'text-right' : 'text-left'}`}>
             {formatMessageTimestamp(message.createdAt)}
@@ -818,6 +955,20 @@ export const MessageBubble = memo(function MessageBubble({
             >
               <Reply className="w-4 h-4 md:w-5 md:h-5" />
               Reply
+            </button>
+          )}
+
+          {/* Copy — for text messages (uses decrypted plaintext if E2EE) */}
+          {message.type === 'TEXT' && !message.deletedAt && (
+            <button
+              onClick={() => handleMenuAction(() => {
+                const text = decryptedContentCache.get(message.id) ?? message.content;
+                if (text) navigator.clipboard.writeText(text).catch(() => {});
+              })}
+              className="w-full px-4 py-2 text-left text-sm md:text-base hover:bg-gray-100 dark:hover:bg-dark-border flex items-center gap-2 text-gray-700 dark:text-dark-text transition"
+            >
+              <Copy className="w-4 h-4 md:w-5 md:h-5" />
+              Copy
             </button>
           )}
 

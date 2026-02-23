@@ -25,6 +25,7 @@ export type LogCategory =
   | 'visibility'    // Read/unread tracking
   | 'query'         // TanStack Query
   | 'notification'  // Notifications
+  | 'encryption'    // E2EE encryption operations
   | 'general';      // Uncategorized
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
@@ -52,6 +53,7 @@ class Logger {
         visibility: isDev || forceDebug,
         query: isDev || forceDebug,
         notification: isDev || forceDebug,
+        encryption: isDev || forceDebug,
         general: isDev || forceDebug,
       },
     };
@@ -264,6 +266,14 @@ export const log = {
     info: (msg: string, ...args: unknown[]) => logger.info('notification', msg, ...args),
     warn: (msg: string, ...args: unknown[]) => logger.warn('notification', msg, ...args),
     error: (msg: string, ...args: unknown[]) => logger.error('notification', msg, ...args),
+  },
+
+  // Encryption logging (E2EE operations)
+  encryption: {
+    debug: (msg: string, ...args: unknown[]) => logger.debug('encryption', msg, ...args),
+    info: (msg: string, ...args: unknown[]) => logger.info('encryption', msg, ...args),
+    warn: (msg: string, ...args: unknown[]) => logger.warn('encryption', msg, ...args),
+    error: (msg: string, ...args: unknown[]) => logger.error('encryption', msg, ...args),
   },
 
   // General logging (fallback)

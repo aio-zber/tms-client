@@ -1,6 +1,6 @@
 'use client';
 
-import { Menu, MoreVertical, Search, Users, LogOut, User, Bell, BellOff } from 'lucide-react';
+import { Menu, MoreVertical, Search, Users, LogOut, User, Bell, BellOff, Lock } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { OnlineIndicator } from '@/components/ui/OnlineIndicator';
 import {
@@ -14,6 +14,7 @@ import { useIsUserOnline } from '@/hooks/usePresence';
 import { getUserImageUrl } from '@/lib/imageUtils';
 import { useNotificationPreferences } from '@/features/notifications/hooks/useNotificationPreferences';
 import { useNotificationStore } from '@/store/notificationStore';
+import { useEncryptionStore, selectIsInitialized } from '@/features/encryption';
 import type { Conversation } from '@/types/conversation';
 
 interface ChatHeaderProps {
@@ -61,6 +62,7 @@ export function ChatHeader({
   const { muteConversation, unmuteConversation } = useNotificationPreferences();
   const mutedConversations = useNotificationStore((state) => state.mutedConversations);
   const isMuted = mutedConversations.has(conversation.id);
+  const isE2EEReady = useEncryptionStore(selectIsInitialized);
 
   const handleToggleMute = () => {
     if (isMuted) {
@@ -100,18 +102,21 @@ export function ChatHeader({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
           <h1 className="text-base md:text-lg font-semibold dark:text-dark-text truncate">{conversationTitle}</h1>
+          {isE2EEReady && (
+            <Lock className="w-4 h-4 text-viber-purple flex-shrink-0" aria-label="End-to-end encrypted" />
+          )}
           {isMuted && (
             <BellOff className="w-4 h-4 text-gray-400 dark:text-dark-text-secondary flex-shrink-0" aria-label="Muted" />
           )}
         </div>
         {conversation.type === 'group' ? (
           <p className="text-xs md:text-sm text-gray-500 dark:text-dark-text-secondary">
-            {conversation.members.length} member{conversation.members.length > 1 ? 's' : ''}
+            {conversation.members.length} member{conversation.members.length > 1 ? 's' : ''}{isE2EEReady ? ' · Encrypted' : ''}
           </p>
         ) : (
           /* Online status text for DM conversations (Messenger-style) */
           <p className="text-xs md:text-sm text-gray-500 dark:text-dark-text-secondary">
-            {isOtherUserOnline ? 'Active now' : 'Offline'}
+            {isOtherUserOnline ? 'Active now' : 'Offline'}{isE2EEReady ? ' · Encrypted' : ''}
           </p>
         )}
       </div>

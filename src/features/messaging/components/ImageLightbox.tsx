@@ -169,10 +169,15 @@ export function ImageLightbox({
     }
   }, []);
 
-  // Download image
+  // Download image — route through backend proxy to avoid OSS CORS restrictions
   const handleDownload = useCallback(async () => {
     try {
-      const response = await fetch(currentImage.url);
+      const { getApiBaseUrl } = await import('@/lib/constants');
+      const token = localStorage.getItem('auth_token');
+      const proxyUrl = `${getApiBaseUrl()}/files/proxy?url=${encodeURIComponent(currentImage.url)}`;
+      const response = await fetch(proxyUrl, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');

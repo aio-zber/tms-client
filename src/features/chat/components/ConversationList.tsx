@@ -7,7 +7,7 @@
 
 import { useState, Suspense, useMemo, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { MessageCircle, Search, Plus } from 'lucide-react';
+import { MessageCircle, Search, Plus, Lock } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,7 @@ import {
   getConversationDisplayName,
   getNameInitials,
   getOtherUserId,
+  getEncryptedMessagePreview,
 } from '@/lib/conversationUtils';
 import { useConversations, useConversationSearch } from '@/features/conversations';
 import { useUnifiedSearch } from '@/features/messaging/hooks/useUnifiedSearch';
@@ -204,7 +205,7 @@ function ConversationListContent() {
         <div className="p-3 border-b border-gray-200 dark:border-dark-border space-y-3">
           <Button
             onClick={() => setShowNewConversationDialog(true)}
-            className="w-full bg-viber-purple hover:bg-viber-purple-dark"
+            className="w-full bg-viber-purple hover:bg-viber-purple-dark text-white"
           >
             <Plus className="h-4 w-4 mr-2" />
             New Conversation
@@ -331,7 +332,14 @@ function ConversationListContent() {
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-sm text-gray-600 dark:text-dark-text-secondary truncate">
                         {conversation.lastMessage ? (
-                          conversation.lastMessage.content
+                          (conversation.lastMessage.encrypted || conversation.lastMessage.content.startsWith('{"v":')) ? (
+                            <span className="flex items-center gap-1 text-gray-400 dark:text-dark-text-secondary italic">
+                              <Lock className="w-3 h-3" />
+                              {getEncryptedMessagePreview(conversation.lastMessage.type)}
+                            </span>
+                          ) : (
+                            conversation.lastMessage.content
+                          )
                         ) : (
                           <span className="text-gray-400 dark:text-dark-text-secondary italic">No messages yet</span>
                         )}

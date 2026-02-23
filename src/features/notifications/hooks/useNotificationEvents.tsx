@@ -467,6 +467,16 @@ export function useNotificationEvents() {
         }
       }
 
+      // Determine notification content — never show raw ciphertext
+      const isEncrypted = !!(data.encrypted);
+      const isEncryptedContent = typeof message.content === 'string' && message.content.startsWith('{"v":');
+      let notificationContent: string;
+      if (isEncrypted || isEncryptedContent) {
+        notificationContent = 'Encrypted message';
+      } else {
+        notificationContent = message.content.slice(0, 100);
+      }
+
       // Create notification
       const notification: Notification = {
         id: `notif-${message.id}`,
@@ -476,7 +486,7 @@ export function useNotificationEvents() {
         senderId: message.sender_id,
         senderName: resolveSenderName(message.sender_id, message.sender_name, message.conversation_id),
         senderAvatar: message.sender_avatar,
-        content: message.content.slice(0, 100), // Truncate preview
+        content: notificationContent,
         timestamp: message.created_at,
         isRead: false,
         priority: isMentioned ? 'high' : 'medium',

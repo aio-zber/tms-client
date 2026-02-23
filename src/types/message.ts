@@ -23,6 +23,11 @@ export interface Message {
   createdAt: string;
   updatedAt?: string;
   deletedAt?: string;
+
+  // E2EE fields
+  encrypted?: boolean; // Whether the message content is encrypted
+  encryptionVersion?: number; // Encryption protocol version
+  senderKeyId?: string; // Sender key ID for group messages
 }
 
 export interface PollOption {
@@ -80,6 +85,34 @@ export interface MessageMetadata {
 
   // For system messages
   system?: SystemMessageMetadata;
+
+  // E2EE encryption metadata
+  encryption?: EncryptionMetadata;
+}
+
+/**
+ * Encryption metadata for E2EE messages
+ */
+export interface EncryptionMetadata {
+  // X3DH header (for initial messages in 1:1 chats)
+  x3dhHeader?: string; // JSON serialized X3DH header
+
+  // File encryption data
+  fileKey?: string; // Base64 encrypted file key
+  fileKeyNonce?: string; // Base64 nonce for file key encryption
+  fileNonce?: string; // Base64 nonce used for file encryption
+  originalMimeType?: string; // Original MIME type before encryption
+  originalSize?: string; // Original file size before encryption
+
+  // Message key info (for out-of-order decryption)
+  messageNumber?: number;
+  previousChainLength?: number;
+
+  // Sender's current ratchet public key (for DH ratchet)
+  senderPublicKey?: string; // Base64
+
+  // Group encryption flag
+  isGroup?: boolean;
 }
 
 export interface MessageReaction {
@@ -103,7 +136,12 @@ export interface SendMessageRequest {
   content: string;
   type?: MessageType;
   reply_to_id?: string;
-  metadata?: MessageMetadata;
+  metadata_json?: MessageMetadata;
+
+  // E2EE fields
+  encrypted?: boolean;
+  encryption_version?: number;
+  sender_key_id?: string;
 }
 
 export interface EditMessageRequest {

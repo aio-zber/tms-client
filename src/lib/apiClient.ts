@@ -39,14 +39,19 @@ class ApiClient {
   private getAuthToken(): string | null {
     if (typeof window === 'undefined') return null;
 
-    // Try to get token from authService (session-based)
+    // Primary: JWT token from localStorage (set during login/SSO callback)
+    const jwtToken = localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+    if (jwtToken) {
+      return jwtToken;
+    }
+
+    // Fallback: session token from cookies (for SSO cookie-based auth)
     const sessionToken = authService.getStoredToken();
     if (sessionToken && sessionToken !== 'session-active') {
       return sessionToken;
     }
 
-    // Fallback to localStorage (token-based)
-    return localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+    return null;
   }
 
   /**

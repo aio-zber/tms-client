@@ -8,6 +8,8 @@
 
 import { log } from '@/lib/logger';
 import { useState, useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/lib/queryClient';
 import { Loader2, X } from 'lucide-react';
 import { MessageList } from '@/features/messaging/components/MessageList';
 import { MessageInput } from '@/features/messaging/components/MessageInput';
@@ -25,9 +27,12 @@ import { useLeaveConversation } from '@/features/conversations/hooks/useLeaveCon
 import { useUserDisplayName } from '@/features/users/hooks/useUserDisplayName';
 import ConversationSettingsDialog from '@/features/conversations/components/ConversationSettingsDialog';
 import { useConversationEvents } from '@/features/conversations/hooks/useConversationEvents';
+import { patchSidebarLastMessageContent } from '@/features/conversations/hooks/useConversations';
 import { conversationService } from '@/features/conversations/services/conversationService';
 import { ChatHeader } from './ChatHeader';
 import { UserProfileDialog } from '@/features/users/components/UserProfileDialog';
+import { useEncryptionStore } from '@/features/encryption/stores/keyStore';
+import { KeyChangeBanner } from '@/features/encryption/components/KeyChangeBanner';
 
 interface ChatProps {
   conversationId: string;
@@ -52,11 +57,12 @@ export function Chat({
   const [showProfileDialog, setShowProfileDialog] = useState(false);
 
   // Hooks - Use existing hooks instead of manual implementation
+  const queryClient = useQueryClient();
   const { conversation, isLoading: loadingConversation } = useConversationQuery(conversationId, true);
   const { user: currentUser } = useCurrentUser();
   const currentUserId = currentUser?.id || '';
 
-  const { messages, loading, hasMore, loadMore, addOptimisticMessage } = useMessages(conversationId);
+  const { messages, loading, hasMore, loadMore, addOptimisticMessage, replaceOptimisticMessage } = useMessages(conversationId);
   const { sendMessage, sending } = useSendMessage();
   const { editMessage, deleteMessage, addReaction, removeReaction, switchReaction } = useMessageActions({ currentUserId });
   const handleLeaveConversationWithNav = useLeaveConversation(conversationId);
@@ -64,6 +70,29 @@ export function Chat({
 
   useSocket(); // Initialize WebSocket connection
   useConversationEvents({ conversationId }); // Handle real-time conversation updates
+
+  // E2EE: Key change detection (backup prompts moved to EncryptionGate)
+  const encryptionInitStatus = useEncryptionStore((s) => s.initStatus);
+  const identityKeyChanges = useEncryptionStore((s) => s.identityKeyChanges);
+  const clearIdentityKeyChanged = useEncryptionStore((s) => s.clearIdentityKeyChanged);
+
+  // Determine if other user's key changed (DM only)
+  const otherDmUserId = conversation?.type === 'dm'
+    ? conversation.members.find((m) => m.userId !== currentUserId)?.userId
+    : undefined;
+  const otherDmUserName = otherDmUserId
+    ? getUserName(otherDmUserId)
+    : '';
+  const keyChanged = otherDmUserId ? (identityKeyChanges.get(otherDmUserId) ?? false) : false;
+
+  // NOTE: Backup onboarding and restore prompts are both handled by EncryptionGate
+  // (app-level, fires right after login — Messenger pattern).
+
+  // Close mobile drawer when the active conversation changes (Messenger pattern —
+  // tapping a conversation in the sidebar navigates and immediately hides the sidebar)
+  useEffect(() => {
+    setIsMobileDrawerOpen(false);
+  }, [conversationId]);
 
   // Mark conversation as read when opening (Messenger-style pattern)
   // This triggers the backend to update all unread messages to READ status
@@ -74,6 +103,85 @@ export function Chat({
       });
     }
   }, [conversationId, currentUserId]);
+
+  // Group E2EE: Fetch stored sender keys + distribute our own key.
+  // Messenger pattern: key exchange happens in the background AFTER the UI renders
+  // with cached messages — users see the conversation immediately, keys sync silently.
+  // We track which conversations we've already synced this session to avoid redundant
+  // HTTP + crypto work on every revisit (the primary cause of 1-2s navigation delay).
+  useEffect(() => {
+    if (!conversation || conversation.type !== 'group' || !currentUserId || !encryptionInitStatus) return;
+    if (encryptionInitStatus !== 'ready') return;
+
+    const memberIds = conversation.members
+      .map((m: { userId: string }) => m.userId)
+      .filter((id: string) => id !== currentUserId);
+
+    if (memberIds.length === 0) return;
+
+    // Defer the entire key-sync operation so the UI renders cached messages first.
+    // This is exactly how Messenger handles it: render first, sync keys in background.
+    const timer = setTimeout(() => {
+      import('@/features/encryption').then(async ({ encryptionService }) => {
+        if (!encryptionService.isInitialized()) return;
+
+        let groupKeyLoaded = false;
+
+        // 1. Fetch existing group keys from the server for all group members.
+        try {
+          const { apiClient } = await import('@/lib/apiClient');
+          const response = await apiClient.get<{
+            sender_keys: Array<{
+              sender_id: string;
+              key_id: string;
+              public_signing_key: string;
+              chain_key: string | null;
+            }>;
+          }>(`/encryption/sender-keys/${conversationId}`);
+          const senderKeys = response?.sender_keys;
+
+          if (senderKeys && senderKeys.length > 0) {
+            for (const sk of senderKeys) {
+              if (sk.sender_id === currentUserId) continue;
+              await encryptionService.receiveSenderKeyDistribution({
+                conversation_id: conversationId,
+                sender_id: sk.sender_id,
+                key_id: sk.key_id,
+                public_signing_key: sk.public_signing_key,
+                chain_key: sk.chain_key,
+              });
+              groupKeyLoaded = true;
+            }
+            log.debug(`[Chat] Loaded group keys from server for ${conversationId}`);
+          }
+        } catch (err) {
+          log.warn('[Chat] Failed to fetch group sender keys:', err);
+        }
+
+        // 2. Distribute our own group key to all members.
+        try {
+          await encryptionService.distributeSenderKey(conversationId, currentUserId, memberIds);
+          log.debug(`[Chat] Distributed group key to ${memberIds.length} members`);
+        } catch (err) {
+          log.warn('[Chat] Failed to distribute group key:', err);
+        }
+
+        // 3. Only invalidate the message cache if we actually received new keys.
+        //    Avoid unnecessary re-fetches on every conversation revisit.
+        if (groupKeyLoaded) {
+          const { clearFailedDecryptions } = await import('@/features/messaging/hooks/useMessagesQuery');
+          clearFailedDecryptions();
+          queryClient.invalidateQueries({
+            queryKey: [...queryKeys.messages.lists(), conversationId],
+          });
+          log.debug('[Chat] Group key loaded — invalidated message cache for re-decryption');
+        }
+      }).catch(() => {});
+    }, 0); // setTimeout(0) yields to the browser to render the cached messages first
+
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId, conversation?.type, currentUserId, encryptionInitStatus, queryClient]);
 
   // Jump to message hook for search navigation
   const {
@@ -146,6 +254,28 @@ export function Chat({
   const handleSendMessage = async (content: string, replyToId?: string) => {
     log.debug('[Chat] Sending message:', content);
 
+    // Determine encryption options based on E2EE initialization status.
+    // Always include currentUserId so the temp optimistic message has the correct senderId.
+    let encryptionOptions: { encrypted?: boolean; recipientId?: string; isGroup?: boolean; currentUserId?: string; memberIds?: string[] } = {
+      currentUserId,
+    };
+    try {
+      const { encryptionService } = await import('@/features/encryption');
+      if (encryptionService.isInitialized() && conversation) {
+        if (conversation.type === 'group') {
+          const memberIds = conversation.members
+            .map((m: { userId: string }) => m.userId)
+            .filter((id: string) => id !== currentUserId);
+          encryptionOptions = { encrypted: true, isGroup: true, currentUserId, recipientId: currentUserId, memberIds };
+        } else {
+          const otherMember = conversation.members.find(m => m.userId !== currentUserId);
+          if (otherMember) {
+            encryptionOptions = { encrypted: true, recipientId: otherMember.userId, currentUserId };
+          }
+        }
+      }
+    } catch { /* E2EE not available — send unencrypted */ }
+
     const message = await sendMessage(
       {
         conversation_id: conversationId,
@@ -153,12 +283,21 @@ export function Chat({
         type: 'TEXT',
         reply_to_id: replyToId,
       },
-      // Optimistic update callback - add message immediately to UI
-      (sentMessage) => {
-        log.debug('[Chat] Message sent successfully, adding to UI optimistically:', sentMessage);
-        addOptimisticMessage(sentMessage);
-        onMessageSent?.(sentMessage);
-      }
+      // onOptimisticAdd: called immediately with temp message (Messenger pattern)
+      (optimisticMessage) => {
+        addOptimisticMessage(optimisticMessage);
+        // Only fire onMessageSent for the real message (checked by id prefix below)
+      },
+      encryptionOptions,
+      // onReplaceOptimistic: called after send completes — swaps temp with real message
+      // and patches the sidebar to show plaintext immediately (no more "Encrypted Message")
+      (tempId, realMessage) => {
+        replaceOptimisticMessage(tempId, realMessage);
+        // Patch sidebar to show decrypted content — decryptedContentCache is already
+        // populated by cacheDecryptedContent() in useSendMessage at this point
+        patchSidebarLastMessageContent(queryClient, conversationId, realMessage.id, realMessage.content);
+        onMessageSent?.(realMessage);
+      },
     );
 
     if (message) {
@@ -358,6 +497,15 @@ export function Chat({
           goToPrevious={goToPrevious}
         />
 
+        {/* Key Change Warning Banner */}
+        {keyChanged && otherDmUserId && (
+          <KeyChangeBanner
+            userName={otherDmUserName}
+            onDismiss={() => clearIdentityKeyChanged(otherDmUserId)}
+            onViewSecurity={() => setShowSettingsDialog(true)}
+          />
+        )}
+
         {/* Messages Area */}
         <MessageList
           messages={messages}
@@ -418,7 +566,9 @@ export function Chat({
           open={showProfileDialog}
           onOpenChange={setShowProfileDialog}
           showSendMessageButton={selectedUserProfile !== currentUserId}
+          conversationId={conversation?.type === 'dm' ? conversation?.id : undefined}
         />
+
       </div>
     </>
   );
