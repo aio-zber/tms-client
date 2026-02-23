@@ -143,6 +143,13 @@ interface LinkPreview {
   domain: string;
 }
 
+/** Returns true after the component has mounted on the client (safe for portals/document access). */
+function useMounted() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  return mounted;
+}
+
 /** Fires once when the element enters the viewport (one-shot, never resets to false). */
 function useInView(rootMargin = '200px') {
   const ref = useRef<HTMLButtonElement>(null);
@@ -163,6 +170,7 @@ function useInView(rootMargin = '200px') {
 }
 
 export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
+  const mounted = useMounted();
   const [category, setCategory] = useState<MediaCategory>('media');
   const [previews, setPreviews] = useState<Record<string, LinkPreview>>({});
   const [previewsLoading, setPreviewsLoading] = useState(false);
@@ -214,10 +222,14 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
     })
     .filter((item, idx, arr) => arr.findIndex((x) => x.url === item.url) === idx);
 
+  // Stable key for link URLs — avoids render loop from new array reference each render
+  const linkUrlsKey = linkItems.map((i) => i.url).join(',');
+
   // Load link previews when Links tab is active
   useEffect(() => {
-    if (category !== 'links' || linkItems.length === 0) return;
-    const unfetched = linkItems.map((i) => i.url).filter((u) => !(u in previews));
+    if (category !== 'links' || !linkUrlsKey) return;
+    const urls = linkUrlsKey.split(',');
+    const unfetched = urls.filter((u) => !(u in previews));
     if (unfetched.length === 0) return;
 
     setPreviewsLoading(true);
@@ -240,7 +252,7 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
       setPreviewsLoading(false);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [category, linkItems.length]);
+  }, [category, linkUrlsKey]);
 
   const tabs: { key: MediaCategory; label: string; count: number }[] = [
     { key: 'media', label: 'Media', count: mediaMessages.length },
@@ -438,8 +450,8 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
         )}
       </div>
 
-      {/* Image Lightbox — rendered in a portal so it escapes the dialog stacking context */}
-      {lightboxImages.length > 0 && typeof document !== 'undefined' &&
+      {/* Image Lightbox — portal to document.body to escape dialog stacking context */}
+      {mounted && lightboxImages.length > 0 &&
         createPortal(
           <ImageLightbox
             images={lightboxImages}
@@ -450,8 +462,8 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
         )
       }
 
-      {/* Video Lightbox — rendered in a portal so it covers the full viewport */}
-      {videoLightbox && typeof document !== 'undefined' &&
+      {/* Video Lightbox — portal to document.body to cover full viewport */}
+      {mounted && videoLightbox &&
         createPortal(
           <VideoLightbox
             src={videoLightbox.src}
