@@ -378,18 +378,18 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
 
         {/* Files list — Viber pattern: whole row taps to download, name truncates */}
         {category === 'files' && (
-          <div className="h-72 overflow-y-auto overflow-x-hidden">
+          <ScrollArea className="h-72">
             {fileMessages.length === 0 ? (
               <EmptyState icon={<FileText className="w-8 h-8" />} text="No files shared yet" />
             ) : (
-              <div className="space-y-0.5 w-full">
+              <div className="space-y-0.5">
                 {fileMessages.map((msg) => {
                   const encMeta = msg.metadata?.encryption as { fileKey?: string; fileNonce?: string; originalMimeType?: string } | undefined;
                   const canDownload = !!msg.metadata?.fileUrl;
                   return (
                     <button
                       key={msg.id}
-                      className="flex items-center gap-3 w-full min-w-0 overflow-hidden py-3 px-1 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-border transition-colors text-left"
+                      className="flex items-center gap-3 w-full py-3 px-1 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-border transition-colors text-left"
                       disabled={!canDownload}
                       onClick={() => {
                         if (!canDownload) return;
@@ -400,12 +400,9 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
                         );
                       }}
                     >
-                      {/* File type icon */}
                       <div className="flex-shrink-0 w-10 h-10 bg-viber-purple/10 rounded-xl flex items-center justify-center">
                         <FileText className="w-5 h-5 text-viber-purple" />
                       </div>
-
-                      {/* Name + size — flex-1 min-w-0 ensures truncation works */}
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-900 dark:text-dark-text truncate">
                           {msg.metadata?.fileName || 'File'}
@@ -419,12 +416,12 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
                 })}
               </div>
             )}
-          </div>
+          </ScrollArea>
         )}
 
         {/* Links list */}
         {category === 'links' && (
-          <div className="h-72 overflow-y-auto overflow-x-hidden">
+          <ScrollArea className="h-72">
             {linkItems.length === 0 ? (
               <EmptyState icon={<LinkIcon className="w-8 h-8" />} text="No links shared yet" />
             ) : previewsLoading && Object.keys(previews).length === 0 ? (
@@ -432,13 +429,13 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
                 <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
               </div>
             ) : (
-              <div className="space-y-2 w-full">
+              <div className="space-y-2 pr-1">
                 {linkItems.map((item, idx) => (
                   <LinkPreviewCard key={idx} url={item.url} preview={previews[item.url]} />
                 ))}
               </div>
             )}
-          </div>
+          </ScrollArea>
         )}
       </div>
 

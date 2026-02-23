@@ -267,8 +267,8 @@ export default function ConversationSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-x-hidden overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col p-0 gap-0">
+        <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6 pb-2 flex-shrink-0">
           <DialogTitle>
             {isGroup ? 'Group Settings' : 'Conversation'}
           </DialogTitle>
@@ -277,7 +277,7 @@ export default function ConversationSettingsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue={isGroup ? 'members' : 'media'} className="w-full">
+        <Tabs defaultValue={isGroup ? 'members' : 'media'} className="flex flex-col flex-1 overflow-hidden px-4 sm:px-6 pb-4 sm:pb-6">
           <TabsList className={`grid w-full ${isGroup ? 'grid-cols-2' : 'grid-cols-1'}`}>
             {isGroup && <TabsTrigger value="members">Members ({members.length})</TabsTrigger>}
             <TabsTrigger value="media">Media &amp; Files</TabsTrigger>
