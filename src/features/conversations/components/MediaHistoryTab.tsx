@@ -15,7 +15,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Download,
   FileText,
   Link as LinkIcon,
   Image as ImageIcon,
@@ -377,20 +376,20 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
           </ScrollArea>
         )}
 
-        {/* Files list */}
+        {/* Files list — Viber pattern: whole row taps to download, name truncates */}
         {category === 'files' && (
-          <ScrollArea className="h-72 w-full overflow-hidden">
+          <ScrollArea className="h-72">
             {fileMessages.length === 0 ? (
               <EmptyState icon={<FileText className="w-8 h-8" />} text="No files shared yet" />
             ) : (
-              <div className="space-y-1 w-full">
+              <div className="space-y-0.5">
                 {fileMessages.map((msg) => {
                   const encMeta = msg.metadata?.encryption as { fileKey?: string; fileNonce?: string; originalMimeType?: string } | undefined;
                   const canDownload = !!msg.metadata?.fileUrl;
                   return (
                     <button
                       key={msg.id}
-                      className="w-full min-w-0 flex items-center gap-3 px-2 py-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-dark-border transition-colors text-left overflow-hidden"
+                      className="flex items-center gap-3 w-full py-3 px-1 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-border transition-colors text-left"
                       disabled={!canDownload}
                       onClick={() => {
                         if (!canDownload) return;
@@ -406,22 +405,15 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
                         <FileText className="w-5 h-5 text-viber-purple" />
                       </div>
 
-                      {/* Name + size — truncate to never push download button off screen */}
-                      <div className="flex-1 min-w-0 overflow-hidden">
-                        <p className="text-sm font-medium text-gray-900 dark:text-dark-text truncate leading-snug">
+                      {/* Name + size — flex-1 min-w-0 ensures truncation works */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 dark:text-dark-text truncate">
                           {msg.metadata?.fileName || 'File'}
                         </p>
                         <p className="text-xs text-gray-400 mt-0.5">
                           {formatBytes(msg.metadata?.fileSize) || 'Unknown size'}
                         </p>
                       </div>
-
-                      {/* Download button — Viber-style solid purple circle, always visible */}
-                      {canDownload && (
-                        <div className="flex-shrink-0 w-9 h-9 rounded-full bg-viber-purple flex items-center justify-center shadow-sm">
-                          <Download className="w-4 h-4 text-white" />
-                        </div>
-                      )}
                     </button>
                   );
                 })}

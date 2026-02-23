@@ -267,7 +267,7 @@ export default function ConversationSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto overflow-x-hidden w-full">
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {isGroup ? 'Group Settings' : 'Conversation'}

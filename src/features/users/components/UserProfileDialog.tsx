@@ -132,7 +132,7 @@ export function UserProfileDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[90vh] p-0 gap-0 overflow-hidden">
-        <DialogHeader className="px-6 pt-6 pb-2">
+        <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6 pb-2">
           <DialogTitle className="text-xl font-bold">Profile</DialogTitle>
           <DialogDescription className="sr-only">
             View user profile information
@@ -141,7 +141,7 @@ export function UserProfileDialog({
 
         {conversationId ? (
           /* Tabbed layout when conversation media is available */
-          <Tabs defaultValue="profile" className="flex flex-col flex-1 overflow-hidden px-6 pb-6">
+          <Tabs defaultValue="profile" className="flex flex-col flex-1 overflow-hidden px-4 sm:px-6 pb-4 sm:pb-6">
             <TabsList className="grid w-full grid-cols-2 mb-4">
               <TabsTrigger value="profile">Profile</TabsTrigger>
               <TabsTrigger value="media">Media &amp; Files</TabsTrigger>
@@ -155,7 +155,7 @@ export function UserProfileDialog({
           </Tabs>
         ) : (
           /* Simple layout without tabs */
-          <div className="overflow-y-auto px-6 pb-6">
+          <div className="overflow-y-auto px-4 sm:px-6 pb-4 sm:pb-6">
             {profileContent}
           </div>
         )}
