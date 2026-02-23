@@ -40,6 +40,7 @@ interface MessageBubbleProps {
   onEdit?: (messageId: string) => void;
   onDelete?: (messageId: string, scope: 'me' | 'everyone') => void;
   onReply?: (message: Message) => void;
+  onJumpToReply?: (messageId: string) => void;
   onReact?: (messageId: string, emoji: string) => void;
   getUserName?: (userId: string) => string;
   searchQuery?: string;
@@ -61,6 +62,7 @@ export const MessageBubble = memo(function MessageBubble({
   onEdit,
   onDelete,
   onReply,
+  onJumpToReply,
   onReact,
   getUserName,
   searchQuery,
@@ -532,11 +534,12 @@ export const MessageBubble = memo(function MessageBubble({
           {/* Reply-to Message - NEW DESIGN matching the image */}
           {message.replyTo && (
           <div
+            onClick={() => onJumpToReply?.(message.replyTo!.id)}
             className={`text-xs md:text-sm px-3 py-2 rounded-t-xl mb-[-8px] border-l-4 ${
               isSent
                 ? 'bg-gray-100/50 dark:bg-dark-border/50 border-viber-purple'
                 : 'bg-gray-100 dark:bg-dark-border border-viber-purple'
-            } max-w-full`}
+            } max-w-full ${onJumpToReply ? 'cursor-pointer hover:brightness-95 active:brightness-90 transition-[filter]' : ''}`}
           >
             {/* Sender name in viber purple */}
             <div className="font-semibold mb-0.5 text-viber-purple">

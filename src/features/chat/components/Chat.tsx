@@ -517,6 +517,7 @@ export function Chat({
           onEdit={handleEditMessage}
           onDelete={handleDeleteMessage}
           onReply={handleReply}
+          onJumpToReply={(messageId) => jumpToMessage(messageId, { highlightDuration: 2000 })}
           onReact={handleReact}
           getUserName={getUserName}
           isGroupChat={conversation.type === 'group'}

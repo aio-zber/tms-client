@@ -24,6 +24,7 @@ interface MessageListProps {
   onEdit?: (messageId: string) => void;
   onDelete?: (messageId: string, scope: 'me' | 'everyone') => void;
   onReply?: (message: Message) => void;
+  onJumpToReply?: (messageId: string) => void;
   onReact?: (messageId: string, emoji: string) => void;
   getUserName?: (userId: string) => string;
   isGroupChat?: boolean;
@@ -47,6 +48,7 @@ interface MessageItemProps {
   onEdit?: (messageId: string) => void;
   onDelete?: (messageId: string, scope: 'me' | 'everyone') => void;
   onReply?: (message: Message) => void;
+  onJumpToReply?: (messageId: string) => void;
   onReact?: (messageId: string, emoji: string) => void;
   getUserName?: (userId: string) => string;
   searchQuery?: string;
@@ -63,6 +65,7 @@ const MessageItem = memo(function MessageItem({
   onEdit,
   onDelete,
   onReply,
+  onJumpToReply,
   onReact,
   getUserName,
   searchQuery,
@@ -80,6 +83,7 @@ const MessageItem = memo(function MessageItem({
         onEdit={isSent ? onEdit : undefined}
         onDelete={onDelete}
         onReply={onReply}
+        onJumpToReply={onJumpToReply}
         onReact={onReact}
         getUserName={getUserName}
         searchQuery={searchQuery}
@@ -101,6 +105,7 @@ export function MessageList({
   onEdit,
   onDelete,
   onReply,
+  onJumpToReply,
   onReact,
   getUserName,
   isGroupChat = false,
@@ -386,6 +391,7 @@ export function MessageList({
                   onEdit={onEdit}
                   onDelete={onDelete}
                   onReply={onReply}
+                  onJumpToReply={onJumpToReply}
                   onReact={onReact}
                   getUserName={getUserName}
                   searchQuery={searchQuery}
