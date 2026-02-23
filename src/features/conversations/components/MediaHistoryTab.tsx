@@ -379,18 +379,18 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
 
         {/* Files list */}
         {category === 'files' && (
-          <ScrollArea className="h-72">
+          <ScrollArea className="h-72 w-full overflow-hidden">
             {fileMessages.length === 0 ? (
               <EmptyState icon={<FileText className="w-8 h-8" />} text="No files shared yet" />
             ) : (
-              <div className="space-y-1">
+              <div className="space-y-1 w-full">
                 {fileMessages.map((msg) => {
                   const encMeta = msg.metadata?.encryption as { fileKey?: string; fileNonce?: string; originalMimeType?: string } | undefined;
                   const canDownload = !!msg.metadata?.fileUrl;
                   return (
                     <button
                       key={msg.id}
-                      className="w-full flex items-center gap-3 px-2 py-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-dark-border transition-colors text-left"
+                      className="w-full min-w-0 flex items-center gap-3 px-2 py-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-dark-border transition-colors text-left overflow-hidden"
                       disabled={!canDownload}
                       onClick={() => {
                         if (!canDownload) return;

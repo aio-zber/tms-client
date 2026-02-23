@@ -77,7 +77,9 @@ export const MessageBubble = memo(function MessageBubble({
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
   const [decryptedFileUrl, setDecryptedFileUrl] = useState<string | null>(null);
   const [isDecryptingFile, setIsDecryptingFile] = useState(false);
+  const [isInView, setIsInView] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  const bubbleRef = useRef<HTMLDivElement>(null);
 
   // Proxy URL for the file — used when decryptedFileUrl is not yet available.
   // Routes OSS URLs through the backend to avoid CORS failures on <img>/<video> elements.
@@ -94,10 +96,27 @@ export const MessageBubble = memo(function MessageBubble({
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const { voteOnPoll, closePoll } = usePollActions();
 
-  // E2EE: Decrypt encrypted file content for display
+  // Messenger pattern: only decrypt E2EE media when the bubble enters the viewport.
+  // Prevents fetching+decrypting all files on conversation open (saturates HTTP/2 connection).
+  useEffect(() => {
+    const encMeta = message.metadata?.encryption;
+    if (!encMeta?.fileKey) return; // Only need observer for E2EE messages
+    const el = bubbleRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) setIsInView(true); },
+      { rootMargin: '200px' }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [message.id, message.metadata?.encryption?.fileKey]);
+
+  // E2EE: Decrypt encrypted file content for display — gated on viewport visibility
   useEffect(() => {
     const encMeta = message.metadata?.encryption;
     if (!encMeta?.fileKey || !encMeta?.fileNonce || !proxyFileUrl) return;
+    if (!isInView) return; // Wait until bubble is near viewport
 
     let objectUrl: string | null = null;
     const decryptFileContent = async () => {
@@ -123,7 +142,7 @@ export const MessageBubble = memo(function MessageBubble({
     decryptFileContent();
     return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [message.id, message.metadata?.encryption?.fileKey, proxyFileUrl]);
+  }, [message.id, message.metadata?.encryption?.fileKey, proxyFileUrl, isInView]);
 
   // Helper function to format file size
   const formatFileSize = (bytes?: number): string => {
@@ -481,7 +500,7 @@ export const MessageBubble = memo(function MessageBubble({
 
   return (
     <>
-      <div className={`flex gap-2 ${isSent ? 'justify-end' : 'justify-start'}`}>
+      <div className={`flex gap-2 ${isSent ? 'justify-end' : 'justify-start'}`} ref={bubbleRef}>
         {/* Message Content - relative positioning for absolute reactions */}
         <div
           className={`max-w-[85%] sm:max-w-[75%] md:max-w-[70%] lg:max-w-[60%] flex flex-col relative ${

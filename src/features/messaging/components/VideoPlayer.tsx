@@ -43,7 +43,7 @@ export function VideoPlayer({
         poster={thumbnailUrl}
         controls={isPlaying}
         playsInline
-        preload="metadata"
+        preload="none"
         className="max-w-xs md:max-w-sm max-h-64 md:max-h-80 object-contain bg-black"
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
