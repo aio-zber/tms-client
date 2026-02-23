@@ -16,6 +16,27 @@ interface UseConversationsQueryOptions {
 }
 
 /**
+ * Warm the in-memory decryptedContentCache from IndexedDB for a list of message IDs.
+ * Messenger pattern: read from persistent store on new session so the sidebar
+ * never shows "Encrypted message" on first render.
+ * Non-blocking — silently ignored if IndexedDB is unavailable or not yet initialised.
+ */
+async function warmDecryptionCache(messageIds: string[]): Promise<void> {
+  if (messageIds.length === 0) return;
+  try {
+    const { getDecryptedMessages } = await import('@/features/encryption/db/cryptoDb');
+    const stored = await getDecryptedMessages(messageIds);
+    stored.forEach((content, id) => {
+      if (!decryptedContentCache.has(id)) {
+        decryptedContentCache.set(id, content);
+      }
+    });
+  } catch {
+    // IndexedDB not available or encryption module not loaded — skip silently
+  }
+}
+
+/**
  * Hook to fetch conversations using infinite query for pagination
  */
 export function useConversationsQuery(options: UseConversationsQueryOptions = {}) {
@@ -30,9 +51,26 @@ export function useConversationsQuery(options: UseConversationsQueryOptions = {}
         type,
       });
 
+      // Collect encrypted lastMessage IDs that are not yet in the in-memory cache.
+      // On a fresh session the cache is empty but IndexedDB has the plaintext from
+      // previous sessions — warm it now so the sidebar shows decrypted content
+      // immediately (Messenger/Signal pattern: decrypt-once, store-forever).
+      const missedIds = response.data
+        .filter((conv) => {
+          if (!conv.lastMessage?.encrypted) return false;
+          const id = (conv.lastMessage as { id?: string }).id;
+          return !!id && !decryptedContentCache.has(id);
+        })
+        .map((conv) => (conv.lastMessage as { id: string }).id);
+
+      if (missedIds.length > 0) {
+        await warmDecryptionCache(missedIds);
+      }
+
       // Replace encrypted lastMessage content with cached decrypted content (if available).
       // This prevents the sidebar from flashing "Encrypted message" after every refetch —
-      // the decrypted content was already cached by useConversations/useMessages.
+      // the decrypted content was already cached by useConversations/useMessages or the
+      // IndexedDB warm-up above.
       const processedData: Conversation[] = response.data.map((conv) => {
         if (!conv.lastMessage?.encrypted) return conv;
         const lastMsgId = (conv.lastMessage as { id?: string }).id;
