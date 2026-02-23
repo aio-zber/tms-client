@@ -378,18 +378,18 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
 
         {/* Files list — Viber pattern: whole row taps to download, name truncates */}
         {category === 'files' && (
-          <ScrollArea className="h-72 overflow-x-hidden">
+          <div className="h-72 overflow-y-auto overflow-x-hidden">
             {fileMessages.length === 0 ? (
               <EmptyState icon={<FileText className="w-8 h-8" />} text="No files shared yet" />
             ) : (
-              <div className="space-y-0.5">
+              <div className="space-y-0.5 w-full">
                 {fileMessages.map((msg) => {
                   const encMeta = msg.metadata?.encryption as { fileKey?: string; fileNonce?: string; originalMimeType?: string } | undefined;
                   const canDownload = !!msg.metadata?.fileUrl;
                   return (
                     <button
                       key={msg.id}
-                      className="flex items-center gap-3 w-full py-3 px-1 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-border transition-colors text-left"
+                      className="flex items-center gap-3 w-full min-w-0 overflow-hidden py-3 px-1 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-border transition-colors text-left"
                       disabled={!canDownload}
                       onClick={() => {
                         if (!canDownload) return;
@@ -419,12 +419,12 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
                 })}
               </div>
             )}
-          </ScrollArea>
+          </div>
         )}
 
         {/* Links list */}
         {category === 'links' && (
-          <ScrollArea className="h-72">
+          <div className="h-72 overflow-y-auto overflow-x-hidden">
             {linkItems.length === 0 ? (
               <EmptyState icon={<LinkIcon className="w-8 h-8" />} text="No links shared yet" />
             ) : previewsLoading && Object.keys(previews).length === 0 ? (
@@ -432,13 +432,13 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
                 <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
               </div>
             ) : (
-              <div className="space-y-2 pr-1">
+              <div className="space-y-2 w-full">
                 {linkItems.map((item, idx) => (
                   <LinkPreviewCard key={idx} url={item.url} preview={previews[item.url]} />
                 ))}
               </div>
             )}
-          </ScrollArea>
+          </div>
         )}
       </div>
 
