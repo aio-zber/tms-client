@@ -12,7 +12,8 @@
 
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Download,
   FileText,
@@ -140,6 +141,25 @@ interface LinkPreview {
   image?: string;
   favicon?: string;
   domain: string;
+}
+
+/** Fires once when the element enters the viewport (one-shot, never resets to false). */
+function useInView(rootMargin = '200px') {
+  const ref = useRef<HTMLButtonElement>(null);
+  const [isInView, setIsInView] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) setIsInView(true); },
+      { rootMargin }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [rootMargin]);
+
+  return { ref, isInView };
 }
 
 export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
@@ -347,46 +367,52 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
 
         {/* Files list */}
         {category === 'files' && (
-          <ScrollArea className="h-72 w-full">
+          <ScrollArea className="h-72">
             {fileMessages.length === 0 ? (
               <EmptyState icon={<FileText className="w-8 h-8" />} text="No files shared yet" />
             ) : (
-              <div className="space-y-1 pr-3">
-                {fileMessages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-border transition-colors min-w-0"
-                  >
-                    <div className="flex-shrink-0 w-9 h-9 bg-viber-purple/10 rounded-lg flex items-center justify-center">
-                      <FileText className="w-5 h-5 text-viber-purple" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">
-                        {msg.metadata?.fileName || 'File'}
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        {formatBytes(msg.metadata?.fileSize)}
-                      </p>
-                    </div>
-                    {msg.metadata?.fileUrl && (
-                      <button
-                        className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 dark:hover:bg-dark-border text-gray-400 hover:text-viber-purple transition-colors"
-                        title="Download"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const encMeta = msg.metadata?.encryption as { fileKey?: string; fileNonce?: string; originalMimeType?: string } | undefined;
-                          downloadViaProxy(
-                            msg.metadata!.fileUrl!,
-                            msg.metadata?.fileName || 'file',
-                            encMeta
-                          );
-                        }}
-                      >
-                        <Download className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                ))}
+              <div className="space-y-1">
+                {fileMessages.map((msg) => {
+                  const encMeta = msg.metadata?.encryption as { fileKey?: string; fileNonce?: string; originalMimeType?: string } | undefined;
+                  const canDownload = !!msg.metadata?.fileUrl;
+                  return (
+                    <button
+                      key={msg.id}
+                      className="w-full flex items-center gap-3 px-2 py-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-dark-border transition-colors text-left"
+                      disabled={!canDownload}
+                      onClick={() => {
+                        if (!canDownload) return;
+                        downloadViaProxy(
+                          msg.metadata!.fileUrl!,
+                          msg.metadata?.fileName || 'file',
+                          encMeta
+                        );
+                      }}
+                    >
+                      {/* File type icon */}
+                      <div className="flex-shrink-0 w-10 h-10 bg-viber-purple/10 rounded-xl flex items-center justify-center">
+                        <FileText className="w-5 h-5 text-viber-purple" />
+                      </div>
+
+                      {/* Name + size — truncate to never push download button off screen */}
+                      <div className="flex-1 min-w-0 overflow-hidden">
+                        <p className="text-sm font-medium text-gray-900 dark:text-dark-text truncate leading-snug">
+                          {msg.metadata?.fileName || 'File'}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {formatBytes(msg.metadata?.fileSize) || 'Unknown size'}
+                        </p>
+                      </div>
+
+                      {/* Download button — Viber-style solid purple circle, always visible */}
+                      {canDownload && (
+                        <div className="flex-shrink-0 w-9 h-9 rounded-full bg-viber-purple flex items-center justify-center shadow-sm">
+                          <Download className="w-4 h-4 text-white" />
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </ScrollArea>
@@ -412,25 +438,31 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
         )}
       </div>
 
-      {/* Image Lightbox — URLs already proxied in openLightbox() */}
-      {lightboxImages.length > 0 && (
-        <ImageLightbox
-          images={lightboxImages}
-          initialIndex={lightboxIndex}
-          onClose={() => setLightboxImages([])}
-        />
-      )}
+      {/* Image Lightbox — rendered in a portal so it escapes the dialog stacking context */}
+      {lightboxImages.length > 0 && typeof document !== 'undefined' &&
+        createPortal(
+          <ImageLightbox
+            images={lightboxImages}
+            initialIndex={lightboxIndex}
+            onClose={() => setLightboxImages([])}
+          />,
+          document.body
+        )
+      }
 
-      {/* Video Lightbox — URLs already proxied */}
-      {videoLightbox && (
-        <VideoLightbox
-          src={videoLightbox.src}
-          mimeType={videoLightbox.mimeType}
-          fileName={videoLightbox.fileName}
-          thumbnailUrl={videoLightbox.thumbnailUrl}
-          onClose={() => setVideoLightbox(null)}
-        />
-      )}
+      {/* Video Lightbox — rendered in a portal so it covers the full viewport */}
+      {videoLightbox && typeof document !== 'undefined' &&
+        createPortal(
+          <VideoLightbox
+            src={videoLightbox.src}
+            mimeType={videoLightbox.mimeType}
+            fileName={videoLightbox.fileName}
+            thumbnailUrl={videoLightbox.thumbnailUrl}
+            onClose={() => setVideoLightbox(null)}
+          />,
+          document.body
+        )
+      }
     </>
   );
 }
@@ -463,11 +495,14 @@ function DecryptedMediaItem({
   onDecrypted: (msgId: string, blobUrl: string) => void;
   onClick: () => void;
 }) {
+  const { ref, isInView } = useInView('200px');
   const [src, setSrc] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const [decrypting, setDecrypting] = useState(false);
 
   useEffect(() => {
+    if (!isInView) return;  // Only load when in (or near) the viewport
+
     const rawUrl = ossFileUrl || ossThumbUrl;
     if (!rawUrl) return;
 
@@ -509,10 +544,11 @@ function DecryptedMediaItem({
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messageId, ossFileUrl, ossThumbUrl, encMeta?.fileKey]);
+  }, [messageId, ossFileUrl, ossThumbUrl, encMeta?.fileKey, isInView]);
 
   return (
     <button
+      ref={ref}
       onClick={onClick}
       className="relative aspect-square bg-gray-100 dark:bg-dark-surface rounded overflow-hidden group"
       title={fileName}
