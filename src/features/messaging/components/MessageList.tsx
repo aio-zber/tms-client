@@ -184,6 +184,7 @@ function RowRenderer({
     <div style={style as CSSProperties}>
       <div
         className="pb-2"
+        data-react-window-index={index}
         ref={(el) => {
           registerMessageRef?.(message.id, el);
           if (el) observeRowElements([el]);
