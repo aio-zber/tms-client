@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Download, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, RotateCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -36,11 +37,17 @@ export function ImageLightbox({
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [isLoading, setIsLoading] = useState(true);
 
+  const [mounted, setMounted] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
 
   const currentImage = images[currentIndex];
   const hasMultiple = images.length > 1;
+
+  // Mount guard — prevents SSR hydration mismatch (portal targets document.body)
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Reset state when image changes
   useEffect(() => {
@@ -202,9 +209,11 @@ export function ImageLightbox({
     [onClose]
   );
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center"
+      className="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center"
       ref={containerRef}
       onClick={handleBackdropClick}
       onMouseMove={handleMouseMove}
@@ -348,7 +357,8 @@ export function ImageLightbox({
           <p className="text-white/90 text-sm">{currentImage.caption}</p>
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   );
 }
 
