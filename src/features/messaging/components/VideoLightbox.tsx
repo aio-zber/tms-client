@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Download, Maximize, Minimize } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -24,10 +25,16 @@ export function VideoLightbox({
   thumbnailUrl,
   onClose,
 }: VideoLightboxProps) {
+  const [mounted, setMounted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Mount guard — prevents SSR hydration mismatch (portal targets document.body)
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Prevent body scroll when lightbox is open
   useEffect(() => {
@@ -117,9 +124,11 @@ export function VideoLightbox({
     [onClose]
   );
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center"
+      className="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center"
       ref={containerRef}
       onClick={handleBackdropClick}
     >
@@ -191,7 +200,8 @@ export function VideoLightbox({
         {mimeType && <source src={src} type={mimeType} />}
         Your browser does not support video playback.
       </video>
-    </div>
+    </div>,
+    document.body
   );
 }
 
