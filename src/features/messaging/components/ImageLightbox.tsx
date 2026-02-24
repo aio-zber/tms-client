@@ -226,7 +226,7 @@ export function ImageLightbox({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center"
+      className="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center pointer-events-auto"
       ref={containerRef}
       onClick={handleBackdropClick}
       onMouseMove={handleMouseMove}
