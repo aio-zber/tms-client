@@ -44,7 +44,7 @@ export function ImageLightbox({
   const currentImage = images[currentIndex];
   const hasMultiple = images.length > 1;
 
-  // Mount guard — prevents SSR hydration mismatch (portal targets document.body)
+  // Mount guard — prevents SSR hydration mismatch (portal needs document)
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -360,7 +360,7 @@ export function ImageLightbox({
         </div>
       )}
     </div>,
-    document.body
+    document.getElementById('lightbox-root') ?? document.body
   );
 }
 

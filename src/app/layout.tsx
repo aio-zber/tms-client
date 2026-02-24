@@ -27,6 +27,12 @@ export default function RootLayout({
         <ServiceWorkerProvider>
           <QueryProvider>{children}</QueryProvider>
         </ServiceWorkerProvider>
+        {/* Dedicated portal root for image/video lightboxes.
+            Rendered as the last child of body so Radix Dialog's hideOthers()
+            (which only traverses body children present when the dialog opens)
+            never marks it aria-hidden — lightbox buttons stay fully interactive
+            even when a Settings or Profile dialog is open. */}
+        <div id="lightbox-root" />
         <Toaster
           position="top-right"
           toastOptions={{
