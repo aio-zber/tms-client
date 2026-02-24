@@ -62,6 +62,7 @@ export function ImageLightbox({
     const handleKeyDown = (e: KeyboardEvent) => {
       switch (e.key) {
         case 'Escape':
+          e.stopPropagation(); // prevent parent Radix Dialog from also closing
           onClose();
           break;
         case 'ArrowLeft':
@@ -86,8 +87,9 @@ export function ImageLightbox({
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    // capture: true fires before Radix Dialog's document-level bubble listener
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [hasMultiple, currentIndex, onClose]);
 
   // Prevent body scroll when lightbox is open

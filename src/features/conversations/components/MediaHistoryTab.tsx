@@ -13,7 +13,6 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { createPortal } from 'react-dom';
 import {
   FileText,
   Link as LinkIcon,
@@ -142,13 +141,6 @@ interface LinkPreview {
   domain: string;
 }
 
-/** Returns true after the component has mounted on the client (safe for portals/document access). */
-function useMounted() {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
-  return mounted;
-}
-
 /** Fires once when the element enters the viewport (one-shot, never resets to false). */
 function useInView(rootMargin = '200px') {
   const ref = useRef<HTMLButtonElement>(null);
@@ -169,7 +161,6 @@ function useInView(rootMargin = '200px') {
 }
 
 export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
-  const mounted = useMounted();
   const [category, setCategory] = useState<MediaCategory>('media');
   const [previews, setPreviews] = useState<Record<string, LinkPreview>>({});
   const [previewsLoading, setPreviewsLoading] = useState(false);
@@ -439,31 +430,25 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
         )}
       </div>
 
-      {/* Image Lightbox — portal to document.body to escape dialog stacking context */}
-      {mounted && lightboxImages.length > 0 &&
-        createPortal(
-          <ImageLightbox
-            images={lightboxImages}
-            initialIndex={lightboxIndex}
-            onClose={() => setLightboxImages([])}
-          />,
-          document.body
-        )
-      }
+      {/* Image Lightbox — portals internally to document.body to escape dialog stacking */}
+      {lightboxImages.length > 0 && (
+        <ImageLightbox
+          images={lightboxImages}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxImages([])}
+        />
+      )}
 
-      {/* Video Lightbox — portal to document.body to cover full viewport */}
-      {mounted && videoLightbox &&
-        createPortal(
-          <VideoLightbox
-            src={videoLightbox.src}
-            mimeType={videoLightbox.mimeType}
-            fileName={videoLightbox.fileName}
-            thumbnailUrl={videoLightbox.thumbnailUrl}
-            onClose={() => setVideoLightbox(null)}
-          />,
-          document.body
-        )
-      }
+      {/* Video Lightbox — portals internally to document.body */}
+      {videoLightbox && (
+        <VideoLightbox
+          src={videoLightbox.src}
+          mimeType={videoLightbox.mimeType}
+          fileName={videoLightbox.fileName}
+          thumbnailUrl={videoLightbox.thumbnailUrl}
+          onClose={() => setVideoLightbox(null)}
+        />
+      )}
     </>
   );
 }
