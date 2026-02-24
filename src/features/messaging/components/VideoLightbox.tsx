@@ -31,7 +31,7 @@ export function VideoLightbox({
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // Mount guard — prevents SSR hydration mismatch (portal targets document.body)
+  // Mount guard — prevents SSR hydration mismatch (portal needs document)
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -203,7 +203,7 @@ export function VideoLightbox({
         Your browser does not support video playback.
       </video>
     </div>,
-    document.body
+    document.getElementById('lightbox-root') ?? document.body
   );
 }
 
