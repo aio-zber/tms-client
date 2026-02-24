@@ -17,7 +17,7 @@ import {
   useCallback,
   CSSProperties,
 } from 'react';
-import { List, ListImperativeAPI, RowComponentProps } from 'react-window';
+import { List, ListImperativeAPI, RowComponentProps, useDynamicRowHeight } from 'react-window';
 import { formatTimeSeparator, parseTimestamp } from '@/lib/dateUtils';
 import { MessageBubble } from './MessageBubble';
 import { Loader2, ChevronDown } from 'lucide-react';
@@ -104,7 +104,7 @@ const MessageItem = memo(function MessageItem({
   );
 });
 
-/** Estimated row height by message type (refined by measurement) */
+/** Estimated row height by message type — used as defaultRowHeight for useDynamicRowHeight */
 function estimateHeight(message: Message, hasTimeSeparator: boolean): number {
   let base: number;
   switch (message.type) {
@@ -123,6 +123,9 @@ function estimateHeight(message: Message, hasTimeSeparator: boolean): number {
     default:
       base = 72;
   }
+  // Add space for reaction overflow and inter-row gap
+  if (message.reactions && message.reactions.length > 0) base += 28;
+  base += 8;
   return hasTimeSeparator ? base + 32 : base;
 }
 
@@ -141,7 +144,7 @@ interface RowData {
   getUserName?: (userId: string) => string;
   searchQuery?: string;
   registerMessageRef?: (messageId: string, element: HTMLElement | null) => void;
-  setItemSize: (index: number, size: number) => void;
+  observeRowElements: (elements: Element[] | NodeListOf<Element>) => () => void;
 }
 
 interface ItemMeta {
@@ -167,7 +170,7 @@ function RowRenderer({
   getUserName,
   searchQuery,
   registerMessageRef,
-  setItemSize,
+  observeRowElements,
 }: RowComponentProps<RowData>) {
   const message = validMessages[index];
   const meta = itemMeta[index];
@@ -180,12 +183,10 @@ function RowRenderer({
   return (
     <div style={style as CSSProperties}>
       <div
+        className="pb-2"
         ref={(el) => {
           registerMessageRef?.(message.id, el);
-          if (el) {
-            const h = el.getBoundingClientRect().height;
-            if (h > 0) setItemSize(index, h);
-          }
+          if (el) observeRowElements([el]);
         }}
       >
         {showTimeSeparator && (
@@ -235,7 +236,6 @@ export function MessageList({
   searchHighlightId,
 }: MessageListProps) {
   const listRef = useRef<ListImperativeAPI | null>(null);
-  const itemSizeCache = useRef<Map<number, number>>(new Map());
 
   const [autoScroll, setAutoScroll] = useState(true);
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -298,26 +298,29 @@ export function MessageList({
     });
   }, [validMessages, currentUserId, isGroupChat]);
 
-  // Size setter — called by row renderer after measurement
-  const setItemSize = useCallback((index: number, size: number) => {
-    if (itemSizeCache.current.get(index) === size) return;
-    itemSizeCache.current.set(index, size);
-    // Force list re-render to pick up new heights
-    // (react-window's List with function rowHeight re-evaluates on rowProps change,
-    //  but we trigger via listHeight state nudge only when strictly necessary)
-  }, []);
+  // useDynamicRowHeight — ResizeObserver-based height tracking.
+  // observeRowElements fires whenever a row's DOM element resizes (image load,
+  // content change, lazy decryption), automatically updating the row slot height
+  // in the List. This replaces the broken manual getBoundingClientRect approach
+  // which measured once on mount and never updated.
+  // key=conversationId resets all cached heights on conversation switch.
+  const dynamicRowHeight = useDynamicRowHeight({
+    defaultRowHeight: 80,
+    key: conversationId,
+  });
 
-  // rowHeight function passed to List
-  const getRowHeight = useCallback(
-    (index: number): number => {
-      const cached = itemSizeCache.current.get(index);
-      if (cached !== undefined) return cached;
+  // Build rowHeight function that uses per-message estimates as the default
+  // for rows not yet observed by ResizeObserver
+  const rowHeight = useCallback(
+    (index: number) => {
+      const observed = dynamicRowHeight.getRowHeight(index);
+      if (observed !== undefined) return observed;
       const msg = validMessages[index];
-      if (!msg) return 72;
+      if (!msg) return 80;
       return estimateHeight(msg, itemMeta[index]?.showTimeSeparator ?? false);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [validMessages, itemMeta]
+    [dynamicRowHeight, validMessages, itemMeta]
   );
 
   // rowProps passed to each row renderer
@@ -336,7 +339,7 @@ export function MessageList({
       getUserName,
       searchQuery,
       registerMessageRef,
-      setItemSize,
+      observeRowElements: dynamicRowHeight.observeRowElements,
     }),
     [
       validMessages,
@@ -352,14 +355,9 @@ export function MessageList({
       getUserName,
       searchQuery,
       registerMessageRef,
-      setItemSize,
+      dynamicRowHeight.observeRowElements,
     ]
   );
-
-  // Clear size cache on conversation switch
-  useEffect(() => {
-    itemSizeCache.current.clear();
-  }, [conversationId]);
 
   // Track the outer List element for scroll position reads
   const handleListResize = useCallback(
@@ -547,7 +545,7 @@ export function MessageList({
         <List
           listRef={listRef}
           rowCount={validMessages.length}
-          rowHeight={getRowHeight}
+          rowHeight={rowHeight}
           rowComponent={RowRenderer}
           rowProps={rowProps}
           overscanCount={5}
