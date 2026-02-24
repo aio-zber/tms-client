@@ -49,6 +49,17 @@ export function ImageLightbox({
     setMounted(true);
   }, []);
 
+  // Radix Dialog's hideOthers() marks all body children (including #lightbox-root)
+  // as aria-hidden when the dialog opens. Remove it from our dedicated root so
+  // pointer events and focus work inside the lightbox.
+  useEffect(() => {
+    if (!mounted) return;
+    const root = document.getElementById('lightbox-root');
+    if (!root) return;
+    root.removeAttribute('aria-hidden');
+    root.removeAttribute('data-aria-hidden');
+  }, [mounted]);
+
   // Reset state when image changes
   useEffect(() => {
     setZoom(1);

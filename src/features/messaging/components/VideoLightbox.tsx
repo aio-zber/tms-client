@@ -36,6 +36,17 @@ export function VideoLightbox({
     setMounted(true);
   }, []);
 
+  // Radix Dialog's hideOthers() marks all body children (including #lightbox-root)
+  // as aria-hidden when the dialog opens. Remove it from our dedicated root so
+  // pointer events and focus work inside the lightbox.
+  useEffect(() => {
+    if (!mounted) return;
+    const root = document.getElementById('lightbox-root');
+    if (!root) return;
+    root.removeAttribute('aria-hidden');
+    root.removeAttribute('data-aria-hidden');
+  }, [mounted]);
+
   // Prevent body scroll when lightbox is open
   useEffect(() => {
     document.body.style.overflow = 'hidden';
