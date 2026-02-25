@@ -146,8 +146,9 @@ export function generateOneTimePreKeys(
 /**
  * Initialize keys for a new user
  * Creates identity key, signed pre-key, and one-time pre-keys
+ * @param userId - TMS user ID to tag on stored keys (for cross-user contamination detection)
  */
-export async function initializeKeys(): Promise<LocalKeyBundle> {
+export async function initializeKeys(userId?: string): Promise<LocalKeyBundle> {
   await initCrypto();
 
   // Check if we already have keys
@@ -177,8 +178,8 @@ export async function initializeKeys(): Promise<LocalKeyBundle> {
   // Generate one-time pre-keys
   const oneTimePreKeys = generateOneTimePreKeys(1);
 
-  // Store keys
-  await storeIdentityKey(identityKeyPair, signedPreKey);
+  // Store keys (tag with userId so we can detect cross-user contamination on next init)
+  await storeIdentityKey(identityKeyPair, signedPreKey, userId);
   await storePreKeys(oneTimePreKeys);
 
   log.encryption.info(`Generated key bundle with ${oneTimePreKeys.length} pre-keys`);
