@@ -413,40 +413,33 @@ export const MessageBubble = memo(function MessageBubble({
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
+    // Store the raw click position — actual clamping happens after the menu
+    // renders and we can measure its real height (see the useEffect below).
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  };
 
-    // Calculate viewport-aware position to prevent overflow on mobile
-    const menuWidth = 200; // Approximate width including padding
-    const menuHeight = 200; // Approximate height for calculation
+  // After the context menu mounts, measure its actual rendered size and clamp
+  // it so it never overflows the viewport. This is exact regardless of how
+  // many items are visible (own vs other message, deleted, etc.).
+  useEffect(() => {
+    if (!contextMenu || !contextMenuRef.current) return;
+    const menu = contextMenuRef.current;
+    const { width, height } = menu.getBoundingClientRect();
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
-    const padding = 10; // Edge padding
+    const padding = 10;
 
-    let x = e.clientX;
-    let y = e.clientY;
+    let { x, y } = contextMenu;
+    if (x + width > viewportWidth - padding) x = viewportWidth - width - padding;
+    if (x < padding) x = padding;
+    if (y + height > viewportHeight - padding) y = viewportHeight - height - padding;
+    if (y < padding) y = padding;
 
-    // Horizontal boundary check - prevent overflow on right
-    if (x + menuWidth > viewportWidth - padding) {
-      x = viewportWidth - menuWidth - padding;
+    // Only update if clamping actually changed the position (avoids infinite loop)
+    if (x !== contextMenu.x || y !== contextMenu.y) {
+      setContextMenu({ x, y });
     }
-    // Prevent overflow on left
-    if (x < padding) {
-      x = padding;
-    }
-
-    // Vertical boundary check - prevent overflow on bottom
-    if (y + menuHeight > viewportHeight - padding) {
-      y = viewportHeight - menuHeight - padding;
-    }
-    // Prevent overflow on top
-    if (y < padding) {
-      y = padding;
-    }
-
-    setContextMenu({
-      x,
-      y,
-    });
-  };
+  }, [contextMenu?.x, contextMenu?.y]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleMenuAction = (action: () => void) => {
     setContextMenu(null);
