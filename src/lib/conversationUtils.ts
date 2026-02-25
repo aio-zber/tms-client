@@ -40,10 +40,10 @@ export function getConversationDisplayName(
 
       if (userData) {
         const firstName = userData.firstName || userData.first_name || '';
-        const middleName = userData.middleName || userData.middle_name || '';
         const lastName = userData.lastName || userData.last_name || '';
 
-        const fullName = [firstName, middleName, lastName]
+        // First + last only, no middle name — Messenger pattern
+        const fullName = [firstName, lastName]
           .filter(Boolean)
           .join(' ')
           .trim();

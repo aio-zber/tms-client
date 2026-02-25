@@ -11,6 +11,7 @@ export { groupCryptoService } from './services/groupCryptoService';
 export {
   encryptionService,
   initialize as initializeEncryption,
+  reinitialize as reinitializeEncryption,
   isInitialized as isEncryptionInitialized,
   clearEncryptionData,
 } from './services/encryptionService';

@@ -25,14 +25,13 @@ export function useUserDisplayName(conversation: Conversation | null) {
     if (userData) {
       // Try to get full name from various fields
       const firstName = userData.firstName || userData.first_name || '';
-      const middleName = userData.middleName || userData.middle_name || '';
       const lastName = userData.lastName || userData.last_name || '';
       const name = userData.name;
 
-      // Build full name
+      // Build full name (first + last only, no middle name — Messenger pattern)
       if (name) return String(name);
 
-      const fullName = [firstName, middleName, lastName]
+      const fullName = [firstName, lastName]
         .filter(Boolean)
         .join(' ')
         .trim();

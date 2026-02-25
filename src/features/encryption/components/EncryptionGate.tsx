@@ -48,8 +48,11 @@ export function EncryptionGate({ children }: { children: React.ReactNode }) {
   const handleRestoreComplete = async () => {
     setShowRestoreDialog(false);
     try {
-      const { encryptionService } = await import('@/features/encryption');
-      await encryptionService.initialize();
+      // Use reinitialize (not initialize) — initialize() short-circuits when initStatus='ready',
+      // which it already is from the pre-restore init. reinitialize() resets the status first
+      // so the restored identity keys are fully loaded and session recovery works.
+      const { reinitializeEncryption } = await import('@/features/encryption');
+      await reinitializeEncryption();
       log.encryption.info('E2EE restored from backup — all conversations now decryptable');
     } catch (err) {
       log.encryption.error('Failed to re-initialize after restore:', err);
