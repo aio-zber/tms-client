@@ -14,7 +14,8 @@ import { log } from '@/lib/logger';
  *
  * 2. BACKUP ONBOARDING: When 'ready' but no backup exists (brand-new user or
  *    user who never backed up), prompt to create a backup right after login —
- *    not deferred until first chat open. Dismissable (unlike restore).
+ *    not deferred until first chat open. Non-dismissable (same as restore) so
+ *    users cannot skip it and lose message history on their next device.
  */
 export function EncryptionGate({ children }: { children: React.ReactNode }) {
   const encryptionInitStatus = useEncryptionStore((s) => s.initStatus);
@@ -74,11 +75,14 @@ export function EncryptionGate({ children }: { children: React.ReactNode }) {
         onComplete={handleRestoreComplete}
       />
 
-      {/* Non-blocking: prompt new users to create a backup right after login */}
+      {/* Blocking: prompt new users to create a backup right after login.
+          disableClose=true prevents dismissal — users must create a backup
+          so they can recover their keys on a new device. */}
       <KeyBackupDialog
         open={showBackupPrompt}
         onOpenChange={setShowBackupPrompt}
         mode="backup"
+        disableClose={true}
         onComplete={handleBackupComplete}
       />
     </>
