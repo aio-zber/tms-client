@@ -188,6 +188,18 @@ export async function initialize(): Promise<void> {
 }
 
 /**
+ * Reset and re-run initialization from scratch.
+ * Must be called after PIN restore so the freshly restored identity keys are
+ * picked up — a plain initialize() call would return immediately because
+ * initStatus is still 'ready' from the pre-restore initialization.
+ */
+export async function reinitialize(): Promise<void> {
+  initStatus = 'uninitialized';
+  useEncryptionStore.getState().setInitStatus('uninitialized');
+  await initialize();
+}
+
+/**
  * Check if E2EE is initialized
  */
 export function isInitialized(): boolean {
@@ -1208,6 +1220,7 @@ export async function decryptOwnDirectMessage(
 // Export encryption service object
 export const encryptionService = {
   initialize,
+  reinitialize,
   isInitialized,
   getInitStatus,
   establishSession,
