@@ -7,7 +7,7 @@
 'use client';
 
 import { log } from '@/lib/logger';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queryClient';
 import { Loader2, X } from 'lucide-react';
@@ -71,6 +71,11 @@ export function Chat({
   useSocket(); // Initialize WebSocket connection
   useConversationEvents({ conversationId }); // Handle real-time conversation updates
 
+  // Tracks which group conversations we've completed key-sync for this mount.
+  // Prevents StrictMode double-fire and re-visit re-runs from repeating
+  // GET /sender-keys + POST /distribute + POST /keys/conversation on every click.
+  const syncedGroupsRef = useRef<Set<string>>(new Set());
+
   // E2EE: Key change detection (backup prompts moved to EncryptionGate)
   const encryptionInitStatus = useEncryptionStore((s) => s.initStatus);
   const identityKeyChanges = useEncryptionStore((s) => s.identityKeyChanges);
@@ -107,11 +112,16 @@ export function Chat({
   // Group E2EE: Fetch stored sender keys + distribute our own key.
   // Messenger pattern: key exchange happens in the background AFTER the UI renders
   // with cached messages — users see the conversation immediately, keys sync silently.
-  // We track which conversations we've already synced this session to avoid redundant
-  // HTTP + crypto work on every revisit (the primary cause of 1-2s navigation delay).
+  // syncedGroupsRef tracks which conversations we've already synced this component
+  // mount — prevents StrictMode double-fire and re-visit re-runs from repeating
+  // GET /sender-keys + POST /distribute + POST /keys/conversation on every click.
   useEffect(() => {
     if (!conversation || conversation.type !== 'group' || !currentUserId || !encryptionInitStatus) return;
     if (encryptionInitStatus !== 'ready') return;
+
+    // Skip if already synced for this conversation this session.
+    if (syncedGroupsRef.current.has(conversationId)) return;
+    syncedGroupsRef.current.add(conversationId);
 
     const memberIds = conversation.members
       .map((m: { userId: string }) => m.userId)
@@ -159,6 +169,8 @@ export function Chat({
         }
 
         // 2. Distribute our own group key to all members.
+        // encryptionService.distributeSenderKey is also guarded by distributedGroupKeys
+        // (module-level Set) — double protection against concurrent calls.
         try {
           await encryptionService.distributeSenderKey(conversationId, currentUserId, memberIds);
           log.debug(`[Chat] Distributed group key to ${memberIds.length} members`);
