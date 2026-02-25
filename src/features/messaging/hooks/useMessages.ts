@@ -608,6 +608,8 @@ export function useMessages(
               try {
                 // Rotate to a new random key (old key stays for backward compat read, but new messages use new key)
                 await groupCryptoService.rotateGroupKey(conversationId);
+                // Invalidate the session distribution cache so the rotated key actually gets distributed.
+                encryptionService.invalidateGroupKeyDistribution(conversationId);
                 setTimeout(async () => {
                   try {
                     const { getConversationById } = await import('@/features/conversations/services/conversationService');

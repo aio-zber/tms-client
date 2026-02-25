@@ -78,6 +78,12 @@ let initStatus: EncryptionInitStatus = 'uninitialized';
 // regardless of how many messages fail concurrently.
 const groupKeyRecoveryCache = new Map<string, Promise<boolean>>();
 
+// Per-conversation distribution tracking.
+// Once we've successfully distributed our group key for a conversation this session,
+// skip redundant POST /distribute + POST /keys/conversation calls on re-visits.
+// Messenger pattern: distribute once per session, reuse cached state thereafter.
+const distributedGroupKeys = new Set<string>();
+
 // ==================== Initialization ====================
 
 /**
@@ -949,6 +955,14 @@ export async function distributeSenderKey(
   _userId: string, // kept for API compatibility
   memberIds: string[]
 ): Promise<void> {
+  // Messenger pattern: distribute once per session.
+  // On re-visits (user clicks back into the same group), skip the network round-trips —
+  // the key is already on the server and recipients already have it.
+  if (distributedGroupKeys.has(conversationId)) {
+    log.encryption.debug(`Group key already distributed this session for ${conversationId}, skipping`);
+    return;
+  }
+
   // On a new device, no group key exists locally — recover from server backup first.
   // This prevents generating a fresh key that would invalidate all existing encrypted messages.
   if (!(await hasGroupKey(conversationId))) {
@@ -972,6 +986,10 @@ export async function distributeSenderKey(
 
   // Upload own backup so we can recover on new devices
   await uploadGroupKeyBackup(conversationId, session);
+
+  // Mark as distributed for this session — future calls from Chat.tsx re-visits
+  // or useSendMessage fire-and-forget calls will skip the network round-trips.
+  distributedGroupKeys.add(conversationId);
 
   log.encryption.info(`Distributed group key ${session.groupKeyId} to ${memberIds.length} members for ${conversationId}`);
 }
@@ -1003,6 +1021,15 @@ export async function receiveSenderKeyDistribution(
   if (session) {
     await uploadGroupKeyBackup(data.conversation_id, session);
   }
+}
+
+/**
+ * Invalidate the session-level distribution cache for a conversation.
+ * Must be called after key rotation so the next distributeSenderKey call
+ * actually distributes the new key instead of returning early.
+ */
+export function invalidateGroupKeyDistribution(conversationId: string): void {
+  distributedGroupKeys.delete(conversationId);
 }
 
 // ==================== Serialization ====================
@@ -1087,6 +1114,7 @@ export async function clearEncryptionData(): Promise<void> {
   pendingX3DHHeaders.clear();
   processingX3DH.clear();
   groupKeyRecoveryCache.clear();
+  distributedGroupKeys.clear();
   initStatus = 'uninitialized';
   log.encryption.info('Encryption data cleared');
 }
@@ -1171,6 +1199,7 @@ export const encryptionService = {
   encryptFile,
   decryptFile,
   distributeSenderKey,
+  invalidateGroupKeyDistribution,
   receiveSenderKeyDistribution,
   serializeX3DHHeader,
   deserializeX3DHHeader,
