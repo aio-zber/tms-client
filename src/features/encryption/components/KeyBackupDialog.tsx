@@ -15,7 +15,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Eye, EyeOff, Shield, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Shield, Loader2, AlertTriangle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -280,9 +280,12 @@ export function KeyBackupDialog({
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-              <p className="text-xs text-gray-500 dark:text-dark-text-secondary">
-                Confirm your identity before updating encryption keys.
-              </p>
+              <div className="flex gap-2 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-3">
+                <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
+                  <span className="font-semibold">Important:</span> The PIN you are about to create cannot be recovered. If you forget it, you will need to generate a new one — but your old encrypted messages will no longer be decryptable.
+                </p>
+              </div>
             </div>
           ) : (
             /* Steps 2–3: PIN entry (backup) or PIN entry (restore) */
@@ -316,14 +319,22 @@ export function KeyBackupDialog({
                   {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-              {step === 'enter' && isBackup && (
+              {step === 'enter' && !isBackup && (
                 <p className="text-xs text-gray-500 dark:text-dark-text-secondary">
-                  Choose a PIN you can remember. If you lose this PIN, you cannot recover your keys.
+                  Forgot your PIN? You can only recover it from a device where you are already logged in (Settings → Security → Update Backup). If you no longer have access to that device, you will need to generate a new PIN — but past messages will not be decryptable.
                 </p>
               )}
+              {step === 'enter' && isBackup && (
+                <div className="flex gap-2 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-3">
+                  <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
+                    <span className="font-semibold">This PIN cannot be recovered.</span> If you forget it, you will need to generate a new PIN — but this will permanently prevent you from decrypting your old messages.
+                  </p>
+                </div>
+              )}
               {step === 'confirm' && (
-                <p className="text-xs text-gray-500 dark:text-dark-text-secondary">
-                  Re-enter your PIN to confirm.
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  Remember this PIN. It cannot be reset without losing access to past messages.
                 </p>
               )}
             </div>
