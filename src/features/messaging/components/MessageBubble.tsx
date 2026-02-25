@@ -7,6 +7,7 @@
 
 import { log } from '@/lib/logger';
 import { useState, useRef, useEffect, memo, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { formatMessageTimestamp } from '@/lib/dateUtils';
 import { Check, CheckCheck, Reply, Trash2, Smile, Edit, Download, File, FileText, FileSpreadsheet, Play, Copy } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -893,8 +894,8 @@ export const MessageBubble = memo(function MessageBubble({
       </div>
     </div>
 
-      {/* Context Menu */}
-      {contextMenu && (
+      {/* Context Menu — portalled to body so it escapes react-window's overflow:auto scroll container */}
+      {contextMenu && createPortal(
         <div
           ref={contextMenuRef}
           className="fixed z-50 bg-white dark:bg-dark-surface rounded-lg shadow-lg border border-gray-200 dark:border-dark-border py-1 min-w-[160px] max-w-[200px] sm:max-w-none"
@@ -1007,11 +1008,12 @@ export const MessageBubble = memo(function MessageBubble({
               Delete for Everyone
             </button>
           )}
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Emoji Picker */}
-      {showEmojiPicker && (
+      {/* Emoji Picker — portalled to body for the same reason */}
+      {showEmojiPicker && createPortal(
         <div
           ref={emojiPickerRef}
           className="fixed z-50 bg-white dark:bg-dark-surface rounded-lg shadow-lg border border-gray-200 dark:border-dark-border p-3 md:p-4"
@@ -1034,7 +1036,8 @@ export const MessageBubble = memo(function MessageBubble({
               </button>
             ))}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
