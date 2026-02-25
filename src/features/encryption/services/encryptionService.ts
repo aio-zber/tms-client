@@ -1015,11 +1015,15 @@ export async function receiveSenderKeyDistribution(
 
   await storeReceivedGroupKey(data.conversation_id, groupKey, groupKeyId);
 
-  // Upload own backup for cross-device recovery
-  const { getSession } = await import('../db/cryptoDb');
-  const session = await getSession(data.conversation_id, GROUP_KEY_SENTINEL);
-  if (session) {
-    await uploadGroupKeyBackup(data.conversation_id, session);
+  // Upload own backup for cross-device recovery — but only if we haven't already
+  // distributed (and backed up) this session. distributeSenderKey already calls
+  // uploadGroupKeyBackup, so this avoids a redundant POST /keys/conversation.
+  if (!distributedGroupKeys.has(data.conversation_id)) {
+    const { getSession } = await import('../db/cryptoDb');
+    const session = await getSession(data.conversation_id, GROUP_KEY_SENTINEL);
+    if (session) {
+      await uploadGroupKeyBackup(data.conversation_id, session);
+    }
   }
 }
 
