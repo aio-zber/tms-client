@@ -635,6 +635,12 @@ export function useMessages(
 
       log.message.debug(`Message edited:`, { messageId, deletedAt: !!deletedAt });
 
+      // For deletions: evict from decryption cache so ciphertext can't flash.
+      // The message will show a placeholder via the deletedAt check in MessageBubble.
+      if (deletedAt) {
+        decryptedContentCache.delete(messageId);
+      }
+
       // Update cache for other users who didn't initiate the edit
       queryClient.setQueryData(
         queryKeys.messages.list(conversationId, { limit }),
@@ -650,9 +656,12 @@ export function useMessages(
                 msg.id === messageId
                   ? {
                       ...msg,
-                      content: newContent,
-                      isEdited: !deletedAt, // Don't mark as edited if deleted
-                      deletedAt: deletedAt, // Set deletedAt timestamp if present
+                      // For deletions, blank the content so ciphertext can never leak
+                      // through any render path. MessageBubble gates on deletedAt anyway.
+                      // For edits, write the new (plaintext) content as normal.
+                      content: deletedAt ? '' : newContent,
+                      isEdited: !deletedAt,
+                      deletedAt: deletedAt,
                       updatedAt: nowUTC()
                     }
                   : msg
