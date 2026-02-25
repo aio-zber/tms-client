@@ -675,6 +675,10 @@ export function useMessages(
 
       log.message.debug('Message deleted:', messageId);
 
+      // Evict from decryption cache — deleted messages show a placeholder,
+      // never their content. This prevents ciphertext from flashing.
+      decryptedContentCache.delete(messageId);
+
       // UPDATE message with deletedAt timestamp (DON'T remove it from cache)
       // This allows MessageBubble to show "User removed a message" placeholder
       queryClient.setQueryData(

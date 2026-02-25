@@ -91,6 +91,13 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
 
       const processedMessages: typeof response.data = [];
       for (const msg of response.data) {
+        // Deleted messages always show a placeholder — never decrypt their content.
+        // This prevents ciphertext from flashing before the deletedAt check in MessageBubble.
+        if (msg.deletedAt) {
+          processedMessages.push(msg);
+          continue;
+        }
+
         if (!msg.encrypted) {
           processedMessages.push(msg);
           continue;

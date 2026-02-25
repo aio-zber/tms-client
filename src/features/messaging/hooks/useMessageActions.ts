@@ -11,6 +11,7 @@ import { messageService } from '../services/messageService';
 import { queryKeys } from '@/lib/queryClient';
 import type { EditMessageRequest, Message } from '@/types/message';
 import { log } from '@/lib/logger';
+import { decryptedContentCache } from './useMessages';
 
 // Module-level tracking of pending operations to prevent WebSocket race conditions
 // These Sets track operations initiated by the current user to prevent duplicate cache updates
@@ -138,6 +139,10 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
     setError(null);
 
     const deleteForEveryone = scope === 'everyone';
+
+    // Evict from decryption cache immediately — deleted messages show a placeholder,
+    // never their decrypted content. This prevents ciphertext from flashing on re-renders.
+    decryptedContentCache.delete(messageId);
 
     // Mark as pending to prevent WebSocket handler from overwriting optimistic update
     pendingDeletes.add(messageId);
