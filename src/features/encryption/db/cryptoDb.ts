@@ -189,16 +189,19 @@ export async function clearAllData(): Promise<void> {
 
 /**
  * Store the local identity key pair
+ * @param userId - The TMS user ID that owns these keys (used to detect cross-user key contamination)
  */
 export async function storeIdentityKey(
   identityKeyPair: IdentityKeyPair,
-  signedPreKey: SignedPreKey
+  signedPreKey: SignedPreKey,
+  userId?: string
 ): Promise<void> {
   const db = await getDb();
   const now = Date.now();
 
   await db.put(STORES.IDENTITY, {
     id: 'local',
+    userId: userId ?? null,
     identityKeyPair: {
       publicKey: uint8ArrayToBase64(identityKeyPair.publicKey),
       privateKey: uint8ArrayToBase64(identityKeyPair.privateKey),
@@ -261,6 +264,15 @@ export async function hasIdentityKey(): Promise<boolean> {
   const db = await getDb();
   const stored = await db.get(STORES.IDENTITY, 'local');
   return stored !== undefined;
+}
+
+/**
+ * Get the userId stored alongside the identity key (may be null for keys created before this field existed)
+ */
+export async function getIdentityKeyUserId(): Promise<string | null> {
+  const db = await getDb();
+  const stored = await db.get(STORES.IDENTITY, 'local');
+  return stored?.userId ?? null;
 }
 
 // ==================== Pre-Key Operations ====================

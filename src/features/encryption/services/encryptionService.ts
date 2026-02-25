@@ -45,7 +45,7 @@ import {
   hasGroupKey,
   storeReceivedGroupKey,
 } from './groupCryptoService';
-import { getIdentityKey, hasIdentityKey } from '../db/cryptoDb';
+import { getIdentityKey, hasIdentityKey, getIdentityKeyUserId } from '../db/cryptoDb';
 import { useEncryptionStore } from '../stores/keyStore';
 import { GROUP_KEY_SENTINEL } from '../constants';
 import type {
@@ -106,7 +106,23 @@ export async function initialize(): Promise<void> {
     // Initialize libsodium
     await initCrypto();
 
-    // Check if we have local keys
+    // Detect cross-user key contamination: if IndexedDB has keys from a DIFFERENT user,
+    // clear everything and treat this as a fresh device. This prevents User B from inheriting
+    // User A's encryption identity when they log in on the same browser.
+    const currentUserId = typeof window !== 'undefined'
+      ? localStorage.getItem('current_user_id')
+      : null;
+    const storedKeyUserId = await getIdentityKeyUserId();
+
+    if (storedKeyUserId && currentUserId && storedKeyUserId !== currentUserId) {
+      log.encryption.warn(
+        `Stored keys belong to user ${storedKeyUserId}, current user is ${currentUserId} — clearing stale keys`
+      );
+      const { clearAllData } = await import('../db/cryptoDb');
+      await clearAllData();
+    }
+
+    // Check if we have local keys (after potential stale-key clear above)
     const hasLocalKeys = await hasIdentityKey();
     log.encryption.debug(`hasLocalKeys=${hasLocalKeys}`);
 
@@ -128,8 +144,8 @@ export async function initialize(): Promise<void> {
       }
     }
 
-    // Initialize or load existing keys
-    await initializeKeys();
+    // Initialize or load existing keys (tag with userId for future contamination checks)
+    await initializeKeys(currentUserId ?? undefined);
 
     // Upload key bundle to server
     await uploadKeyBundle();

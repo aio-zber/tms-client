@@ -186,7 +186,11 @@ export async function restoreKeyBackup(pin: string): Promise<void> {
       );
     }
 
-    // Restore keys to IndexedDB
+    // Restore keys to IndexedDB — tag with current userId so future logins
+    // by a different user on this device won't inherit these keys.
+    const currentUserId = typeof window !== 'undefined'
+      ? localStorage.getItem('current_user_id') ?? undefined
+      : undefined;
     await storeIdentityKey(
       {
         publicKey: fromBase64(backupData.identityKeyPair.publicKey),
@@ -204,7 +208,8 @@ export async function restoreKeyBackup(pin: string): Promise<void> {
         },
         signature: fromBase64(backupData.signedPreKey.signature),
         createdAt: backupData.signedPreKey.createdAt,
-      }
+      },
+      currentUserId
     );
 
     log.encryption.info('Key backup restored successfully');
