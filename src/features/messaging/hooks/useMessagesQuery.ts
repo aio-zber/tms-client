@@ -46,7 +46,7 @@ interface UseMessagesQueryOptions {
  * Messages are returned in ASC order (oldest first) for chat display
  */
 export function useMessagesQuery(options: UseMessagesQueryOptions) {
-  const { conversationId, limit = 50, enabled = true } = options;
+  const { conversationId, limit = 30, enabled = true } = options;
   const currentUserId = useUserStore((s) => s.currentUser?.id);
 
   const query = useInfiniteQuery({

@@ -542,9 +542,35 @@ export function useMessages(
           addMessageToCache({ ...transformedMessage, content: cached });
           patchConversationLastMessage(cached);
         } else if (currentUserId && transformedMessage.senderId === currentUserId) {
-          // Own encrypted message not in cache yet — the send path will add it
-          // via optimistic update. Don't add a placeholder that would flash.
-          log.message.debug('[useMessages] Skipping own encrypted message (waiting for send path):', transformedMessage.id);
+          // Own message from ANOTHER device — not sent from this device so no optimistic update exists.
+          // Decrypt using decryptOwnDirectMessage (uses our identity key to recover session).
+          const isGroup = !!(wsMessage.sender_key_id || wsMessage.senderKeyId);
+          if (isGroup) {
+            // Group: decrypt normally — we have the group key
+            transformAndDecryptMessage(wsMessage, true).then((decryptedMsg) => {
+              addMessageToCache(decryptedMsg);
+              patchConversationLastMessage(decryptedMsg.content);
+            }).catch(() => {
+              addMessageToCache({ ...transformedMessage, content: '[Unable to decrypt message]' });
+            });
+          } else {
+            // DM: use decryptOwnDirectMessage (recovers via server key backup if needed)
+            import('@/features/encryption').then(async ({ encryptionService }) => {
+              try {
+                const decrypted = await encryptionService.decryptOwnDirectMessage(
+                  transformedMessage.conversationId,
+                  transformedMessage.content
+                );
+                cacheDecryptedContent(transformedMessage.id, decrypted, transformedMessage.conversationId);
+                addMessageToCache({ ...transformedMessage, content: decrypted });
+                patchConversationLastMessage(decrypted);
+              } catch {
+                addMessageToCache({ ...transformedMessage, content: '[Unable to decrypt message]' });
+              }
+            }).catch(() => {
+              addMessageToCache({ ...transformedMessage, content: '[Unable to decrypt message]' });
+            });
+          }
         } else {
           // Recipient: decrypt the message
           // Use senderKeyId as the reliable group indicator — it's non-null only for group E2EE.

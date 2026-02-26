@@ -145,10 +145,14 @@ export async function initialize(): Promise<void> {
     }
 
     // Initialize or load existing keys (tag with userId for future contamination checks)
-    await initializeKeys(currentUserId ?? undefined);
+    const { isNew: isNewBundle } = await initializeKeys(currentUserId ?? undefined);
 
-    // Upload key bundle to server
-    await uploadKeyBundle();
+    // Only upload key bundle if freshly generated — avoids a blocking POST on every refresh
+    if (isNewBundle) {
+      await uploadKeyBundle();
+    } else {
+      log.encryption.debug('Key bundle unchanged — skipping upload');
+    }
 
     // Check if we need to replenish pre-keys
     if (await needsPreKeyReplenishment()) {
@@ -158,16 +162,17 @@ export async function initialize(): Promise<void> {
       }
     }
 
-    // Check backup status in background
-    try {
-      const { getBackupStatus } = await import('./backupService');
-      const status = await getBackupStatus();
-      useEncryptionStore.getState().setHasBackup(status.has_backup);
-    } catch (err) {
-      log.encryption.warn('Failed to check backup status:', err);
-      // Set to false so backup prompt can appear
-      useEncryptionStore.getState().setHasBackup(false);
-    }
+    // Check backup status fire-and-forget — only updates UI store, not blocking
+    Promise.resolve().then(async () => {
+      try {
+        const { getBackupStatus } = await import('./backupService');
+        const status = await getBackupStatus();
+        useEncryptionStore.getState().setHasBackup(status.has_backup);
+      } catch (err) {
+        log.encryption.warn('Failed to check backup status:', err);
+        useEncryptionStore.getState().setHasBackup(false);
+      }
+    });
 
     // Upload existing session key backups in background (for sessions pre-dating this feature)
     uploadAllExistingSessionBackups();
