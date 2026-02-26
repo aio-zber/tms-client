@@ -18,6 +18,8 @@ import {
 } from '@/components/ui/dialog';
 import { getUserInitials, getUserDisplayName, User } from '@/types';
 import { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/lib/queryClient';
 import { authService } from '@/features/auth/services/authService';
 import { useTheme } from '@/hooks/useTheme';
 import { STORAGE_KEYS, getApiBaseUrl } from '@/lib/constants';
@@ -43,6 +45,8 @@ export function AppHeader() {
   const { theme, setTheme } = useTheme();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [notificationSettingsOpen, setNotificationSettingsOpen] = useState(false);
+
+  const queryClient = useQueryClient();
 
   // E2EE state
   const encryptionInitStatus = useEncryptionStore((s) => s.initStatus);
@@ -348,6 +352,17 @@ export function AppHeader() {
             const { reinitializeEncryption } = await import('@/features/encryption');
             await reinitializeEncryption();
           } catch { /* will retry on next message */ }
+
+          // Clear decryption failure cache and decrypted content cache so all
+          // previously-failed messages are re-attempted with the restored keys.
+          const { clearFailedDecryptions } = await import('@/features/messaging/hooks/useMessagesQuery');
+          const { decryptedContentCache } = await import('@/features/messaging/hooks/useMessages');
+          clearFailedDecryptions();
+          decryptedContentCache.clear();
+
+          // Invalidate all message queries so they re-fetch and re-decrypt.
+          queryClient.invalidateQueries({ queryKey: queryKeys.messages.all });
+
           useEncryptionStore.getState().setHasBackup(true);
         }}
       />
