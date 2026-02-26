@@ -48,7 +48,7 @@ export function AppHeader() {
   const encryptionInitStatus = useEncryptionStore((s) => s.initStatus);
   const hasBackup = useEncryptionStore((s) => s.hasBackup);
   const [showBackupDialog, setShowBackupDialog] = useState(false);
-  const isE2EEReady = encryptionInitStatus === 'ready';
+  const isE2EEReady = encryptionInitStatus === 'ready' || encryptionInitStatus === 'needs_restore';
 
   useEffect(() => {
     const loadUser = async () => {
@@ -341,12 +341,12 @@ export function AppHeader() {
         mode="manage"
         hasExistingBackup={hasBackup === true}
         onComplete={async () => {
-          // Re-initialize encryption after restore so messages decrypt immediately
+          // Re-initialize encryption after restore so messages decrypt immediately.
+          // Must use reinitializeEncryption (not initialize) — initialize() is a
+          // no-op when initStatus is already 'ready' or 'needs_restore'.
           try {
-            const { encryptionService } = await import('@/features/encryption');
-            if (!encryptionService.isInitialized()) {
-              await encryptionService.initialize();
-            }
+            const { reinitializeEncryption } = await import('@/features/encryption');
+            await reinitializeEncryption();
           } catch { /* will retry on next message */ }
           useEncryptionStore.getState().setHasBackup(true);
         }}
