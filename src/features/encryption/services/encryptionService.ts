@@ -197,6 +197,11 @@ export async function reinitialize(): Promise<void> {
   initStatus = 'uninitialized';
   useEncryptionStore.getState().setInitStatus('uninitialized');
   await initialize();
+  // After keys are restored, bulk-fetch all conversation key backups from the server
+  // and pre-populate IndexedDB sessions — Messenger Labyrinth pattern.
+  // This makes all DM and group conversations immediately decryptable without
+  // per-conversation lazy recovery API calls.
+  await restoreAllConversationSessions();
 }
 
 /**
@@ -525,6 +530,73 @@ async function uploadAllExistingSessionBackups(): Promise<void> {
 }
 
 /**
+ * Sentinel used to cache bulk-restored DM conversation keys in IndexedDB.
+ * tryRecoverFromKeyBackup checks this sentinel before hitting the network,
+ * so sessions are immediately available after a PIN restore without per-conversation API calls.
+ */
+const BULK_RESTORE_SENTINEL = '__bulk__';
+
+/**
+ * Bulk-restore ALL conversation sessions from server key backups.
+ * Called after PIN restore — same pattern as Messenger's Labyrinth key vault bulk-fetch.
+ *
+ * DM vs group is detected from the payload: group backups have all-zero remoteIdentityKey bytes.
+ * DM sessions are cached under BULK_RESTORE_SENTINEL; tryRecoverFromKeyBackup reads this
+ * cache and copies to the exact sender key on first use.
+ */
+async function restoreAllConversationSessions(): Promise<void> {
+  try {
+    const response = await apiClient.get<{
+      keys: Array<{ conversation_id: string; encrypted_key: string; nonce: string }>;
+    }>(`${ENCRYPTION_API}/keys/conversations`);
+
+    if (!response.keys || response.keys.length === 0) return;
+
+    const ourKeys = await getIdentityKey();
+    if (!ourKeys) return;
+
+    const { storeSession } = await import('../db/cryptoDb');
+    const { storeReceivedGroupKey } = await import('./groupCryptoService');
+
+    let restored = 0;
+    for (const entry of response.keys) {
+      try {
+        const ciphertext = fromBase64(entry.encrypted_key);
+        const nonce = fromBase64(entry.nonce);
+        const payload = decrypt(ciphertext, nonce, ourKeys.identityKeyPair.privateKey);
+
+        const conversationKey = payload.slice(0, 32);
+        const remoteIdentityKeyBytes = payload.slice(32, 64);
+
+        // Detect type: group backups have all-zero remoteIdentityKey
+        const isGroup = remoteIdentityKeyBytes.every((b) => b === 0);
+
+        if (isGroup) {
+          const groupKeyId = toHex(randomBytes(16));
+          await storeReceivedGroupKey(entry.conversation_id, conversationKey, groupKeyId);
+        } else {
+          // DM: cache under BULK_RESTORE_SENTINEL. tryRecoverFromKeyBackup will copy
+          // this to the exact sender key on first per-conversation decryption attempt.
+          await storeSession(entry.conversation_id, BULK_RESTORE_SENTINEL, {
+            conversationKey,
+            remoteIdentityKey: remoteIdentityKeyBytes,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          });
+        }
+        restored++;
+      } catch {
+        // Skip individual failures — non-critical
+      }
+    }
+
+    log.encryption.info(`Bulk session restore: ${restored}/${response.keys.length} conversations restored`);
+  } catch (err) {
+    log.encryption.warn('Bulk session restore failed:', err);
+  }
+}
+
+/**
  * Try to recover a session from the server-stored conversation key backup.
  * Uses our own identity private key to decrypt (Messenger multi-device pattern).
  *
@@ -535,6 +607,23 @@ async function tryRecoverFromKeyBackup(
   remoteUserId: string
 ): Promise<boolean> {
   try {
+    const { getSession, storeSession } = await import('../db/cryptoDb');
+
+    // Fast path: check if bulk restore already cached this conversation key.
+    // If so, copy it to the exact sender key and skip the network call.
+    const bulkCached = await getSession(conversationId, BULK_RESTORE_SENTINEL);
+    if (bulkCached) {
+      await storeSession(conversationId, remoteUserId, {
+        conversationKey: bulkCached.conversationKey,
+        remoteIdentityKey: bulkCached.remoteIdentityKey,
+        createdAt: bulkCached.createdAt,
+        updatedAt: Date.now(),
+      });
+      log.encryption.debug(`Session restored from bulk cache for ${conversationId}:${remoteUserId}`);
+      return true;
+    }
+
+    // Network path: fetch from server
     const response = await apiClient.get<{
       conversation_id: string;
       encrypted_key: string;
@@ -554,8 +643,6 @@ async function tryRecoverFromKeyBackup(
     const conversationKey = payload.slice(0, 32);
     const remoteIdentityKey = payload.slice(32, 64);
 
-    // Store the recovered session
-    const { storeSession } = await import('../db/cryptoDb');
     await storeSession(conversationId, remoteUserId, {
       conversationKey,
       remoteIdentityKey,
