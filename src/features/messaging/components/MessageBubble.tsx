@@ -81,6 +81,7 @@ export const MessageBubble = memo(function MessageBubble({
   const [decryptedFileUrl, setDecryptedFileUrl] = useState<string | null>(null);
   const [isDecryptingFile, setIsDecryptingFile] = useState(false);
   const [isInView, setIsInView] = useState(false);
+  const decryptedVideoUrlRef = useRef<string | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
 
@@ -118,11 +119,19 @@ export const MessageBubble = memo(function MessageBubble({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [message.id, message.type, message.metadata?.fileUrl]);
 
-  // E2EE: Decrypt encrypted file content for display — gated on viewport visibility
+  // E2EE: Decrypt encrypted file content for display — gated on viewport visibility.
+  // Videos are excluded here — they decrypt on play-click to avoid downloading large
+  // files the user may never watch (see handleEncryptedVideoPlay below).
+  const isEncryptedVideo =
+    !!(message.metadata?.encryption?.fileKey) &&
+    (message.metadata?.mimeType?.startsWith('video/') ||
+      message.metadata?.encryption?.originalMimeType?.startsWith('video/'));
+
   useEffect(() => {
     const encMeta = message.metadata?.encryption;
     if (!encMeta?.fileKey || !encMeta?.fileNonce || !proxyFileUrl) return;
     if (!isInView) return; // Wait until bubble is near viewport
+    if (isEncryptedVideo) return; // Videos decrypt on play-click, not viewport entry
 
     let objectUrl: string | null = null;
     const decryptFileContent = async () => {
@@ -148,7 +157,37 @@ export const MessageBubble = memo(function MessageBubble({
     decryptFileContent();
     return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [message.id, message.metadata?.encryption?.fileKey, proxyFileUrl, isInView]);
+  }, [message.id, message.metadata?.encryption?.fileKey, proxyFileUrl, isInView, isEncryptedVideo]);
+
+  // E2EE video: decrypt on play-click. Returns a blob URL for immediate playback.
+  const handleEncryptedVideoPlay = async (): Promise<string | null> => {
+    // Return cached blob URL if already decrypted
+    if (decryptedVideoUrlRef.current) return decryptedVideoUrlRef.current;
+    if (!proxyFileUrl) return null;
+    const encMeta = message.metadata?.encryption;
+    if (!encMeta?.fileKey || !encMeta?.fileNonce) return null;
+
+    setIsDecryptingFile(true);
+    try {
+      const response = await fetch(proxyFileUrl);
+      const encryptedData = await response.arrayBuffer();
+      const { encryptionService } = await import('@/features/encryption');
+      const { fromBase64 } = await import('@/features/encryption/services/cryptoService');
+      const mimeType = encMeta.originalMimeType || message.metadata?.mimeType || 'video/mp4';
+      const decryptedBlob = await encryptionService.decryptFile(
+        encryptedData, fromBase64(encMeta.fileKey!), fromBase64(encMeta.fileNonce!), mimeType
+      );
+      const objectUrl = URL.createObjectURL(decryptedBlob);
+      decryptedVideoUrlRef.current = objectUrl;
+      setDecryptedFileUrl(objectUrl);
+      return objectUrl;
+    } catch (err) {
+      log.message.error('[MessageBubble] Video decryption failed:', err);
+      return null;
+    } finally {
+      setIsDecryptingFile(false);
+    }
+  };
 
   // Helper function to format file size
   const formatFileSize = (bytes?: number): string => {
@@ -639,11 +678,13 @@ export const MessageBubble = memo(function MessageBubble({
               } overflow-hidden`}
             >
               <VideoPlayer
-                src={isInView ? (decryptedFileUrl || proxyFileUrl!) : undefined}
+                src={isInView ? (decryptedFileUrl || (isEncryptedVideo ? undefined : proxyFileUrl!)) : undefined}
                 thumbnailUrl={isInView ? (decryptedFileUrl ? undefined : proxyThumbnailUrl || undefined) : undefined}
                 mimeType={message.metadata.encryption?.originalMimeType || message.metadata.mimeType}
                 fileName={message.metadata.fileName}
                 isSent={isSent}
+                isDecrypting={isEncryptedVideo ? isDecryptingFile : false}
+                onPlayClick={isEncryptedVideo ? handleEncryptedVideoPlay : undefined}
                 onExpandClick={() => setVideoLightboxOpen(true)}
               />
               {/* Caption if present */}

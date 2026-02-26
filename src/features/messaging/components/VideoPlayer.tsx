@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Maximize2, Play } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { Loader2, Maximize2, Play } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface VideoPlayerProps {
@@ -10,12 +10,20 @@ interface VideoPlayerProps {
   mimeType?: string;
   fileName?: string;
   isSent: boolean;
+  /** For E2EE videos: called on play-click to decrypt and return a blob URL. */
+  onPlayClick?: () => Promise<string | null>;
+  /** True while E2EE decryption is in progress — shows a spinner on the play button. */
+  isDecrypting?: boolean;
   onExpandClick: () => void;
 }
 
 /**
  * Inline video player for message bubbles.
  * Shows video with native controls and expand button for fullscreen.
+ *
+ * For E2EE videos, pass onPlayClick — the component will call it on first play,
+ * wait for the blob URL, then start playback. This defers the full file download
+ * to when the user explicitly requests it, matching Messenger's approach.
  */
 export function VideoPlayer({
   src,
@@ -23,10 +31,27 @@ export function VideoPlayer({
   mimeType,
   fileName,
   isSent,
+  onPlayClick,
+  isDecrypting = false,
   onExpandClick,
 }: VideoPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [showControls, setShowControls] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  const handlePlayOverlayClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onPlayClick) {
+      // E2EE path: decrypt first, then play
+      const blobUrl = await onPlayClick();
+      if (blobUrl && videoRef.current) {
+        videoRef.current.src = blobUrl;
+        videoRef.current.play();
+      }
+    } else if (videoRef.current) {
+      videoRef.current.play();
+    }
+  };
 
   return (
     <div
@@ -39,6 +64,7 @@ export function VideoPlayer({
     >
       {/* Video element */}
       <video
+        ref={videoRef}
         src={src}
         poster={thumbnailUrl}
         controls={isPlaying}
@@ -57,16 +83,14 @@ export function VideoPlayer({
       {!isPlaying && (
         <div
           className="absolute inset-0 flex items-center justify-center bg-black/30 transition-opacity"
-          onClick={(e) => {
-            e.stopPropagation();
-            const video = e.currentTarget.parentElement?.querySelector('video');
-            if (video) {
-              video.play();
-            }
-          }}
+          onClick={handlePlayOverlayClick}
         >
           <div className="h-14 w-14 rounded-full bg-white/90 flex items-center justify-center shadow-lg hover:bg-white transition-colors">
-            <Play className="h-7 w-7 text-gray-900 ml-1" fill="currentColor" />
+            {isDecrypting ? (
+              <Loader2 className="h-7 w-7 text-gray-700 animate-spin" />
+            ) : (
+              <Play className="h-7 w-7 text-gray-900 ml-1" fill="currentColor" />
+            )}
           </div>
         </div>
       )}
