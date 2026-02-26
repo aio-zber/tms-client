@@ -69,12 +69,12 @@ export function EncryptionGate({ children }: { children: React.ReactNode }) {
     <>
       {children}
 
-      {/* Blocking: restore keys on new device */}
+      {/* Restore keys on new device — closeable but warns before dismissal */}
       <KeyBackupDialog
         open={showRestoreDialog}
         onOpenChange={setShowRestoreDialog}
         mode="restore"
-        disableClose={encryptionInitStatus === 'needs_restore'}
+        disableClose={false}
         onComplete={handleRestoreComplete}
       />
 
