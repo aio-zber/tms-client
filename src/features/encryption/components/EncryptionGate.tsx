@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEncryptionStore } from '../stores/keyStore';
 import { KeyBackupDialog } from './KeyBackupDialog';
+import { queryKeys } from '@/lib/queryClient';
 import { log } from '@/lib/logger';
 
 /**
@@ -18,6 +20,7 @@ import { log } from '@/lib/logger';
  *    users cannot skip it and lose message history on their next device.
  */
 export function EncryptionGate({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
   const encryptionInitStatus = useEncryptionStore((s) => s.initStatus);
   const hasBackup = useEncryptionStore((s) => s.hasBackup);
   const [showRestoreDialog, setShowRestoreDialog] = useState(false);
@@ -57,6 +60,15 @@ export function EncryptionGate({ children }: { children: React.ReactNode }) {
     } catch (err) {
       log.encryption.error('Failed to re-initialize after restore:', err);
     }
+
+    // Clear decryption failure/content caches and invalidate message queries
+    // so any messages opened before restore are re-fetched and re-decrypted.
+    const { clearFailedDecryptions } = await import('@/features/messaging/hooks/useMessagesQuery');
+    const { decryptedContentCache } = await import('@/features/messaging/hooks/useMessages');
+    clearFailedDecryptions();
+    decryptedContentCache.clear();
+    queryClient.invalidateQueries({ queryKey: queryKeys.messages.all });
+
     useEncryptionStore.getState().setHasBackup(true);
   };
 
