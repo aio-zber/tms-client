@@ -23,16 +23,6 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -426,64 +416,66 @@ export function KeyBackupDialog({
     </Dialog>
 
     {/* Confirm before final PIN backup submit */}
-    <AlertDialog open={showPinConfirmModal} onOpenChange={setShowPinConfirmModal}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle className="flex items-center gap-2">
+    <Dialog open={showPinConfirmModal} onOpenChange={setShowPinConfirmModal}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="w-5 h-5 text-amber-500" />
             Are you sure you remember this PIN?
-          </AlertDialogTitle>
-          <AlertDialogDescription className="space-y-2">
-            <span className="block">
-              This PIN is the <strong>only way</strong> to restore your encrypted messages on a new device or browser.
-            </span>
-            <span className="block text-amber-700 dark:text-amber-400 font-medium">
-              If you forget it, your old messages will be permanently unreadable — there is no way to recover this PIN.
-            </span>
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel onClick={() => setShowPinConfirmModal(false)}>
+          </DialogTitle>
+          <DialogDescription asChild>
+            <div className="space-y-2 text-sm text-gray-600 dark:text-dark-text-secondary pt-1">
+              <p>
+                This PIN is the <strong className="text-gray-900 dark:text-dark-text-primary">only way</strong> to restore your encrypted messages on a new device or browser.
+              </p>
+              <p className="text-amber-700 dark:text-amber-400 font-medium">
+                If you forget it, your old messages will be permanently unreadable — there is no way to recover this PIN.
+              </p>
+            </div>
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex gap-2 mt-2">
+          <Button variant="outline" className="flex-1" onClick={() => setShowPinConfirmModal(false)}>
             Go Back
-          </AlertDialogCancel>
-          <AlertDialogAction
-            className="bg-viber-purple hover:bg-viber-purple-dark text-white"
+          </Button>
+          <Button
+            className="flex-1 bg-viber-purple hover:bg-viber-purple-dark text-white"
             onClick={() => {
               setShowPinConfirmModal(false);
               executeBackupRestore();
             }}
           >
-            Yes, I Remember My PIN
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+            Yes, I Remember
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
 
     {/* Warn before closing the restore dialog without restoring */}
-    <AlertDialog open={showCloseWarning} onOpenChange={setShowCloseWarning}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle className="flex items-center gap-2">
+    <Dialog open={showCloseWarning} onOpenChange={setShowCloseWarning}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="w-5 h-5 text-amber-500" />
             Skip key restore?
-          </AlertDialogTitle>
-          <AlertDialogDescription asChild>
-            <div className="space-y-2 text-sm text-gray-600 dark:text-dark-text-secondary">
+          </DialogTitle>
+          <DialogDescription asChild>
+            <div className="space-y-2 text-sm text-gray-600 dark:text-dark-text-secondary pt-1">
               <p>
-                Without restoring your encryption keys, your <strong className="text-gray-900 dark:text-dark-text-primary">old messages will not be readable</strong> on this device.
+                Without restoring your keys, your <strong className="text-gray-900 dark:text-dark-text-primary">old messages will not be readable</strong> on this device.
               </p>
               <p>
-                You can still recover them later — go to <strong className="text-gray-900 dark:text-dark-text-primary">Settings → Security → Restore Keys</strong> and enter your PIN. After a successful restore, <strong className="text-gray-900 dark:text-dark-text-primary">refresh the page</strong> (or hard refresh with Ctrl+Shift+R / Cmd+Shift+R if messages still don&apos;t appear) to decrypt your messages.
+                You can still recover them — go to <strong className="text-gray-900 dark:text-dark-text-primary">Settings → Security → Restore Keys</strong> and enter your PIN. After restoring, <strong className="text-gray-900 dark:text-dark-text-primary">refresh the page</strong> (or hard refresh with Ctrl+Shift+R / Cmd+Shift+R if messages still don&apos;t appear).
               </p>
             </div>
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel onClick={() => setShowCloseWarning(false)}>
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex gap-2 mt-2">
+          <Button variant="outline" className="flex-1" onClick={() => setShowCloseWarning(false)}>
             Enter My PIN Now
-          </AlertDialogCancel>
-          <AlertDialogAction
-            className="bg-red-600 hover:bg-red-700 text-white"
+          </Button>
+          <Button
+            className="flex-1 bg-red-600 hover:bg-red-700 text-white"
             onClick={() => {
               setShowCloseWarning(false);
               resetState();
@@ -491,10 +483,10 @@ export function KeyBackupDialog({
             }}
           >
             Skip for Now
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
