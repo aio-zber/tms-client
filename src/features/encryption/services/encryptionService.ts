@@ -89,8 +89,10 @@ const distributedGroupKeys = new Set<string>();
 /**
  * Initialize the E2EE system
  * Must be called on app startup (after login)
+ * @param forceUploadBundle - Force re-upload of key bundle even if keys already existed
+ *   (used after PIN restore: keys are in IndexedDB but server may not have this device's bundle)
  */
-export async function initialize(): Promise<void> {
+export async function initialize(forceUploadBundle = false): Promise<void> {
   if (initStatus === 'ready') return;
   if (initStatus === 'initializing') {
     // Wait for existing initialization
@@ -147,8 +149,12 @@ export async function initialize(): Promise<void> {
     // Initialize or load existing keys (tag with userId for future contamination checks)
     const { isNew: isNewBundle } = await initializeKeys(currentUserId ?? undefined);
 
-    // Only upload key bundle if freshly generated — avoids a blocking POST on every refresh
-    if (isNewBundle) {
+    // Upload key bundle when:
+    //   - Keys are freshly generated (first login / new device)
+    //   - forceUploadBundle is set (after PIN restore: keys are in IndexedDB but the
+    //     server bundle for this device may be stale or belong to the previous session)
+    // Skip on normal refresh with unchanged existing keys — saves one blocking POST.
+    if (isNewBundle || forceUploadBundle) {
       await uploadKeyBundle();
     } else {
       log.encryption.debug('Key bundle unchanged — skipping upload');
@@ -201,7 +207,9 @@ export async function initialize(): Promise<void> {
 export async function reinitialize(): Promise<void> {
   initStatus = 'uninitialized';
   useEncryptionStore.getState().setInitStatus('uninitialized');
-  await initialize();
+  // forceUploadBundle=true: keys were just restored from PIN backup into IndexedDB,
+  // so the server needs the fresh public bundle from this device.
+  await initialize(true);
   // After keys are restored, bulk-fetch all conversation key backups from the server
   // and pre-populate IndexedDB sessions — Messenger Labyrinth pattern.
   // This makes all DM and group conversations immediately decryptable without
