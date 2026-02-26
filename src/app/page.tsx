@@ -19,6 +19,18 @@ function HomePageContent() {
   const searchParams = useSearchParams();
   const { isLoading, checkAuth } = useAuthStore();
   const [processing, setProcessing] = useState(true);
+  // Read re-auth flags after mount only — localStorage is unavailable during SSR,
+  // so reading it at render time causes a server/client HTML mismatch (React error #418).
+  const [reauthState, setReauthState] = useState<{ isReauthenticating: boolean; reason: string | null }>({
+    isReauthenticating: false,
+    reason: null,
+  });
+  useEffect(() => {
+    setReauthState({
+      isReauthenticating: localStorage.getItem('reauthenticating') === 'true',
+      reason: localStorage.getItem('reauth_reason'),
+    });
+  }, []);
 
   // Enable session synchronization with GCGC
   useSessionSync();
@@ -187,11 +199,9 @@ function HomePageContent() {
 
   // Show loading while processing
   if (isLoading || processing) {
-    // Check for re-authentication flags
-    const isReauthenticating = typeof window !== 'undefined' &&
-      localStorage.getItem('reauthenticating') === 'true';
-    const reauthReason = typeof window !== 'undefined' &&
-      localStorage.getItem('reauth_reason');
+    // Use mount-time values (set by useEffect above) — avoids SSR/client mismatch
+    const isReauthenticating = reauthState.isReauthenticating;
+    const reauthReason = reauthState.reason;
 
     // Determine loading message
     let loadingMessage = 'Checking authentication...';
