@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { QueryProvider } from '@/components/providers/QueryProvider';
 import { ServiceWorkerProvider } from '@/components/providers/ServiceWorkerProvider';
@@ -7,6 +7,15 @@ import { Toaster } from 'react-hot-toast';
 export const metadata: Metadata = {
   title: 'GCG Team Messaging App',
   description: 'A Viber-inspired team messaging application integrated with Team Management System',
+};
+
+// Proper mobile viewport: prevents user zoom (keeps layout stable when input focused),
+// and sets the theme color for mobile browser chrome.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({

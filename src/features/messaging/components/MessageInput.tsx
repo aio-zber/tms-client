@@ -348,7 +348,7 @@ export function MessageInput({
   };
 
   return (
-    <div className="p-3 md:p-4 border-t border-gray-200 dark:border-dark-border bg-white dark:bg-dark-surface">
+    <div className="sticky bottom-0 p-3 md:p-4 border-t border-gray-200 dark:border-dark-border bg-white dark:bg-dark-surface safe-bottom">
       <div className="max-w-4xl mx-auto">
         {/* Edit Preview */}
         {editingMessage && (

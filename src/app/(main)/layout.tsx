@@ -71,7 +71,7 @@ export default function MainLayout({
   return (
     <SocketProvider>
       <EncryptionGate>
-      <div className="h-screen flex flex-col bg-gray-50 dark:bg-dark-bg">
+      <div className="h-[100dvh] flex flex-col bg-gray-50 dark:bg-dark-bg">
         {/* App Header with Settings */}
         <AppHeader />
 

@@ -5,7 +5,7 @@ import { Maximize2, Play } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface VideoPlayerProps {
-  src: string;
+  src: string | undefined;
   thumbnailUrl?: string;
   mimeType?: string;
   fileName?: string;
@@ -49,7 +49,7 @@ export function VideoPlayer({
         onPause={() => setIsPlaying(false)}
         onEnded={() => setIsPlaying(false)}
       >
-        {mimeType && <source src={src} type={mimeType} />}
+        {src && mimeType && <source src={src} type={mimeType} />}
         Your browser does not support video playback.
       </video>
 

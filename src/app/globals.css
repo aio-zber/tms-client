@@ -149,6 +149,11 @@
   .status-read {
     @apply text-message-read;
   }
+
+  /* iOS safe area inset for bottom elements (home indicator, notch) */
+  .safe-bottom {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
 }
 
 

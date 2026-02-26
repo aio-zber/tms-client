@@ -99,11 +99,14 @@ export const MessageBubble = memo(function MessageBubble({
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const { voteOnPoll, closePoll } = usePollActions();
 
-  // Messenger pattern: only decrypt E2EE media when the bubble enters the viewport.
-  // Prevents fetching+decrypting all files on conversation open (saturates HTTP/2 connection).
+  // Messenger pattern: only load/decrypt media when the bubble enters the viewport.
+  // Applies to ALL image/video messages (not just E2EE) — prevents the browser from
+  // firing OSS proxy requests for every message on conversation open.
+  // loading="lazy" on <img> is browser-hinted only; IntersectionObserver is reliable.
   useEffect(() => {
-    const encMeta = message.metadata?.encryption;
-    if (!encMeta?.fileKey) return; // Only need observer for E2EE messages
+    const isMedia = message.type === 'IMAGE' ||
+      (message.type === 'FILE' && message.metadata?.mimeType?.startsWith('video/'));
+    if (!isMedia || !message.metadata?.fileUrl) return;
     const el = bubbleRef.current;
     if (!el) return;
     const observer = new IntersectionObserver(
@@ -113,7 +116,7 @@ export const MessageBubble = memo(function MessageBubble({
     observer.observe(el);
     return () => observer.disconnect();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [message.id, message.metadata?.encryption?.fileKey]);
+  }, [message.id, message.type, message.metadata?.fileUrl]);
 
   // E2EE: Decrypt encrypted file content for display — gated on viewport visibility
   useEffect(() => {
@@ -602,10 +605,9 @@ export const MessageBubble = memo(function MessageBubble({
               ) : (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={decryptedFileUrl || (thumbnailFailed ? proxyFileUrl! : (proxyThumbnailUrl || proxyFileUrl!))}
+                src={isInView ? (decryptedFileUrl || (thumbnailFailed ? proxyFileUrl! : (proxyThumbnailUrl || proxyFileUrl!))) : undefined}
                 alt={message.metadata.fileName || 'Image'}
                 className="max-w-xs md:max-w-sm max-h-64 md:max-h-80 object-cover"
-                loading="lazy"
                 onError={() => {
                   // If proxied thumbnail fails, fall back to proxied main file URL
                   if (!decryptedFileUrl && !thumbnailFailed && proxyThumbnailUrl) {
@@ -637,8 +639,8 @@ export const MessageBubble = memo(function MessageBubble({
               } overflow-hidden`}
             >
               <VideoPlayer
-                src={decryptedFileUrl || proxyFileUrl!}
-                thumbnailUrl={decryptedFileUrl ? undefined : proxyThumbnailUrl || undefined}
+                src={isInView ? (decryptedFileUrl || proxyFileUrl!) : undefined}
+                thumbnailUrl={isInView ? (decryptedFileUrl ? undefined : proxyThumbnailUrl || undefined) : undefined}
                 mimeType={message.metadata.encryption?.originalMimeType || message.metadata.mimeType}
                 fileName={message.metadata.fileName}
                 isSent={isSent}
