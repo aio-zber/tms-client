@@ -365,6 +365,7 @@ export function KeyBackupDialog({
           <div className="flex gap-2">
             {step === 'confirm' && (
               <Button
+                type="button"
                 variant="outline"
                 onClick={() => { setStep('enter'); setConfirmPin(''); }}
                 disabled={loading}
@@ -375,6 +376,7 @@ export function KeyBackupDialog({
             )}
             {step === 'enter' && isBackup && (
               <Button
+                type="button"
                 variant="outline"
                 onClick={() => setStep('verify_password')}
                 disabled={loading}
@@ -384,6 +386,7 @@ export function KeyBackupDialog({
               </Button>
             )}
             <Button
+              type="button"
               onClick={handleSubmit}
               disabled={
                 loading ||
@@ -435,10 +438,11 @@ export function KeyBackupDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="flex gap-2 mt-2">
-          <Button variant="outline" className="flex-1" onClick={() => setShowPinConfirmModal(false)}>
+          <Button type="button" variant="outline" className="flex-1" onClick={() => setShowPinConfirmModal(false)}>
             Go Back
           </Button>
           <Button
+            type="button"
             className="flex-1 bg-viber-purple hover:bg-viber-purple-dark text-white"
             onClick={() => {
               setShowPinConfirmModal(false);
@@ -471,10 +475,11 @@ export function KeyBackupDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="flex gap-2 mt-2">
-          <Button variant="outline" className="flex-1" onClick={() => setShowCloseWarning(false)}>
+          <Button type="button" variant="outline" className="flex-1" onClick={() => setShowCloseWarning(false)}>
             Enter My PIN Now
           </Button>
           <Button
+            type="button"
             className="flex-1 bg-red-600 hover:bg-red-700 text-white"
             onClick={() => {
               setShowCloseWarning(false);
