@@ -41,12 +41,11 @@ interface AuthState {
 export const useAuthStore = create<AuthState>()(
   devtools(
     (set, _get: () => AuthState) => ({
-      // Initial state - hydrate isAuthenticated from localStorage to prevent redirect on refresh
+      // Initial state — always false on first render (server + client both start the same).
+      // checkAuth() runs in useEffect on mount and sets the real value from localStorage.
+      // Reading localStorage here causes a server/client HTML mismatch (React error #418).
       token: null,
-      isAuthenticated: typeof window !== 'undefined'
-        ? (localStorage.getItem('tms_session_active') === 'true' ||
-           localStorage.getItem('session_active') === 'true')
-        : false,
+      isAuthenticated: false,
       isLoading: false,
       error: null,
 

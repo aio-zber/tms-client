@@ -82,6 +82,7 @@ export const MessageBubble = memo(function MessageBubble({
   const [isDecryptingFile, setIsDecryptingFile] = useState(false);
   const [isInView, setIsInView] = useState(false);
   const decryptedVideoUrlRef = useRef<string | null>(null);
+  const decryptionFailedRef = useRef(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
 
@@ -132,6 +133,7 @@ export const MessageBubble = memo(function MessageBubble({
     if (!encMeta?.fileKey || !encMeta?.fileNonce || !proxyFileUrl) return;
     if (!isInView) return; // Wait until bubble is near viewport
     if (isEncryptedVideo) return; // Videos decrypt on play-click, not viewport entry
+    if (decryptionFailedRef.current) return; // Don't retry after a permanent decryption failure
 
     let objectUrl: string | null = null;
     const decryptFileContent = async () => {
@@ -150,6 +152,7 @@ export const MessageBubble = memo(function MessageBubble({
         setDecryptedFileUrl(objectUrl);
       } catch (err) {
         log.message.error('[MessageBubble] File decryption failed:', err);
+        decryptionFailedRef.current = true; // Permanent failure — don't retry on scroll
       } finally {
         setIsDecryptingFile(false);
       }
