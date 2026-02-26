@@ -3,7 +3,7 @@
  * TanStack Query version of conversations fetching with proper cache management
  */
 
-import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { conversationService } from '../services/conversationService';
 import { queryKeys } from '@/lib/queryClient';
 import { decryptedContentCache } from '@/features/messaging/hooks/useMessages';
@@ -41,6 +41,7 @@ async function warmDecryptionCache(messageIds: string[]): Promise<void> {
  */
 export function useConversationsQuery(options: UseConversationsQueryOptions = {}) {
   const { limit = 20, type, enabled = true } = options;
+  const queryClient = useQueryClient();
 
   const query = useInfiniteQuery({
     queryKey: queryKeys.conversations.list({ limit, offset: 0, type }),
@@ -81,6 +82,13 @@ export function useConversationsQuery(options: UseConversationsQueryOptions = {}
           ...conv,
           lastMessage: { ...conv.lastMessage, content: cached, encrypted: false },
         };
+      });
+
+      // Seed each conversation's detail cache so clicking a conversation doesn't
+      // fire GET /conversations/{id} — it finds the data already in cache.
+      // Messenger pattern: list data pre-populates the detail view instantly.
+      processedData.forEach((conv) => {
+        queryClient.setQueryData(queryKeys.conversations.detail(conv.id), conv);
       });
 
       return { ...response, data: processedData };
