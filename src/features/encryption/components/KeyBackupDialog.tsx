@@ -237,6 +237,7 @@ export function KeyBackupDialog({
       : 'Enter the PIN you used when backing up your encryption keys.';
 
   return (
+    <>
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
@@ -492,6 +493,7 @@ export function KeyBackupDialog({
         </div>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 
