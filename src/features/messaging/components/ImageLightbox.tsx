@@ -302,41 +302,60 @@ export function ImageLightbox({
     }
   }, []);
 
-  // Download image — if already a blob (decrypted E2EE), download directly.
-  // Otherwise route through backend proxy to avoid OSS CORS restrictions.
+  // Download: if already a blob (decrypted), save directly.
+  // If E2EE (encMeta present), fetch proxy URL + decrypt first, then save plaintext.
+  // Otherwise (plain proxy URL), fetch and save raw bytes.
   const handleDownload = useCallback(async () => {
     try {
-      const url = currentImage.url;
-      const fileName = currentImage.fileName || `image-${Date.now()}.jpg`;
+      const url = currentImage.url; // proxy URL (with ?token=) or blob URL
+      const enc = images[currentIndex].encMeta; // original encMeta (not in currentImage alias)
+      const fileName = currentImage.fileName ||
+        `${currentImage.isVideo ? 'video' : 'image'}-${Date.now()}${currentImage.isVideo ? '.mp4' : '.jpg'}`;
+
       if (url.startsWith('blob:')) {
-        // Already decrypted — download the blob directly (plaintext bytes)
+        // Already decrypted blob — download directly
         const link = document.createElement('a');
         link.href = url;
         link.download = fileName;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-      } else {
-        const { getApiBaseUrl } = await import('@/lib/constants');
-        const token = localStorage.getItem('auth_token');
-        const proxyUrl = `${getApiBaseUrl()}/files/proxy?url=${encodeURIComponent(url)}`;
-        const response = await fetch(proxyUrl, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        const blob = await response.blob();
-        const blobUrl = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(blobUrl);
+        return;
       }
+
+      // Fetch the file through the proxy (token already embedded in url)
+      const response = await fetch(url);
+      const arrayBuffer = await response.arrayBuffer();
+
+      let blob: Blob;
+      if (enc?.fileKey && enc?.fileNonce) {
+        // E2EE — decrypt before saving so the user gets plaintext bytes
+        const { encryptionService } = await import('@/features/encryption');
+        const { fromBase64 } = await import('@/features/encryption/services/cryptoService');
+        const mimeType = enc.originalMimeType || currentImage.mimeType || 'application/octet-stream';
+        blob = await encryptionService.decryptFile(
+          arrayBuffer,
+          fromBase64(enc.fileKey),
+          fromBase64(enc.fileNonce),
+          mimeType
+        );
+      } else {
+        blob = new Blob([arrayBuffer]);
+      }
+
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
     } catch (error) {
-      console.error('Failed to download image:', error);
+      console.error('Failed to download:', error);
     }
-  }, [currentImage]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, currentImage, images]);
 
   // Handle click on backdrop to close
   const handleBackdropClick = useCallback(
