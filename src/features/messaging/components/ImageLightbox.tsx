@@ -203,26 +203,30 @@ export function ImageLightbox({
   }, []);
 
   // Video play-click: decrypt E2EE video on demand, then start playback.
-  // If already a blob URL (passed from bubble), just start playing immediately.
+  // If already a blob URL (passed from bubble or previously decrypted), play immediately.
+  //
+  // IMPORTANT: setVideoPlaying(true) must only fire AFTER resolvedUrls has the final
+  // URL — otherwise <video key={currentImage.url}> renders with the encrypted proxy URL
+  // before the state update lands (React batches setState, url read is stale).
   const handleVideoPlayClick = useCallback(async () => {
     const img = images[currentIndex];
-    const proxyUrl = img.url; // original proxy URL (before any resolvedUrls override)
     const currentUrl = resolvedUrls[currentIndex];
 
-    // Already a blob (decrypted by bubble before opening lightbox) — play directly
+    // Already a blob — play directly, no decrypt needed
     if (currentUrl.startsWith('blob:')) {
+      setIsLoading(true);
       setVideoPlaying(true);
-      setIsLoading(false);
       return;
     }
 
-    // E2EE video — decrypt on demand
+    // E2EE video — decrypt first, then set both url + playing in one synchronous flush
     if (img.encMeta?.fileKey && img.encMeta?.fileNonce) {
       setIsVideoDecrypting(true);
       try {
         const { encryptionService } = await import('@/features/encryption');
         const { fromBase64 } = await import('@/features/encryption/services/cryptoService');
-        const res = await fetch(proxyUrl);
+        // Fetch from the current resolved URL (may already be patched by MessageList)
+        const res = await fetch(currentUrl);
         const arrayBuffer = await res.arrayBuffer();
         const mimeType = img.encMeta.originalMimeType || img.mimeType || 'video/mp4';
         const blob = await encryptionService.decryptFile(
@@ -232,21 +236,26 @@ export function ImageLightbox({
           mimeType
         );
         const objectUrl = URL.createObjectURL(blob);
+        // Update URL and flip to playing in the same render cycle so <video src>
+        // always gets the blob URL, never the encrypted proxy URL.
         setResolvedUrls((prev) => {
           const next = [...prev];
           next[currentIndex] = objectUrl;
           return next;
         });
+        setIsLoading(true);
+        setVideoPlaying(true);
       } catch {
-        // Leave URL as-is — video will error naturally
+        // Decrypt failed — leave overlay so user can retry
       } finally {
         setIsVideoDecrypting(false);
       }
+      return;
     }
 
-    // Plain proxy URL (non-E2EE) or after decrypt completes
+    // Plain non-E2EE proxy URL — play directly
+    setIsLoading(true);
     setVideoPlaying(true);
-    setIsLoading(true); // spinner until canPlay fires
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, images, resolvedUrls]);
 
