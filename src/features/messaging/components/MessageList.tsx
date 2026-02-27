@@ -20,9 +20,19 @@ import {
 import { List, ListImperativeAPI, RowComponentProps, useDynamicRowHeight } from 'react-window';
 import { formatTimeSeparator, parseTimestamp } from '@/lib/dateUtils';
 import { MessageBubble } from './MessageBubble';
+import { ImageLightbox, type LightboxImage } from './ImageLightbox';
 import { Loader2, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Message } from '@/types/message';
+import { getApiBaseUrl, STORAGE_KEYS } from '@/lib/constants';
+
+/** Build a proxy URL for an OSS asset (mirrors the helper in MessageBubble). */
+function ossProxyUrl(ossUrl: string): string {
+  const token = typeof window !== 'undefined' ? (localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN) || '') : '';
+  const params = new URLSearchParams({ url: ossUrl });
+  if (token) params.set('token', token);
+  return `${getApiBaseUrl()}/files/proxy?${params.toString()}`;
+}
 
 interface MessageListProps {
   messages: Message[];
@@ -64,6 +74,7 @@ interface MessageItemProps {
   searchQuery?: string;
   isHighlighted: boolean;
   isSearchHighlighted: boolean;
+  onOpenMediaLightbox?: (messageId: string, resolvedUrl?: string) => void;
 }
 
 const MessageItem = memo(function MessageItem({
@@ -81,6 +92,7 @@ const MessageItem = memo(function MessageItem({
   searchQuery,
   isHighlighted,
   isSearchHighlighted,
+  onOpenMediaLightbox,
 }: MessageItemProps) {
   return (
     <div className="transition-all duration-300">
@@ -99,6 +111,7 @@ const MessageItem = memo(function MessageItem({
         searchQuery={searchQuery}
         isHighlighted={isHighlighted}
         isSearchHighlighted={isSearchHighlighted}
+        onOpenMediaLightbox={onOpenMediaLightbox}
       />
     </div>
   );
@@ -145,6 +158,7 @@ interface RowData {
   searchQuery?: string;
   registerMessageRef?: (messageId: string, element: HTMLElement | null) => void;
   observeRowElements: (elements: Element[] | NodeListOf<Element>) => () => void;
+  onOpenMediaLightbox?: (messageId: string, resolvedUrl?: string) => void;
 }
 
 interface ItemMeta {
@@ -171,6 +185,7 @@ function RowRenderer({
   searchQuery,
   registerMessageRef,
   observeRowElements,
+  onOpenMediaLightbox,
 }: RowComponentProps<RowData>) {
   const message = validMessages[index];
   const meta = itemMeta[index];
@@ -210,6 +225,7 @@ function RowRenderer({
           searchQuery={searchQuery}
           isHighlighted={isHighlighted}
           isSearchHighlighted={isSearchHighlighted}
+          onOpenMediaLightbox={onOpenMediaLightbox}
         />
       </div>
     </div>
@@ -240,6 +256,12 @@ export function MessageList({
 
   const [autoScroll, setAutoScroll] = useState(true);
   const [showScrollButton, setShowScrollButton] = useState(false);
+
+  // Connected lightbox — owned here so all media in the conversation can be navigated.
+  // Messenger/Telegram pattern: clicking any image/video opens a single lightbox
+  // with left/right arrows to browse all conversation media (latest ↔ oldest).
+  const [lightboxImages, setLightboxImages] = useState<LightboxImage[]>([]);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
 
   const previousMessageCountRef = useRef(messages?.length || 0);
   const previousScrollTopRef = useRef(0);
@@ -299,6 +321,67 @@ export function MessageList({
     });
   }, [validMessages, currentUserId, isGroupChat]);
 
+  // Build the ordered list of media items (images + videos) from current messages.
+  // Used for connected lightbox navigation — clicking any media in the conversation
+  // opens the lightbox at that item's index, with arrows to navigate all others.
+  // Note: validMessages is oldest-first; we keep that order for the lightbox
+  // (left = older, right = newer — matches Messenger/Telegram).
+  const conversationMediaList = useMemo<LightboxImage[]>(() => {
+    return validMessages
+      .filter(
+        (m) =>
+          !m.deletedAt &&
+          (m.type === 'IMAGE' ||
+            (m.type === 'FILE' &&
+              (m.metadata?.mimeType?.startsWith('video/') ||
+                m.metadata?.encryption?.originalMimeType?.startsWith('video/'))))
+      )
+      .map((m) => {
+        const isVideo =
+          m.type === 'FILE' &&
+          (m.metadata?.mimeType?.startsWith('video/') ||
+            !!m.metadata?.encryption?.originalMimeType?.startsWith('video/'));
+        const fileUrl = m.metadata?.fileUrl ? ossProxyUrl(m.metadata.fileUrl) : '';
+        const encMeta = m.metadata?.encryption;
+        return {
+          id: m.id,
+          url: fileUrl,
+          fileName: m.metadata?.fileName,
+          isVideo,
+          mimeType: encMeta?.originalMimeType || m.metadata?.mimeType,
+          // Pass encMeta for both images and videos so the lightbox can decrypt on demand.
+          // Images: auto-decrypted on navigation. Videos: decrypted on play-click.
+          encMeta:
+            encMeta?.fileKey && encMeta?.fileNonce
+              ? { fileKey: encMeta.fileKey, fileNonce: encMeta.fileNonce, originalMimeType: encMeta.originalMimeType }
+              : undefined,
+          caption: m.content !== m.metadata?.fileName ? m.content || undefined : undefined,
+        };
+      })
+      .filter((item) => item.url);
+  }, [validMessages]);
+
+  // Open the connected lightbox at the given message's index within conversationMediaList.
+  // resolvedUrl: if the bubble already decrypted the file (E2EE blob URL), use it for
+  // this item so the lightbox doesn't show encrypted bytes.
+  const handleOpenMediaLightbox = useCallback(
+    (messageId: string, resolvedUrl?: string) => {
+      const idx = conversationMediaList.findIndex((item) => item.id === messageId);
+      if (idx === -1) return;
+      if (resolvedUrl) {
+        // Patch the clicked item's URL in-place; leave all others as proxy URLs
+        const patched = conversationMediaList.map((item) =>
+          item.id === messageId ? { ...item, url: resolvedUrl, encMeta: undefined } : item
+        );
+        setLightboxImages(patched);
+      } else {
+        setLightboxImages(conversationMediaList);
+      }
+      setLightboxIndex(idx);
+    },
+    [conversationMediaList]
+  );
+
   // useDynamicRowHeight — ResizeObserver-based height tracking.
   // observeRowElements fires whenever a row's DOM element resizes (image load,
   // content change, lazy decryption), automatically updating the row slot height
@@ -341,6 +424,7 @@ export function MessageList({
       searchQuery,
       registerMessageRef,
       observeRowElements: dynamicRowHeight.observeRowElements,
+      onOpenMediaLightbox: handleOpenMediaLightbox,
     }),
     [
       validMessages,
@@ -357,6 +441,7 @@ export function MessageList({
       searchQuery,
       registerMessageRef,
       dynamicRowHeight.observeRowElements,
+      handleOpenMediaLightbox,
     ]
   );
 
@@ -573,6 +658,15 @@ export function MessageList({
           </motion.button>
         )}
       </AnimatePresence>
+
+      {/* Connected conversation lightbox — portals to #lightbox-root outside dialog stack */}
+      {lightboxImages.length > 0 && (
+        <ImageLightbox
+          images={lightboxImages}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxImages([])}
+        />
+      )}
     </div>
   );
 }
