@@ -189,7 +189,7 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
         (m.type === 'FILE' &&
           (isVideoMime(effectiveMimeType(m.metadata)) ||
             isImageMime(effectiveMimeType(m.metadata)))))
-  );
+  ).slice().reverse();
 
   const fileMessages = messages.filter(
     (m) =>
@@ -197,9 +197,11 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
       m.type === 'FILE' &&
       !isVideoMime(effectiveMimeType(m.metadata)) &&
       !isImageMime(effectiveMimeType(m.metadata))
-  );
+  ).slice().reverse();
 
   const linkItems = messages
+    .slice()
+    .reverse()
     .filter((m) => !m.deletedAt && m.type === 'TEXT')
     .flatMap((m) => {
       // useMessagesQuery already decrypts content; also check in-memory cache as fallback
