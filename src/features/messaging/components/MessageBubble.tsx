@@ -641,23 +641,26 @@ export const MessageBubble = memo(function MessageBubble({
               } overflow-hidden cursor-pointer transition-all hover:opacity-90`}
               onClick={() => !isDecryptingFile && setLightboxOpen(true)}
             >
-              {/* Shimmer placeholder — always reserves space, hidden once image loads */}
+              {/* Shimmer — shown until the image element mounts and fires onLoad */}
               {!imgLoaded && (
                 <div className="w-64 h-48 bg-gray-200 dark:bg-gray-700 animate-pulse" />
               )}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={isInView ? (decryptedFileUrl || (thumbnailFailed ? proxyFileUrl! : (proxyThumbnailUrl || proxyFileUrl!))) : undefined}
-                alt={message.metadata.fileName || 'Image'}
-                className={`max-w-xs md:max-w-sm max-h-64 md:max-h-80 object-cover transition-opacity duration-200 ${imgLoaded ? 'opacity-100' : 'hidden'}`}
-                onLoad={() => setImgLoaded(true)}
-                onError={() => {
-                  setImgLoaded(true); // stop shimmer even on error
-                  if (!decryptedFileUrl && !thumbnailFailed && proxyThumbnailUrl) {
-                    setThumbnailFailed(true);
-                  }
-                }}
-              />
+              {/* Only mount <img> once in viewport — avoids broken-image flash from src=undefined */}
+              {isInView && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={decryptedFileUrl || (thumbnailFailed ? proxyFileUrl! : (proxyThumbnailUrl || proxyFileUrl!))}
+                  alt={message.metadata.fileName || 'Image'}
+                  className={`max-w-xs md:max-w-sm max-h-64 md:max-h-80 object-cover transition-opacity duration-200 ${imgLoaded ? 'opacity-100' : 'opacity-0 h-0'}`}
+                  onLoad={() => setImgLoaded(true)}
+                  onError={() => {
+                    setImgLoaded(true); // stop shimmer even on error
+                    if (!decryptedFileUrl && !thumbnailFailed && proxyThumbnailUrl) {
+                      setThumbnailFailed(true);
+                    }
+                  }}
+                />
+              )}
               {/* Caption if present */}
               {message.content && message.content !== message.metadata.fileName && (
                 <div className={`px-3 py-2 text-sm ${isSent ? 'text-white' : 'text-gray-900'}`}>
