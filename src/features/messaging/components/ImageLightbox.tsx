@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Download, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, RotateCw } from 'lucide-react';
+import { X, Download, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, RotateCw, Play, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -43,6 +43,11 @@ export function ImageLightbox({
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [isLoading, setIsLoading] = useState(true);
+  // Video-specific state: play overlay shown until user clicks play.
+  // isVideoDecrypting: E2EE decrypt in progress after play click.
+  // videoPlaying: user clicked play — show the <video> element with src set.
+  const [videoPlaying, setVideoPlaying] = useState(false);
+  const [isVideoDecrypting, setIsVideoDecrypting] = useState(false);
 
   const [mounted, setMounted] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -59,12 +64,11 @@ export function ImageLightbox({
     setMounted(true);
   }, []);
 
-  // On-demand E2EE decryption: when navigating to an image that has encMeta but
-  // no blob URL yet, decrypt it now. Lazy — only the viewed image is decrypted.
-  // Videos are excluded — their full-file decrypt is too heavy for background fetch.
+  // On-demand E2EE decryption for images: when navigating to an image that has encMeta
+  // but no blob URL yet, decrypt it now. Videos use handleVideoPlayClick instead.
   useEffect(() => {
     const img = images[currentIndex];
-    if (img.isVideo) return; // videos play from proxy URL directly
+    if (img.isVideo) return; // videos decrypt on play-click via handleVideoPlayClick
     if (!img.encMeta?.fileKey || !img.encMeta?.fileNonce) return;
     if (resolvedUrls[currentIndex]?.startsWith('blob:')) return; // already decrypted
 
@@ -110,12 +114,14 @@ export function ImageLightbox({
     root.removeAttribute('data-aria-hidden');
   }, [mounted]);
 
-  // Reset state when image changes
+  // Reset state when image/video changes
   useEffect(() => {
     setZoom(1);
     setRotation(0);
     setPosition({ x: 0, y: 0 });
     setIsLoading(true);
+    setVideoPlaying(false);
+    setIsVideoDecrypting(false);
   }, [currentIndex]);
 
   // Handle keyboard navigation
@@ -195,6 +201,54 @@ export function ImageLightbox({
   const handleRotate = useCallback(() => {
     setRotation((prev) => (prev + 90) % 360);
   }, []);
+
+  // Video play-click: decrypt E2EE video on demand, then start playback.
+  // If already a blob URL (passed from bubble), just start playing immediately.
+  const handleVideoPlayClick = useCallback(async () => {
+    const img = images[currentIndex];
+    const proxyUrl = img.url; // original proxy URL (before any resolvedUrls override)
+    const currentUrl = resolvedUrls[currentIndex];
+
+    // Already a blob (decrypted by bubble before opening lightbox) — play directly
+    if (currentUrl.startsWith('blob:')) {
+      setVideoPlaying(true);
+      setIsLoading(false);
+      return;
+    }
+
+    // E2EE video — decrypt on demand
+    if (img.encMeta?.fileKey && img.encMeta?.fileNonce) {
+      setIsVideoDecrypting(true);
+      try {
+        const { encryptionService } = await import('@/features/encryption');
+        const { fromBase64 } = await import('@/features/encryption/services/cryptoService');
+        const res = await fetch(proxyUrl);
+        const arrayBuffer = await res.arrayBuffer();
+        const mimeType = img.encMeta.originalMimeType || img.mimeType || 'video/mp4';
+        const blob = await encryptionService.decryptFile(
+          arrayBuffer,
+          fromBase64(img.encMeta.fileKey),
+          fromBase64(img.encMeta.fileNonce),
+          mimeType
+        );
+        const objectUrl = URL.createObjectURL(blob);
+        setResolvedUrls((prev) => {
+          const next = [...prev];
+          next[currentIndex] = objectUrl;
+          return next;
+        });
+      } catch {
+        // Leave URL as-is — video will error naturally
+      } finally {
+        setIsVideoDecrypting(false);
+      }
+    }
+
+    // Plain proxy URL (non-E2EE) or after decrypt completes
+    setVideoPlaying(true);
+    setIsLoading(true); // spinner until canPlay fires
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, images, resolvedUrls]);
 
   // Pan/drag when zoomed
   const handleMouseDown = useCallback(
@@ -404,30 +458,60 @@ export function ImageLightbox({
         onMouseDown={!currentImage.isVideo ? handleMouseDown : undefined}
         onWheel={!currentImage.isVideo ? handleWheel : undefined}
       >
-        {/* Loading spinner */}
-        {isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center">
+        {/* Loading spinner — shown for images while loading, and for videos after play starts */}
+        {isLoading && (!currentImage.isVideo || videoPlaying) && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="h-12 w-12 border-4 border-white/30 border-t-white rounded-full animate-spin" />
           </div>
         )}
 
         {currentImage.isVideo ? (
-          /* Video player */
-          <video
-            key={currentImage.url}
-            src={currentImage.url}
-            controls
-            autoPlay
-            playsInline
-            className={cn(
-              'max-h-[90vh] max-w-[90vw] object-contain',
-              isLoading ? 'opacity-0' : 'opacity-100'
+          /* Video player — shows play overlay until user clicks, then decrypts (if E2EE) and plays */
+          <>
+            {videoPlaying ? (
+              <video
+                key={currentImage.url}
+                src={currentImage.url}
+                controls
+                autoPlay
+                playsInline
+                className={cn(
+                  'max-h-[90vh] max-w-[90vw] object-contain',
+                  isLoading ? 'opacity-0' : 'opacity-100'
+                )}
+                onCanPlay={() => setIsLoading(false)}
+                onError={() => setIsLoading(false)}
+              >
+                {currentImage.mimeType && <source src={currentImage.url} type={currentImage.mimeType} />}
+              </video>
+            ) : (
+              /* Play overlay — shown before user clicks play */
+              <div
+                className="flex items-center justify-center w-full h-full cursor-pointer"
+                onClick={handleVideoPlayClick}
+              >
+                {currentImage.thumbnailUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={currentImage.thumbnailUrl}
+                    alt={currentImage.fileName || 'Video'}
+                    className="max-h-[90vh] max-w-[90vw] object-contain opacity-60"
+                    onLoad={() => setIsLoading(false)}
+                    onError={() => setIsLoading(false)}
+                  />
+                )}
+                <div className="absolute flex items-center justify-center">
+                  <div className="w-20 h-20 rounded-full bg-black/60 flex items-center justify-center hover:bg-black/80 transition-colors">
+                    {isVideoDecrypting ? (
+                      <Loader2 className="w-10 h-10 text-white animate-spin" />
+                    ) : (
+                      <Play className="w-10 h-10 text-white ml-1" fill="currentColor" />
+                    )}
+                  </div>
+                </div>
+              </div>
             )}
-            onCanPlay={() => setIsLoading(false)}
-            onError={() => setIsLoading(false)}
-          >
-            {currentImage.mimeType && <source src={currentImage.url} type={currentImage.mimeType} />}
-          </video>
+          </>
         ) : (
           /* Image */
           <img

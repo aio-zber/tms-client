@@ -51,8 +51,10 @@ interface MessageBubbleProps {
    * If provided, clicking an image/video bubble calls this instead of opening
    * a per-bubble lightbox. The parent (MessageList) owns the lightbox and uses
    * the full conversation media list for navigation — Messenger/Telegram pattern.
+   * `resolvedUrl` is the already-decrypted blob URL if available — lets the
+   * parent override the proxy URL for E2EE media that was already decrypted.
    */
-  onOpenMediaLightbox?: (messageId: string) => void;
+  onOpenMediaLightbox?: (messageId: string, resolvedUrl?: string) => void;
 }
 
 interface ContextMenuPosition {
@@ -648,7 +650,7 @@ export const MessageBubble = memo(function MessageBubble({
               } overflow-hidden cursor-pointer transition-all hover:opacity-90`}
               onClick={() => {
                 if (isDecryptingFile) return;
-                if (onOpenMediaLightbox) onOpenMediaLightbox(message.id);
+                if (onOpenMediaLightbox) onOpenMediaLightbox(message.id, decryptedFileUrl || undefined);
                 else setLightboxOpen(true);
               }}
             >
@@ -703,7 +705,7 @@ export const MessageBubble = memo(function MessageBubble({
                 isDecrypting={isEncryptedVideo ? isDecryptingFile : false}
                 onPlayClick={isEncryptedVideo ? handleEncryptedVideoPlay : undefined}
                 onExpandClick={() => {
-                  if (onOpenMediaLightbox) onOpenMediaLightbox(message.id);
+                  if (onOpenMediaLightbox) onOpenMediaLightbox(message.id, decryptedFileUrl || undefined);
                   else setVideoLightboxOpen(true);
                 }}
               />

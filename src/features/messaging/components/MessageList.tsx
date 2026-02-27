@@ -74,7 +74,7 @@ interface MessageItemProps {
   searchQuery?: string;
   isHighlighted: boolean;
   isSearchHighlighted: boolean;
-  onOpenMediaLightbox?: (messageId: string) => void;
+  onOpenMediaLightbox?: (messageId: string, resolvedUrl?: string) => void;
 }
 
 const MessageItem = memo(function MessageItem({
@@ -158,7 +158,7 @@ interface RowData {
   searchQuery?: string;
   registerMessageRef?: (messageId: string, element: HTMLElement | null) => void;
   observeRowElements: (elements: Element[] | NodeListOf<Element>) => () => void;
-  onOpenMediaLightbox?: (messageId: string) => void;
+  onOpenMediaLightbox?: (messageId: string, resolvedUrl?: string) => void;
 }
 
 interface ItemMeta {
@@ -362,11 +362,21 @@ export function MessageList({
   }, [validMessages]);
 
   // Open the connected lightbox at the given message's index within conversationMediaList.
+  // resolvedUrl: if the bubble already decrypted the file (E2EE blob URL), use it for
+  // this item so the lightbox doesn't show encrypted bytes.
   const handleOpenMediaLightbox = useCallback(
-    (messageId: string) => {
+    (messageId: string, resolvedUrl?: string) => {
       const idx = conversationMediaList.findIndex((item) => item.id === messageId);
-      if (idx === -1) return; // Message not in media list — ignore
-      setLightboxImages(conversationMediaList);
+      if (idx === -1) return;
+      if (resolvedUrl) {
+        // Patch the clicked item's URL in-place; leave all others as proxy URLs
+        const patched = conversationMediaList.map((item) =>
+          item.id === messageId ? { ...item, url: resolvedUrl, encMeta: undefined } : item
+        );
+        setLightboxImages(patched);
+      } else {
+        setLightboxImages(conversationMediaList);
+      }
       setLightboxIndex(idx);
     },
     [conversationMediaList]
