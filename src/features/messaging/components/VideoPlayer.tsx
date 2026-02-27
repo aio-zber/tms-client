@@ -45,11 +45,16 @@ export function VideoPlayer({
       // E2EE path: decrypt first, then play
       const blobUrl = await onPlayClick();
       if (blobUrl && videoRef.current) {
-        videoRef.current.src = blobUrl;
-        videoRef.current.play();
+        const video = videoRef.current;
+        video.src = blobUrl;
+        // Wait for the browser to load the new src before calling play().
+        // Calling play() immediately after setting src races with the load
+        // and causes an AbortError ("play() interrupted by a new load request").
+        video.load();
+        video.addEventListener('canplay', () => { video.play().catch(() => {}); }, { once: true });
       }
     } else if (videoRef.current) {
-      videoRef.current.play();
+      videoRef.current.play().catch(() => {});
     }
   };
 
