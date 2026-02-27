@@ -636,8 +636,8 @@ export const MessageBubble = memo(function MessageBubble({
             <div
               className={`${message.replyTo ? 'rounded-b-2xl rounded-t-md' : 'rounded-2xl'} ${
                 isSent
-                  ? 'bg-viber-purple rounded-br-sm order-1'
-                  : 'bg-gray-100 dark:bg-dark-received-bubble rounded-bl-sm order-2'
+                  ? 'bg-white rounded-br-sm order-1'
+                  : 'bg-white rounded-bl-sm order-2'
               } overflow-hidden cursor-pointer transition-all hover:opacity-90`}
               onClick={() => !isDecryptingFile && setLightboxOpen(true)}
             >
