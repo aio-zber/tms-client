@@ -141,7 +141,8 @@ export function VideoLightbox({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center pointer-events-auto"
+      className="fixed inset-0 z-[9999] flex items-center justify-center pointer-events-auto"
+      style={{ backgroundColor: '#1F242B' }}
       ref={containerRef}
       onClick={handleBackdropClick}
     >
