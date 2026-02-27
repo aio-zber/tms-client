@@ -262,7 +262,7 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
           fileName: m.metadata?.fileName,
           isVideo: video,
           mimeType: mime,
-          encMeta: (!video && !blobUrl && encMeta?.fileKey && encMeta?.fileNonce)
+          encMeta: (!blobUrl && encMeta?.fileKey && encMeta?.fileNonce)
             ? { fileKey: encMeta.fileKey, fileNonce: encMeta.fileNonce, originalMimeType: encMeta.originalMimeType }
             : undefined,
         };
