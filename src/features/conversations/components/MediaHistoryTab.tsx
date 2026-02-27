@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { apiClient } from '@/lib/apiClient';
-import { ImageLightbox } from '@/features/messaging/components/ImageLightbox';
+import { ImageLightbox, type LightboxImage } from '@/features/messaging/components/ImageLightbox';
 import { VideoLightbox } from '@/features/messaging/components/VideoLightbox';
 import { decryptedContentCache } from '@/features/messaging/hooks/useMessages';
 import { useMessagesQuery } from '@/features/messaging/hooks/useMessagesQuery';
@@ -165,7 +165,7 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
   const [previews, setPreviews] = useState<Record<string, LinkPreview>>({});
   const [previewsLoading, setPreviewsLoading] = useState(false);
 
-  const [lightboxImages, setLightboxImages] = useState<{ url: string; fileName?: string }[]>([]);
+  const [lightboxImages, setLightboxImages] = useState<LightboxImage[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [videoLightbox, setVideoLightbox] = useState<{
     src: string;
@@ -252,24 +252,32 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
     { key: 'links', label: 'Links', count: linkItems.length },
   ];
 
-  // Pre-build lightbox image list — prefer decrypted blob URLs for E2EE images
+  // Pre-build lightbox image list — prefer already-decrypted blob URLs, otherwise
+  // pass encMeta so the lightbox can decrypt on-demand when the user navigates to it.
   const lightboxImageList = useMemo(() => {
     return mediaMessages
       .filter((m) => !isVideoMime(effectiveMimeType(m.metadata)))
-      .map((m) => ({
-        id: m.id,
-        // Use decrypted blob URL if available (E2EE), fall back to proxy URL
-        url: decryptedMediaUrls[m.id] || (m.metadata?.fileUrl ? makeProxyUrl(m.metadata.fileUrl) : ''),
-        fileName: m.metadata?.fileName,
-      }))
+      .map((m) => {
+        const encMeta = m.metadata?.encryption as { fileKey?: string; fileNonce?: string; originalMimeType?: string } | undefined;
+        const proxyUrl = m.metadata?.fileUrl ? makeProxyUrl(m.metadata.fileUrl) : '';
+        const blobUrl = decryptedMediaUrls[m.id];
+        return {
+          id: m.id,
+          url: blobUrl || proxyUrl,
+          fileName: m.metadata?.fileName,
+          // Pass encMeta only when not yet decrypted — lightbox will decrypt on demand
+          encMeta: (!blobUrl && encMeta?.fileKey && encMeta?.fileNonce)
+            ? { fileKey: encMeta.fileKey, fileNonce: encMeta.fileNonce, originalMimeType: encMeta.originalMimeType }
+            : undefined,
+        };
+      })
       .filter((img) => img.url);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mediaMessages, decryptedMediaUrls]);
 
   const openLightbox = (clickedMsg: Message) => {
-    const images = lightboxImageList.map(({ url, fileName }) => ({ url, fileName }));
+    const images = lightboxImageList.map(({ url, fileName, encMeta }) => ({ url, fileName, encMeta }));
     const idx = lightboxImageList.findIndex((img) => img.id === clickedMsg.id);
-
     setLightboxImages(images);
     setLightboxIndex(Math.max(0, idx));
   };
