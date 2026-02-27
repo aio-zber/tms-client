@@ -15,6 +15,8 @@ interface VideoPlayerProps {
   /** True while E2EE decryption is in progress — shows a spinner on the play button. */
   isDecrypting?: boolean;
   onExpandClick: () => void;
+  /** Called when the inline player should pause (e.g. before opening lightbox). */
+  onRequestPause?: () => void;
 }
 
 /**
@@ -34,6 +36,7 @@ export function VideoPlayer({
   onPlayClick,
   isDecrypting = false,
   onExpandClick,
+  onRequestPause,
 }: VideoPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [showControls, setShowControls] = useState(false);
@@ -104,6 +107,11 @@ export function VideoPlayer({
       <button
         onClick={(e) => {
           e.stopPropagation();
+          // Pause the inline player before opening lightbox to avoid double playback
+          if (videoRef.current && !videoRef.current.paused) {
+            videoRef.current.pause();
+          }
+          onRequestPause?.();
           onExpandClick();
         }}
         className={cn(

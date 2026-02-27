@@ -349,10 +349,10 @@ export function MessageList({
           fileName: m.metadata?.fileName,
           isVideo,
           mimeType: encMeta?.originalMimeType || m.metadata?.mimeType,
-          // For images: pass encMeta so lightbox can decrypt on demand.
-          // For videos: skip encMeta — E2EE video decrypt is deferred to play-click.
+          // Pass encMeta for both images and videos so the lightbox can decrypt on demand.
+          // Images: auto-decrypted on navigation. Videos: decrypted on play-click.
           encMeta:
-            !isVideo && encMeta?.fileKey && encMeta?.fileNonce
+            encMeta?.fileKey && encMeta?.fileNonce
               ? { fileKey: encMeta.fileKey, fileNonce: encMeta.fileNonce, originalMimeType: encMeta.originalMimeType }
               : undefined,
           caption: m.content !== m.metadata?.fileName ? m.content || undefined : undefined,
