@@ -6,11 +6,13 @@ import { X, Download, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, RotateCw } fro
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-interface LightboxImage {
+export interface LightboxImage {
   url: string;
   thumbnailUrl?: string;
   caption?: string;
   fileName?: string;
+  /** E2EE metadata — if present and url is a proxy URL, lightbox decrypts on demand */
+  encMeta?: { fileKey: string; fileNonce: string; originalMimeType?: string };
 }
 
 interface ImageLightboxProps {
@@ -41,13 +43,54 @@ export function ImageLightbox({
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
 
-  const currentImage = images[currentIndex];
+  // Resolved URLs: starts as the passed-in urls, updated as E2EE images are decrypted
+  const [resolvedUrls, setResolvedUrls] = useState<string[]>(() => images.map((img) => img.url));
+
+  const currentImage = { ...images[currentIndex], url: resolvedUrls[currentIndex] };
   const hasMultiple = images.length > 1;
 
   // Mount guard — prevents SSR hydration mismatch (portal needs document)
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // On-demand E2EE decryption: when navigating to an image that has encMeta but
+  // no blob URL yet, decrypt it now. Lazy — only the viewed image is decrypted.
+  useEffect(() => {
+    const img = images[currentIndex];
+    if (!img.encMeta?.fileKey || !img.encMeta?.fileNonce) return;
+    if (resolvedUrls[currentIndex]?.startsWith('blob:')) return; // already decrypted
+
+    let objectUrl: string | null = null;
+    (async () => {
+      try {
+        const { encryptionService } = await import('@/features/encryption');
+        const { fromBase64 } = await import('@/features/encryption/services/cryptoService');
+        const res = await fetch(img.url);
+        const arrayBuffer = await res.arrayBuffer();
+        const mimeType = img.encMeta!.originalMimeType || 'image/jpeg';
+        const blob = await encryptionService.decryptFile(
+          arrayBuffer,
+          fromBase64(img.encMeta!.fileKey),
+          fromBase64(img.encMeta!.fileNonce),
+          mimeType
+        );
+        objectUrl = URL.createObjectURL(blob);
+        setResolvedUrls((prev) => {
+          const next = [...prev];
+          next[currentIndex] = objectUrl!;
+          return next;
+        });
+      } catch {
+        // Leave broken URL — spinner will stop via onError
+      }
+    })();
+
+    return () => {
+      // Don't revoke immediately — user may navigate back; revoke on lightbox close
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex]);
 
   // Radix Dialog's hideOthers() marks all body children (including #lightbox-root)
   // as aria-hidden when the dialog opens. Remove it from our dedicated root so
@@ -189,24 +232,37 @@ export function ImageLightbox({
     }
   }, []);
 
-  // Download image — route through backend proxy to avoid OSS CORS restrictions
+  // Download image — if already a blob (decrypted E2EE), download directly.
+  // Otherwise route through backend proxy to avoid OSS CORS restrictions.
   const handleDownload = useCallback(async () => {
     try {
-      const { getApiBaseUrl } = await import('@/lib/constants');
-      const token = localStorage.getItem('auth_token');
-      const proxyUrl = `${getApiBaseUrl()}/files/proxy?url=${encodeURIComponent(currentImage.url)}`;
-      const response = await fetch(proxyUrl, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = currentImage.fileName || `image-${Date.now()}.jpg`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      const url = currentImage.url;
+      const fileName = currentImage.fileName || `image-${Date.now()}.jpg`;
+      if (url.startsWith('blob:')) {
+        // Already decrypted — download the blob directly (plaintext bytes)
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else {
+        const { getApiBaseUrl } = await import('@/lib/constants');
+        const token = localStorage.getItem('auth_token');
+        const proxyUrl = `${getApiBaseUrl()}/files/proxy?url=${encodeURIComponent(url)}`;
+        const response = await fetch(proxyUrl, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(blobUrl);
+      }
     } catch (error) {
       console.error('Failed to download image:', error);
     }
