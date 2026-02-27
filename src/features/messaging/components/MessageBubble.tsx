@@ -47,6 +47,12 @@ interface MessageBubbleProps {
   searchQuery?: string;
   isHighlighted?: boolean;
   isSearchHighlighted?: boolean;
+  /**
+   * If provided, clicking an image/video bubble calls this instead of opening
+   * a per-bubble lightbox. The parent (MessageList) owns the lightbox and uses
+   * the full conversation media list for navigation — Messenger/Telegram pattern.
+   */
+  onOpenMediaLightbox?: (messageId: string) => void;
 }
 
 interface ContextMenuPosition {
@@ -69,6 +75,7 @@ export const MessageBubble = memo(function MessageBubble({
   searchQuery,
   isHighlighted: _isHighlighted = false,
   isSearchHighlighted = false,
+  onOpenMediaLightbox,
 }: MessageBubbleProps) {
   const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -639,7 +646,11 @@ export const MessageBubble = memo(function MessageBubble({
                   ? 'bg-white rounded-br-sm order-1'
                   : 'bg-white rounded-bl-sm order-2'
               } overflow-hidden cursor-pointer transition-all hover:opacity-90`}
-              onClick={() => !isDecryptingFile && setLightboxOpen(true)}
+              onClick={() => {
+                if (isDecryptingFile) return;
+                if (onOpenMediaLightbox) onOpenMediaLightbox(message.id);
+                else setLightboxOpen(true);
+              }}
             >
               {/* Shimmer — shown until the image element mounts and fires onLoad */}
               {!imgLoaded && (
@@ -691,7 +702,10 @@ export const MessageBubble = memo(function MessageBubble({
                 isSent={isSent}
                 isDecrypting={isEncryptedVideo ? isDecryptingFile : false}
                 onPlayClick={isEncryptedVideo ? handleEncryptedVideoPlay : undefined}
-                onExpandClick={() => setVideoLightboxOpen(true)}
+                onExpandClick={() => {
+                  if (onOpenMediaLightbox) onOpenMediaLightbox(message.id);
+                  else setVideoLightboxOpen(true);
+                }}
               />
               {/* Caption if present */}
               {message.content && message.content !== message.metadata.fileName && (

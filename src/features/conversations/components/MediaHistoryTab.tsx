@@ -26,7 +26,6 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { apiClient } from '@/lib/apiClient';
 import { ImageLightbox, type LightboxImage } from '@/features/messaging/components/ImageLightbox';
-import { VideoLightbox } from '@/features/messaging/components/VideoLightbox';
 import { decryptedContentCache } from '@/features/messaging/hooks/useMessages';
 import { useMessagesQuery } from '@/features/messaging/hooks/useMessagesQuery';
 import { getApiBaseUrl, STORAGE_KEYS } from '@/lib/constants';
@@ -167,12 +166,6 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
 
   const [lightboxImages, setLightboxImages] = useState<LightboxImage[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
-  const [videoLightbox, setVideoLightbox] = useState<{
-    src: string;
-    mimeType?: string;
-    fileName?: string;
-    thumbnailUrl?: string;
-  } | null>(null);
 
   // Track decrypted blob URLs per message ID — populated by DecryptedMediaItem components
   const [decryptedMediaUrls, setDecryptedMediaUrls] = useState<Record<string, string>>({});
@@ -252,32 +245,35 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
     { key: 'links', label: 'Links', count: linkItems.length },
   ];
 
-  // Pre-build lightbox image list — prefer already-decrypted blob URLs, otherwise
-  // pass encMeta so the lightbox can decrypt on-demand when the user navigates to it.
+  // Unified lightbox list — images AND videos in order, latest first.
+  // Images: prefer decrypted blob URL, pass encMeta for on-demand decrypt.
+  // Videos: use proxy URL directly (full E2EE decrypt is too heavy for background).
   const lightboxImageList = useMemo(() => {
     return mediaMessages
-      .filter((m) => !isVideoMime(effectiveMimeType(m.metadata)))
       .map((m) => {
+        const mime = effectiveMimeType(m.metadata);
+        const video = isVideoMime(mime);
         const encMeta = m.metadata?.encryption as { fileKey?: string; fileNonce?: string; originalMimeType?: string } | undefined;
         const proxyUrl = m.metadata?.fileUrl ? makeProxyUrl(m.metadata.fileUrl) : '';
-        const blobUrl = decryptedMediaUrls[m.id];
+        const blobUrl = !video ? decryptedMediaUrls[m.id] : undefined;
         return {
           id: m.id,
           url: blobUrl || proxyUrl,
           fileName: m.metadata?.fileName,
-          // Pass encMeta only when not yet decrypted — lightbox will decrypt on demand
-          encMeta: (!blobUrl && encMeta?.fileKey && encMeta?.fileNonce)
+          isVideo: video,
+          mimeType: mime,
+          encMeta: (!video && !blobUrl && encMeta?.fileKey && encMeta?.fileNonce)
             ? { fileKey: encMeta.fileKey, fileNonce: encMeta.fileNonce, originalMimeType: encMeta.originalMimeType }
             : undefined,
         };
       })
-      .filter((img) => img.url);
+      .filter((item) => item.url);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mediaMessages, decryptedMediaUrls]);
 
   const openLightbox = (clickedMsg: Message) => {
-    const images = lightboxImageList.map(({ url, fileName, encMeta }) => ({ url, fileName, encMeta }));
-    const idx = lightboxImageList.findIndex((img) => img.id === clickedMsg.id);
+    const images = lightboxImageList.map(({ url, fileName, isVideo, mimeType, encMeta }) => ({ url, fileName, isVideo, mimeType, encMeta }));
+    const idx = lightboxImageList.findIndex((item) => item.id === clickedMsg.id);
     setLightboxImages(images);
     setLightboxIndex(Math.max(0, idx));
   };
@@ -344,14 +340,7 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
                         mimeType={mime}
                         fileName={msg.metadata?.fileName}
                         encMeta={encMeta}
-                        onPlay={(src, thumbUrl) =>
-                          setVideoLightbox({
-                            src,
-                            mimeType: mime,
-                            fileName: msg.metadata?.fileName,
-                            thumbnailUrl: thumbUrl,
-                          })
-                        }
+                        onPlay={() => openLightbox(msg)}
                       />
                     );
                   }
@@ -449,16 +438,6 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
         />
       )}
 
-      {/* Video Lightbox — portals internally to document.body */}
-      {videoLightbox && (
-        <VideoLightbox
-          src={videoLightbox.src}
-          mimeType={videoLightbox.mimeType}
-          fileName={videoLightbox.fileName}
-          thumbnailUrl={videoLightbox.thumbnailUrl}
-          onClose={() => setVideoLightbox(null)}
-        />
-      )}
     </>
   );
 }
@@ -573,16 +552,14 @@ function DecryptedMediaItem({
 }
 
 /**
- * E2EE-aware video thumbnail cell.
- * Thumbnail is non-E2EE (uploaded as plain thumbnail), file is E2EE.
- * On play, decrypts the video and opens the lightbox with the blob URL.
+ * Video thumbnail cell for the media history grid.
+ * Clicking opens the unified lightbox (which handles proxy URL display).
+ * E2EE video decryption is intentionally deferred to the VideoPlayer inside
+ * the lightbox — downloading a full encrypted video upfront is too heavy.
  */
 function DecryptedVideoCell({
-  ossFileUrl,
   ossThumbUrl,
-  mimeType,
   fileName,
-  encMeta,
   onPlay,
 }: {
   ossFileUrl: string;
@@ -590,39 +567,10 @@ function DecryptedVideoCell({
   mimeType?: string;
   fileName?: string;
   encMeta?: EncMeta;
-  onPlay: (src: string, thumbnailUrl?: string) => void;
+  onPlay: () => void;
 }) {
-  const [loading, setLoading] = useState(false);
-
-  const handleClick = async () => {
-    if (!ossFileUrl) return;
-
-    if (encMeta?.fileKey && encMeta?.fileNonce) {
-      setLoading(true);
-      try {
-        const proxyUrl = makeProxyUrl(ossFileUrl);
-        const res = await fetch(proxyUrl);
-        const arrayBuffer = await res.arrayBuffer();
-        const { encryptionService } = await import('@/features/encryption');
-        const { fromBase64 } = await import('@/features/encryption/services/cryptoService');
-        const mime = encMeta.originalMimeType || mimeType || 'video/mp4';
-        const blob = await encryptionService.decryptFile(
-          arrayBuffer,
-          fromBase64(encMeta.fileKey!),
-          fromBase64(encMeta.fileNonce!),
-          mime
-        );
-        const objectUrl = URL.createObjectURL(blob);
-        const thumbUrl = ossThumbUrl ? makeProxyUrl(ossThumbUrl) : undefined;
-        onPlay(objectUrl, thumbUrl);
-      } catch (err) {
-        log.error('[MediaHistoryTab] Video decryption failed:', err);
-      } finally {
-        setLoading(false);
-      }
-    } else {
-      onPlay(makeProxyUrl(ossFileUrl), ossThumbUrl ? makeProxyUrl(ossThumbUrl) : undefined);
-    }
+  const handleClick = () => {
+    onPlay();
   };
 
   return (
@@ -630,7 +578,6 @@ function DecryptedVideoCell({
       onClick={handleClick}
       className="relative aspect-square bg-gray-900 rounded overflow-hidden group"
       title={fileName}
-      disabled={loading}
     >
       {ossThumbUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -646,15 +593,9 @@ function DecryptedVideoCell({
         </div>
       )}
       <div className="absolute inset-0 flex items-center justify-center">
-        {loading ? (
-          <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center">
-            <Loader2 className="w-5 h-5 text-white animate-spin" />
-          </div>
-        ) : (
-          <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center group-hover:bg-black/80 transition-colors">
-            <Play className="w-5 h-5 text-white fill-white ml-0.5" />
-          </div>
-        )}
+        <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center group-hover:bg-black/80 transition-colors">
+          <Play className="w-5 h-5 text-white fill-white ml-0.5" />
+        </div>
       </div>
     </button>
   );

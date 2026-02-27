@@ -7,10 +7,15 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 export interface LightboxImage {
+  /** Optional message ID — used by consumers (MediaHistoryTab, MessageList) for index lookup. Not used by the lightbox itself. */
+  id?: string;
   url: string;
   thumbnailUrl?: string;
   caption?: string;
   fileName?: string;
+  /** If true, renders a video player instead of an image */
+  isVideo?: boolean;
+  mimeType?: string;
   /** E2EE metadata — if present and url is a proxy URL, lightbox decrypts on demand */
   encMeta?: { fileKey: string; fileNonce: string; originalMimeType?: string };
 }
@@ -56,8 +61,10 @@ export function ImageLightbox({
 
   // On-demand E2EE decryption: when navigating to an image that has encMeta but
   // no blob URL yet, decrypt it now. Lazy — only the viewed image is decrypted.
+  // Videos are excluded — their full-file decrypt is too heavy for background fetch.
   useEffect(() => {
     const img = images[currentIndex];
+    if (img.isVideo) return; // videos play from proxy URL directly
     if (!img.encMeta?.fileKey || !img.encMeta?.fileNonce) return;
     if (resolvedUrls[currentIndex]?.startsWith('blob:')) return; // already decrypted
 
@@ -302,7 +309,8 @@ export function ImageLightbox({
         </div>
 
         <div className="flex items-center gap-1">
-          {/* Zoom controls */}
+          {/* Zoom controls — images only */}
+          {!currentImage.isVideo && (<>
           <Button
             variant="ghost"
             size="icon"
@@ -335,6 +343,7 @@ export function ImageLightbox({
           >
             <RotateCw className="h-5 w-5" />
           </Button>
+          </>)}
 
           {/* Download */}
           <Button
@@ -384,16 +393,16 @@ export function ImageLightbox({
         </>
       )}
 
-      {/* Image container */}
+      {/* Media container */}
       <div
         className={cn(
           'flex items-center justify-center overflow-hidden',
           'w-full h-full',
-          zoom > 1 ? 'cursor-grab' : 'cursor-zoom-in',
-          isDragging && 'cursor-grabbing'
+          !currentImage.isVideo && (zoom > 1 ? 'cursor-grab' : 'cursor-zoom-in'),
+          !currentImage.isVideo && isDragging && 'cursor-grabbing'
         )}
-        onMouseDown={handleMouseDown}
-        onWheel={handleWheel}
+        onMouseDown={!currentImage.isVideo ? handleMouseDown : undefined}
+        onWheel={!currentImage.isVideo ? handleWheel : undefined}
       >
         {/* Loading spinner */}
         {isLoading && (
@@ -402,23 +411,42 @@ export function ImageLightbox({
           </div>
         )}
 
-        {/* Image */}
-        <img
-          ref={imageRef}
-          src={currentImage.url}
-          alt={currentImage.caption || currentImage.fileName || 'Image'}
-          className={cn(
-            'max-h-[90vh] max-w-[90vw] object-contain transition-opacity duration-200',
-            isLoading ? 'opacity-0' : 'opacity-100'
-          )}
-          style={{
-            transform: `translate(${position.x}px, ${position.y}px) scale(${zoom}) rotate(${rotation}deg)`,
-            transition: isDragging ? 'none' : 'transform 0.2s ease-out',
-          }}
-          onLoad={() => setIsLoading(false)}
-          onError={() => setIsLoading(false)}
-          draggable={false}
-        />
+        {currentImage.isVideo ? (
+          /* Video player */
+          <video
+            key={currentImage.url}
+            src={currentImage.url}
+            controls
+            autoPlay
+            playsInline
+            className={cn(
+              'max-h-[90vh] max-w-[90vw] object-contain',
+              isLoading ? 'opacity-0' : 'opacity-100'
+            )}
+            onCanPlay={() => setIsLoading(false)}
+            onError={() => setIsLoading(false)}
+          >
+            {currentImage.mimeType && <source src={currentImage.url} type={currentImage.mimeType} />}
+          </video>
+        ) : (
+          /* Image */
+          <img
+            ref={imageRef}
+            src={currentImage.url}
+            alt={currentImage.caption || currentImage.fileName || 'Image'}
+            className={cn(
+              'max-h-[90vh] max-w-[90vw] object-contain transition-opacity duration-200',
+              isLoading ? 'opacity-0' : 'opacity-100'
+            )}
+            style={{
+              transform: `translate(${position.x}px, ${position.y}px) scale(${zoom}) rotate(${rotation}deg)`,
+              transition: isDragging ? 'none' : 'transform 0.2s ease-out',
+            }}
+            onLoad={() => setIsLoading(false)}
+            onError={() => setIsLoading(false)}
+            draggable={false}
+          />
+        )}
       </div>
 
       {/* Caption */}
