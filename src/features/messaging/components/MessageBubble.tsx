@@ -81,6 +81,7 @@ export const MessageBubble = memo(function MessageBubble({
   const [decryptedFileUrl, setDecryptedFileUrl] = useState<string | null>(null);
   const [isDecryptingFile, setIsDecryptingFile] = useState(false);
   const [isInView, setIsInView] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
   const decryptedVideoUrlRef = useRef<string | null>(null);
   const decryptionFailedRef = useRef(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
@@ -640,24 +641,23 @@ export const MessageBubble = memo(function MessageBubble({
               } overflow-hidden cursor-pointer transition-all hover:opacity-90`}
               onClick={() => !isDecryptingFile && setLightboxOpen(true)}
             >
-              {isDecryptingFile && !decryptedFileUrl ? (
-                <div className="max-w-xs md:max-w-sm h-48 flex items-center justify-center">
-                  <div className="w-8 h-8 border-2 border-viber-purple border-t-transparent rounded-full animate-spin" />
-                </div>
-              ) : (
-              // eslint-disable-next-line @next/next/no-img-element
+              {/* Shimmer placeholder — always reserves space, hidden once image loads */}
+              {!imgLoaded && (
+                <div className="w-64 h-48 bg-gray-200 dark:bg-gray-700 animate-pulse" />
+              )}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={isInView ? (decryptedFileUrl || (thumbnailFailed ? proxyFileUrl! : (proxyThumbnailUrl || proxyFileUrl!))) : undefined}
                 alt={message.metadata.fileName || 'Image'}
-                className="max-w-xs md:max-w-sm max-h-64 md:max-h-80 object-cover"
+                className={`max-w-xs md:max-w-sm max-h-64 md:max-h-80 object-cover transition-opacity duration-200 ${imgLoaded ? 'opacity-100' : 'hidden'}`}
+                onLoad={() => setImgLoaded(true)}
                 onError={() => {
-                  // If proxied thumbnail fails, fall back to proxied main file URL
+                  setImgLoaded(true); // stop shimmer even on error
                   if (!decryptedFileUrl && !thumbnailFailed && proxyThumbnailUrl) {
                     setThumbnailFailed(true);
                   }
                 }}
               />
-              )}
               {/* Caption if present */}
               {message.content && message.content !== message.metadata.fileName && (
                 <div className={`px-3 py-2 text-sm ${isSent ? 'text-white' : 'text-gray-900'}`}>
