@@ -570,7 +570,7 @@ export default function ConversationSettingsDialog({
           )}
 
           {/* Media History Tab */}
-          <TabsContent value="media">
+          <TabsContent value="media" className="flex flex-col flex-1 overflow-hidden mt-2">
             <MediaHistoryTab conversationId={conversation.id} />
           </TabsContent>
         </Tabs>

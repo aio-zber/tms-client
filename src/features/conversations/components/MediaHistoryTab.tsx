@@ -2,9 +2,9 @@
  * Media History Tab
  * Shows shared media: Media (images/videos), Files, Links
  *
- * Reads directly from the TanStack Query cache populated by useMessagesQuery —
- * no duplicate network requests. If the user opens the dialog before messages
- * are loaded the hook fetches them, otherwise data is instant from cache.
+ * Messenger pattern: paginated infinite scroll — loads next batch of messages
+ * when the user scrolls near the bottom of each tab. Each tab independently
+ * triggers fetchNextPage until all pages are loaded.
  *
  * All OSS media is loaded through the backend /files/proxy endpoint to bypass
  * Alibaba OSS CORS restrictions — same pattern as MessageBubble E2EE file decryption.
@@ -12,7 +12,7 @@
 
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   FileText,
   Link as LinkIcon,
@@ -23,7 +23,6 @@ import {
   Loader2,
   Globe,
 } from 'lucide-react';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { apiClient } from '@/lib/apiClient';
 import { ImageLightbox, type LightboxImage } from '@/features/messaging/components/ImageLightbox';
 import { decryptedContentCache } from '@/features/messaging/hooks/useMessages';
@@ -77,7 +76,6 @@ function formatBytes(bytes?: number): string {
  * Build backend proxy URL for an OSS asset.
  * Includes ?token= so <img src> and <video src> can authenticate
  * (browsers can't send Authorization headers for media elements).
- * getApiBaseUrl() is synchronous — safe to call at render time.
  */
 function makeProxyUrl(ossUrl: string): string {
   const token = getAuthToken();
@@ -159,6 +157,38 @@ function useInView(rootMargin = '200px') {
   return { ref, isInView };
 }
 
+/**
+ * Scroll sentinel — triggers a callback when the element enters the viewport.
+ * Used at the bottom of each tab to trigger fetchNextPage (Messenger pattern).
+ * Resets when `resetKey` changes so re-mounting triggers a fresh observation.
+ */
+function ScrollSentinel({
+  onVisible,
+  scrollRoot,
+}: {
+  onVisible: () => void;
+  scrollRoot: Element | null;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const onVisibleRef = useRef(onVisible);
+  onVisibleRef.current = onVisible;
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) onVisibleRef.current();
+      },
+      { root: scrollRoot, rootMargin: '200px' }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [scrollRoot]);
+
+  return <div ref={ref} className="h-1 w-full" />;
+}
+
 export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
   const [category, setCategory] = useState<MediaCategory>('media');
   const [previews, setPreviews] = useState<Record<string, LinkPreview>>({});
@@ -170,42 +200,72 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
   // Track decrypted blob URLs per message ID — populated by DecryptedMediaItem components
   const [decryptedMediaUrls, setDecryptedMediaUrls] = useState<Record<string, string>>({});
 
-  // Read from the same TanStack Query cache that Chat.tsx uses.
-  // When the dialog opens from an active chat, data is instant (zero extra requests).
-  // If messages haven't been fetched yet, the hook fetches them with proper E2EE decryption.
-  const { messages, isLoading, error } = useMessagesQuery({ conversationId });
+  // Refs to the scrollable container elements for each tab
+  const mediaScrollRef = useRef<HTMLDivElement>(null);
+  const filesScrollRef = useRef<HTMLDivElement>(null);
+  const linksScrollRef = useRef<HTMLDivElement>(null);
 
-  const mediaMessages = messages.filter(
-    (m) =>
-      !m.deletedAt &&
-      (m.type === 'IMAGE' ||
-        (m.type === 'FILE' &&
-          (isVideoMime(effectiveMimeType(m.metadata)) ||
-            isImageMime(effectiveMimeType(m.metadata)))))
-  ).slice().reverse();
+  // Use the same TanStack Query cache as Chat.tsx.
+  // fetchNextPage loads older pages of messages progressively (Messenger pattern).
+  const { messages, isLoading, error, hasNextPage, fetchNextPage, isFetchingNextPage } =
+    useMessagesQuery({ conversationId });
 
-  const fileMessages = messages.filter(
-    (m) =>
-      !m.deletedAt &&
-      m.type === 'FILE' &&
-      !isVideoMime(effectiveMimeType(m.metadata)) &&
-      !isImageMime(effectiveMimeType(m.metadata))
-  ).slice().reverse();
+  // Trigger next page fetch when sentinel is visible
+  const handleLoadMore = useCallback(() => {
+    if (hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
+    }
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  const linkItems = messages
-    .slice()
-    .reverse()
-    .filter((m) => !m.deletedAt && m.type === 'TEXT')
-    .flatMap((m) => {
-      // useMessagesQuery already decrypts content; also check in-memory cache as fallback
-      const plaintext =
-        m.content ||
-        decryptedContentCache.get(m.id) ||
-        (m.encrypted ? null : m.content);
-      if (!plaintext || plaintext.startsWith('[')) return [];
-      return extractUrls(plaintext).map((url) => ({ url, message: m }));
-    })
-    .filter((item, idx, arr) => arr.findIndex((x) => x.url === item.url) === idx);
+  const mediaMessages = useMemo(
+    () =>
+      messages
+        .filter(
+          (m) =>
+            !m.deletedAt &&
+            (m.type === 'IMAGE' ||
+              (m.type === 'FILE' &&
+                (isVideoMime(effectiveMimeType(m.metadata)) ||
+                  isImageMime(effectiveMimeType(m.metadata)))))
+        )
+        .slice()
+        .reverse(),
+    [messages]
+  );
+
+  const fileMessages = useMemo(
+    () =>
+      messages
+        .filter(
+          (m) =>
+            !m.deletedAt &&
+            m.type === 'FILE' &&
+            !isVideoMime(effectiveMimeType(m.metadata)) &&
+            !isImageMime(effectiveMimeType(m.metadata))
+        )
+        .slice()
+        .reverse(),
+    [messages]
+  );
+
+  const linkItems = useMemo(
+    () =>
+      messages
+        .slice()
+        .reverse()
+        .filter((m) => !m.deletedAt && m.type === 'TEXT')
+        .flatMap((m) => {
+          // useMessagesQuery already decrypts content; also check in-memory cache as fallback
+          const plaintext =
+            m.content ||
+            decryptedContentCache.get(m.id) ||
+            (m.encrypted ? null : m.content);
+          if (!plaintext || plaintext.startsWith('[')) return [];
+          return extractUrls(plaintext).map((url) => ({ url, message: m }));
+        })
+        .filter((item, idx, arr) => arr.findIndex((x) => x.url === item.url) === idx),
+    [messages]
+  );
 
   // Stable key for link URLs — avoids render loop from new array reference each render
   const linkUrlsKey = linkItems.map((i) => i.url).join(',');
@@ -246,8 +306,6 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
   ];
 
   // Unified lightbox list — images AND videos in order, latest first.
-  // Images: prefer decrypted blob URL, pass encMeta for on-demand decrypt.
-  // Videos: use proxy URL directly (full E2EE decrypt is too heavy for background).
   const lightboxImageList = useMemo(() => {
     return mediaMessages
       .map((m) => {
@@ -294,11 +352,12 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
     );
   }
 
+
   return (
     <>
-      <div className="space-y-3">
+      <div className="flex flex-col h-full">
         {/* Sub-category tabs */}
-        <div className="flex border-b dark:border-dark-border">
+        <div className="flex border-b dark:border-dark-border flex-shrink-0">
           {tabs.map((tab) => (
             <button
               key={tab.key}
@@ -319,113 +378,145 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
 
         {/* Media grid */}
         {category === 'media' && (
-          <ScrollArea className="h-72">
-            {mediaMessages.length === 0 ? (
+          <div
+            ref={mediaScrollRef}
+            className="flex-1 overflow-y-auto min-h-0"
+          >
+            {mediaMessages.length === 0 && !hasNextPage ? (
               <EmptyState icon={<ImageIcon className="w-8 h-8" />} text="No media shared yet" />
             ) : (
-              <div className="grid grid-cols-3 gap-1 pr-1">
-                {mediaMessages.map((msg) => {
-                  const mime = effectiveMimeType(msg.metadata);
-                  const isVideo = isVideoMime(mime);
-                  const encMeta = msg.metadata?.encryption as { fileKey?: string; fileNonce?: string; originalMimeType?: string } | undefined;
-                  const ossFileUrl = msg.metadata?.fileUrl || '';
-                  const ossThumbUrl = msg.metadata?.thumbnailUrl || '';
+              <>
+                <div className="grid grid-cols-3 gap-1 p-1">
+                  {mediaMessages.map((msg) => {
+                    const mime = effectiveMimeType(msg.metadata);
+                    const isVideo = isVideoMime(mime);
+                    const encMeta = msg.metadata?.encryption as { fileKey?: string; fileNonce?: string; originalMimeType?: string } | undefined;
+                    const ossFileUrl = msg.metadata?.fileUrl || '';
+                    const ossThumbUrl = msg.metadata?.thumbnailUrl || '';
 
-                  if (isVideo) {
+                    if (isVideo) {
+                      return (
+                        <DecryptedVideoCell
+                          key={msg.id}
+                          ossFileUrl={ossFileUrl}
+                          ossThumbUrl={ossThumbUrl}
+                          mimeType={mime}
+                          fileName={msg.metadata?.fileName}
+                          encMeta={encMeta}
+                          onPlay={() => openLightbox(msg)}
+                        />
+                      );
+                    }
+
                     return (
-                      <DecryptedVideoCell
+                      <DecryptedMediaItem
                         key={msg.id}
+                        messageId={msg.id}
                         ossFileUrl={ossFileUrl}
                         ossThumbUrl={ossThumbUrl}
-                        mimeType={mime}
                         fileName={msg.metadata?.fileName}
                         encMeta={encMeta}
-                        onPlay={() => openLightbox(msg)}
+                        onDecrypted={(msgId, blobUrl) =>
+                          setDecryptedMediaUrls((prev) => ({ ...prev, [msgId]: blobUrl }))
+                        }
+                        onClick={() => openLightbox(msg)}
                       />
                     );
-                  }
-
-                  // Image — use DecryptedMediaItem to handle E2EE decryption
-                  return (
-                    <DecryptedMediaItem
-                      key={msg.id}
-                      messageId={msg.id}
-                      ossFileUrl={ossFileUrl}
-                      ossThumbUrl={ossThumbUrl}
-                      fileName={msg.metadata?.fileName}
-                      encMeta={encMeta}
-                      onDecrypted={(msgId, blobUrl) =>
-                        setDecryptedMediaUrls((prev) => ({ ...prev, [msgId]: blobUrl }))
-                      }
-                      onClick={() => openLightbox(msg)}
-                    />
-                  );
-                })}
-              </div>
+                  })}
+                </div>
+                {hasNextPage && (
+                  <div className="flex items-center justify-center py-4">
+                    {isFetchingNextPage && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}
+                    <ScrollSentinel onVisible={handleLoadMore} scrollRoot={mediaScrollRef.current} />
+                  </div>
+                )}
+              </>
             )}
-          </ScrollArea>
+          </div>
         )}
 
-        {/* Files list — Viber pattern: whole row taps to download, name truncates */}
+        {/* Files list */}
         {category === 'files' && (
-          <ScrollArea className="h-72">
-            {fileMessages.length === 0 ? (
+          <div
+            ref={filesScrollRef}
+            className="flex-1 overflow-y-auto min-h-0"
+          >
+            {fileMessages.length === 0 && !hasNextPage ? (
               <EmptyState icon={<FileText className="w-8 h-8" />} text="No files shared yet" />
             ) : (
-              <div className="space-y-0.5">
-                {fileMessages.map((msg) => {
-                  const encMeta = msg.metadata?.encryption as { fileKey?: string; fileNonce?: string; originalMimeType?: string } | undefined;
-                  const canDownload = !!msg.metadata?.fileUrl;
-                  return (
-                    <button
-                      key={msg.id}
-                      className="flex items-center gap-3 w-full py-3 px-1 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-border transition-colors text-left"
-                      disabled={!canDownload}
-                      onClick={() => {
-                        if (!canDownload) return;
-                        downloadViaProxy(
-                          msg.metadata!.fileUrl!,
-                          msg.metadata?.fileName || 'file',
-                          encMeta
-                        );
-                      }}
-                    >
-                      <div className="flex-shrink-0 w-10 h-10 bg-viber-purple/10 rounded-xl flex items-center justify-center">
-                        <FileText className="w-5 h-5 text-viber-purple" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 dark:text-dark-text truncate">
-                          {msg.metadata?.fileName || 'File'}
-                        </p>
-                        <p className="text-xs text-gray-400 mt-0.5">
-                          {formatBytes(msg.metadata?.fileSize) || 'Unknown size'}
-                        </p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+              <>
+                <div className="space-y-0.5 p-1">
+                  {fileMessages.map((msg) => {
+                    const encMeta = msg.metadata?.encryption as { fileKey?: string; fileNonce?: string; originalMimeType?: string } | undefined;
+                    const canDownload = !!msg.metadata?.fileUrl;
+                    return (
+                      <button
+                        key={msg.id}
+                        className="flex items-center gap-3 w-full py-3 px-1 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-border transition-colors text-left"
+                        disabled={!canDownload}
+                        onClick={() => {
+                          if (!canDownload) return;
+                          downloadViaProxy(
+                            msg.metadata!.fileUrl!,
+                            msg.metadata?.fileName || 'file',
+                            encMeta
+                          );
+                        }}
+                      >
+                        <div className="flex-shrink-0 w-10 h-10 bg-viber-purple/10 rounded-xl flex items-center justify-center">
+                          <FileText className="w-5 h-5 text-viber-purple" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 dark:text-dark-text truncate">
+                            {msg.metadata?.fileName || 'File'}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            {formatBytes(msg.metadata?.fileSize) || 'Unknown size'}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                {hasNextPage && (
+                  <div className="flex items-center justify-center py-4">
+                    {isFetchingNextPage && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}
+                    <ScrollSentinel onVisible={handleLoadMore} scrollRoot={filesScrollRef.current} />
+                  </div>
+                )}
+              </>
             )}
-          </ScrollArea>
+          </div>
         )}
 
         {/* Links list */}
         {category === 'links' && (
-          <ScrollArea className="h-72">
-            {linkItems.length === 0 ? (
+          <div
+            ref={linksScrollRef}
+            className="flex-1 overflow-y-auto min-h-0"
+          >
+            {linkItems.length === 0 && !hasNextPage ? (
               <EmptyState icon={<LinkIcon className="w-8 h-8" />} text="No links shared yet" />
             ) : previewsLoading && Object.keys(previews).length === 0 ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
               </div>
             ) : (
-              <div className="space-y-2 pr-1">
-                {linkItems.map((item, idx) => (
-                  <LinkPreviewCard key={idx} url={item.url} preview={previews[item.url]} />
-                ))}
-              </div>
+              <>
+                <div className="space-y-2 p-1">
+                  {linkItems.map((item, idx) => (
+                    <LinkPreviewCard key={idx} url={item.url} preview={previews[item.url]} />
+                  ))}
+                </div>
+                {hasNextPage && (
+                  <div className="flex items-center justify-center py-4">
+                    {isFetchingNextPage && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}
+                    <ScrollSentinel onVisible={handleLoadMore} scrollRoot={linksScrollRef.current} />
+                  </div>
+                )}
+              </>
             )}
-          </ScrollArea>
+          </div>
         )}
       </div>
 
@@ -437,7 +528,6 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
           onClose={() => setLightboxImages([])}
         />
       )}
-
     </>
   );
 }
@@ -476,7 +566,7 @@ function DecryptedMediaItem({
   const [decrypting, setDecrypting] = useState(false);
 
   useEffect(() => {
-    if (!isInView) return;  // Only load when in (or near) the viewport
+    if (!isInView) return;
 
     const rawUrl = ossFileUrl || ossThumbUrl;
     if (!rawUrl) return;
@@ -484,7 +574,6 @@ function DecryptedMediaItem({
     let objectUrl: string | null = null;
 
     if (encMeta?.fileKey && encMeta?.fileNonce) {
-      // E2EE: fetch encrypted bytes through proxy, decrypt in-browser
       setDecrypting(true);
       const proxyUrl = makeProxyUrl(rawUrl);
       (async () => {
@@ -511,7 +600,6 @@ function DecryptedMediaItem({
         }
       })();
     } else {
-      // Non-E2EE: use proxy URL directly
       setSrc(makeProxyUrl(rawUrl));
     }
 
@@ -553,9 +641,7 @@ function DecryptedMediaItem({
 
 /**
  * Video thumbnail cell for the media history grid.
- * Clicking opens the unified lightbox (which handles proxy URL display).
- * E2EE video decryption is intentionally deferred to the VideoPlayer inside
- * the lightbox — downloading a full encrypted video upfront is too heavy.
+ * E2EE video decryption is deferred to the lightbox VideoPlayer — too heavy for grid.
  */
 function DecryptedVideoCell({
   ossThumbUrl,
@@ -569,13 +655,9 @@ function DecryptedVideoCell({
   encMeta?: EncMeta;
   onPlay: () => void;
 }) {
-  const handleClick = () => {
-    onPlay();
-  };
-
   return (
     <button
-      onClick={handleClick}
+      onClick={onPlay}
       className="relative aspect-square bg-gray-900 rounded overflow-hidden group"
       title={fileName}
     >
