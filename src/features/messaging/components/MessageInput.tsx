@@ -397,9 +397,10 @@ export function MessageInput({
           </div>
         )}
 
-        {/* File Previews (when files selected) */}
+        {/* File Previews — horizontal scrollable strip (Messenger pattern).
+            Chips stay compact so the send button is always visible. */}
         {selectedFiles.length > 0 && (
-          <div className="mb-2 flex flex-col gap-2">
+          <div className="mb-2 flex gap-3 overflow-x-auto pb-1 scrollbar-thin">
             {selectedFiles.map((file, index) => (
               <FilePreview
                 key={`${file.name}-${index}`}
