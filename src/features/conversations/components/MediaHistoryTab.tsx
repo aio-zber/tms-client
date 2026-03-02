@@ -207,8 +207,11 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
 
   // Use the same TanStack Query cache as Chat.tsx.
   // fetchNextPage loads older pages of messages progressively (Messenger pattern).
+  // MUST use limit=50 to match the cache key used by useMessages (Chat.tsx),
+  // otherwise WebSocket new_message updates land in a different cache entry
+  // and this tab never sees newly uploaded files/media in real-time.
   const { messages, isLoading, error, hasNextPage, fetchNextPage, isFetchingNextPage } =
-    useMessagesQuery({ conversationId });
+    useMessagesQuery({ conversationId, limit: 50 });
 
   // Trigger next page fetch when sentinel is visible
   const handleLoadMore = useCallback(() => {
