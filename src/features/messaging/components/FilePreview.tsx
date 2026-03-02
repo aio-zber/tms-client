@@ -1,21 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, File, FileText, FileSpreadsheet, Image, Video, Music } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { X, File, FileText, FileSpreadsheet, Video, Music } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-// Simple progress bar component
-function ProgressBar({ value, className }: { value: number; className?: string }) {
-  return (
-    <div className={cn('w-full bg-gray-200 dark:bg-dark-border rounded-full overflow-hidden', className)}>
-      <div
-        className="bg-viber-purple h-full transition-all duration-300"
-        style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
-      />
-    </div>
-  );
-}
 
 interface FilePreviewProps {
   file: File;
@@ -26,8 +13,8 @@ interface FilePreviewProps {
 }
 
 /**
- * File preview component shown before sending.
- * Displays image thumbnails or file icons with metadata.
+ * Compact file chip for the horizontal pre-send strip (Messenger pattern).
+ * Fixed 72×72 square: image thumbnail or file-type icon + name + progress ring.
  */
 export function FilePreview({
   file,
@@ -38,136 +25,64 @@ export function FilePreview({
 }: FilePreviewProps) {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
 
-  // Format file size for display
-  const formatFileSize = (bytes: number): string => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
-  // Get file icon based on MIME type
-  const getFileIcon = (mimeType: string) => {
-    if (mimeType.startsWith('image/')) {
-      return <Image className="h-8 w-8 text-blue-500" />;
-    }
-    if (mimeType.startsWith('video/')) {
-      return <Video className="h-8 w-8 text-purple-500" />;
-    }
-    if (mimeType.startsWith('audio/')) {
-      return <Music className="h-8 w-8 text-green-500" />;
-    }
-    if (mimeType.includes('pdf')) {
-      return <FileText className="h-8 w-8 text-red-500" />;
-    }
-    if (mimeType.includes('word') || mimeType.includes('document')) {
-      return <FileText className="h-8 w-8 text-blue-600" />;
-    }
-    if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) {
-      return <FileSpreadsheet className="h-8 w-8 text-green-600" />;
-    }
-    return <File className="h-8 w-8 text-gray-500" />;
-  };
-
-  // Generate image preview for image files
   useEffect(() => {
-    if (file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setImagePreview(e.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-    } else {
-      setImagePreview(null);
-    }
-
-    // Cleanup
-    return () => {
-      setImagePreview(null);
-    };
+    if (!file.type.startsWith('image/')) { setImagePreview(null); return; }
+    const reader = new FileReader();
+    reader.onload = (e) => setImagePreview(e.target?.result as string);
+    reader.readAsDataURL(file);
+    return () => setImagePreview(null);
   }, [file]);
 
-  // Truncate filename if too long
-  const truncateFilename = (name: string, maxLength: number = 30): string => {
-    if (name.length <= maxLength) return name;
+  const icon = (() => {
+    if (file.type.startsWith('video/')) return <Video className="w-6 h-6 text-purple-400" />;
+    if (file.type.startsWith('audio/')) return <Music className="w-6 h-6 text-green-400" />;
+    if (file.type.includes('pdf'))      return <FileText className="w-6 h-6 text-red-400" />;
+    if (file.type.includes('word') || file.type.includes('document'))
+                                        return <FileText className="w-6 h-6 text-blue-400" />;
+    if (file.type.includes('excel') || file.type.includes('spreadsheet'))
+                                        return <FileSpreadsheet className="w-6 h-6 text-green-500" />;
+    return <File className="w-6 h-6 text-gray-400" />;
+  })();
 
-    const ext = name.split('.').pop() || '';
-    const nameWithoutExt = name.slice(0, name.length - ext.length - 1);
-    const truncatedLength = maxLength - ext.length - 4; // 4 for "..." and "."
-
-    return `${nameWithoutExt.slice(0, truncatedLength)}...${ext}`;
-  };
-
-  const isImage = file.type.startsWith('image/');
+  // Truncate filename to fit chip
+  const shortName = file.name.length > 12
+    ? file.name.slice(0, 9) + '…' + (file.name.split('.').pop() ? '.' + file.name.split('.').pop() : '')
+    : file.name;
 
   return (
-    <div
-      className={cn(
-        'relative flex items-center gap-3 p-3 bg-muted/50 rounded-lg border border-border/50',
-        'animate-in fade-in-0 slide-in-from-bottom-2 duration-200',
-        className
-      )}
-    >
-      {/* File preview/icon */}
-      <div className="flex-shrink-0">
-        {isImage && imagePreview ? (
-          <div className="relative h-16 w-16 rounded-md overflow-hidden bg-muted">
-            <img
-              src={imagePreview}
-              alt={file.name}
-              className="h-full w-full object-cover"
-            />
-          </div>
+    <div className={cn('relative flex-shrink-0 w-[72px]', className)}>
+      {/* Thumbnail / icon box */}
+      <div className="w-[72px] h-[72px] rounded-xl overflow-hidden bg-gray-100 dark:bg-dark-surface flex items-center justify-center">
+        {imagePreview ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={imagePreview} alt={file.name} className="w-full h-full object-cover" />
         ) : (
-          <div className="h-16 w-16 flex items-center justify-center bg-muted rounded-md">
-            {getFileIcon(file.type)}
-          </div>
+          icon
         )}
-      </div>
 
-      {/* File info */}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate" title={file.name}>
-          {truncateFilename(file.name)}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          {formatFileSize(file.size)}
-        </p>
-
-        {/* Upload progress */}
+        {/* Upload progress overlay */}
         {isUploading && (
-          <div className="mt-2">
-            <ProgressBar value={uploadProgress} className="h-1.5" />
-            <p className="text-xs text-muted-foreground mt-1">
-              Uploading... {Math.round(uploadProgress)}%
-            </p>
+          <div className="absolute inset-0 rounded-xl bg-black/50 flex items-center justify-center">
+            <span className="text-white text-xs font-semibold">{Math.round(uploadProgress)}%</span>
           </div>
         )}
       </div>
 
-      {/* Remove button */}
-      {!isUploading && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={onRemove}
-          className="h-7 w-7 absolute top-1 right-1 text-muted-foreground hover:text-foreground hover:bg-muted"
-          aria-label="Remove file"
-        >
-          <X className="h-4 w-4" />
-        </Button>
-      )}
+      {/* Filename */}
+      <p className="mt-1 text-[10px] text-center text-gray-500 dark:text-dark-text-secondary truncate leading-tight">
+        {shortName}
+      </p>
 
-      {/* Uploading overlay */}
-      {isUploading && (
-        <div className="absolute inset-0 bg-background/50 rounded-lg flex items-center justify-center">
-          <div className="flex flex-col items-center gap-2">
-            <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-            <span className="text-xs text-muted-foreground">
-              {Math.round(uploadProgress)}%
-            </span>
-          </div>
-        </div>
+      {/* Remove button — top-right corner */}
+      {!isUploading && (
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label="Remove file"
+          className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-gray-500 dark:bg-gray-600 text-white flex items-center justify-center hover:bg-gray-700 transition-colors"
+        >
+          <X className="w-3 h-3" />
+        </button>
       )}
     </div>
   );
