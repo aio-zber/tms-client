@@ -138,8 +138,8 @@ interface LinkPreview {
   domain: string;
 }
 
-/** Fires once when the element enters the viewport (one-shot, never resets to false). */
-function useInView(rootMargin = '200px') {
+/** Fires once when the element enters the scroll container (one-shot). */
+function useInView(scrollRoot: HTMLDivElement | null) {
   const ref = useRef<HTMLButtonElement>(null);
   const [isInView, setIsInView] = useState(false);
 
@@ -148,11 +148,11 @@ function useInView(rootMargin = '200px') {
     if (!el) return;
     const observer = new IntersectionObserver(
       ([entry]) => { if (entry.isIntersecting) setIsInView(true); },
-      { rootMargin }
+      { root: scrollRoot, rootMargin: '100px' }
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [rootMargin]);
+  }, [scrollRoot]);
 
   return { ref, isInView };
 }
@@ -355,9 +355,9 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
 
   return (
     <>
-      <div className="flex flex-col h-full">
+      <div className="flex flex-col">
         {/* Sub-category tabs */}
-        <div className="flex border-b dark:border-dark-border flex-shrink-0">
+        <div className="flex border-b dark:border-dark-border">
           {tabs.map((tab) => (
             <button
               key={tab.key}
@@ -376,11 +376,11 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
           ))}
         </div>
 
-        {/* Media grid */}
+        {/* Media grid — 3 rows visible (~288px), scroll for more */}
         {category === 'media' && (
           <div
             ref={mediaScrollRef}
-            className="flex-1 overflow-y-auto min-h-0"
+            className="h-72 overflow-y-auto"
           >
             {mediaMessages.length === 0 && !hasNextPage ? (
               <EmptyState icon={<ImageIcon className="w-8 h-8" />} text="No media shared yet" />
@@ -416,6 +416,7 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
                         ossThumbUrl={ossThumbUrl}
                         fileName={msg.metadata?.fileName}
                         encMeta={encMeta}
+                        scrollRoot={mediaScrollRef.current}
                         onDecrypted={(msgId, blobUrl) =>
                           setDecryptedMediaUrls((prev) => ({ ...prev, [msgId]: blobUrl }))
                         }
@@ -439,7 +440,7 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
         {category === 'files' && (
           <div
             ref={filesScrollRef}
-            className="flex-1 overflow-y-auto min-h-0"
+            className="h-72 overflow-y-auto"
           >
             {fileMessages.length === 0 && !hasNextPage ? (
               <EmptyState icon={<FileText className="w-8 h-8" />} text="No files shared yet" />
@@ -493,7 +494,7 @@ export function MediaHistoryTab({ conversationId }: MediaHistoryTabProps) {
         {category === 'links' && (
           <div
             ref={linksScrollRef}
-            className="flex-1 overflow-y-auto min-h-0"
+            className="h-72 overflow-y-auto"
           >
             {linkItems.length === 0 && !hasNextPage ? (
               <EmptyState icon={<LinkIcon className="w-8 h-8" />} text="No links shared yet" />
@@ -549,6 +550,7 @@ function DecryptedMediaItem({
   ossThumbUrl,
   fileName,
   encMeta,
+  scrollRoot,
   onDecrypted,
   onClick,
 }: {
@@ -557,10 +559,11 @@ function DecryptedMediaItem({
   ossThumbUrl: string;
   fileName?: string;
   encMeta?: EncMeta;
+  scrollRoot: HTMLDivElement | null;
   onDecrypted: (msgId: string, blobUrl: string) => void;
   onClick: () => void;
 }) {
-  const { ref, isInView } = useInView('200px');
+  const { ref, isInView } = useInView(scrollRoot);
   const [src, setSrc] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const [decrypting, setDecrypting] = useState(false);
