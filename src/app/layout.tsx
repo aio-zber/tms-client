@@ -5,7 +5,7 @@ import { ServiceWorkerProvider } from '@/components/providers/ServiceWorkerProvi
 import { Toaster } from 'react-hot-toast';
 
 export const metadata: Metadata = {
-  title: 'GCG Team Messaging App',
+  title: 'Team Messaging',
   description: 'A Viber-inspired team messaging application integrated with Team Management System',
   icons: { icon: '/favicon.ico' },
 };
