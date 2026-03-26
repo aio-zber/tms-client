@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { useEncryptionStore } from '@/features/encryption/stores/keyStore';
@@ -14,6 +14,7 @@ import { usePresenceInit } from '@/hooks/usePresence';
 import { useTheme } from '@/hooks/useTheme';
 import { SocketProvider } from '@/components/providers/SocketProvider';
 import { log } from '@/lib/logger';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function MainLayout({
   children,
@@ -25,6 +26,7 @@ export default function MainLayout({
   const { isAuthenticated, isLoading } = useAuthStore();
   const encryptionInitStatus = useEncryptionStore((s) => s.initStatus);
   const isChatsRoute = pathname.startsWith('/chats');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Initialize theme (applies 'dark' class to <html> based on stored preference)
   useTheme();
@@ -84,14 +86,37 @@ export default function MainLayout({
         {/* Main Content Area */}
         <div className="flex-1 overflow-hidden">
           {/* Desktop: 2-column layout */}
-          <div className="hidden lg:grid lg:grid-cols-[400px_1fr] h-full">
+          <div className="hidden lg:flex h-full">
             {/* Center Panel - Messages/Conversations List */}
-            <aside className="bg-white dark:bg-dark-surface border-r border-gray-200 dark:border-dark-border">
-              <ConversationList />
+            <aside
+              className={`relative bg-white dark:bg-dark-surface border-r border-gray-200 dark:border-dark-border
+                transition-all duration-300 ease-in-out shrink-0 overflow-hidden
+                ${sidebarCollapsed ? 'w-0 border-r-0' : 'w-[400px]'}`}
+            >
+              <div className="w-[400px] h-full">
+                <ConversationList />
+              </div>
             </aside>
 
+            {/* Sidebar toggle button — sits at the edge of the sidebar */}
+            <div className="relative shrink-0 flex items-center">
+              <button
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                className="absolute -left-3 z-10 w-6 h-12 bg-white dark:bg-dark-surface
+                  border border-gray-200 dark:border-dark-border rounded-full shadow-sm
+                  flex items-center justify-center
+                  hover:bg-gray-50 dark:hover:bg-dark-border transition-colors"
+                aria-label={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
+              >
+                {sidebarCollapsed
+                  ? <ChevronRight className="w-3.5 h-3.5 text-gray-500 dark:text-dark-text-secondary" />
+                  : <ChevronLeft className="w-3.5 h-3.5 text-gray-500 dark:text-dark-text-secondary" />
+                }
+              </button>
+            </div>
+
             {/* Right Panel - Chat View (children) */}
-            <main className="bg-gray-50 dark:bg-dark-bg overflow-hidden">
+            <main className="flex-1 bg-gray-50 dark:bg-dark-bg overflow-hidden">
               {isChatsRoute ? (
                 children
               ) : (
