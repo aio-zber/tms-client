@@ -98,19 +98,17 @@ export default function MainLayout({
               </div>
             </aside>
 
-            {/* Sidebar toggle button — sits at the edge of the sidebar */}
-            <div className="relative shrink-0 flex items-center">
+            {/* Sidebar toggle button — floats at the left edge of the chat area */}
+            <div className="relative shrink-0 z-20 flex items-center">
               <button
                 onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                className="absolute -left-3 z-10 w-6 h-12 bg-white dark:bg-dark-surface
-                  border border-gray-200 dark:border-dark-border rounded-full shadow-sm
-                  flex items-center justify-center
-                  hover:bg-gray-50 dark:hover:bg-dark-border transition-colors"
+                className="absolute left-2 w-8 h-8 bg-viber-purple hover:bg-viber-purple-dark
+                  rounded-full shadow-lg flex items-center justify-center transition-colors"
                 aria-label={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
               >
                 {sidebarCollapsed
-                  ? <ChevronRight className="w-3.5 h-3.5 text-gray-500 dark:text-dark-text-secondary" />
-                  : <ChevronLeft className="w-3.5 h-3.5 text-gray-500 dark:text-dark-text-secondary" />
+                  ? <ChevronRight className="w-4 h-4 text-white" />
+                  : <ChevronLeft className="w-4 h-4 text-white" />
                 }
               </button>
             </div>
