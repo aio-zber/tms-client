@@ -7,6 +7,7 @@ import { Toaster } from 'react-hot-toast';
 export const metadata: Metadata = {
   title: 'GCG Team Messaging App',
   description: 'A Viber-inspired team messaging application integrated with Team Management System',
+  icons: { icon: '/favicon.ico' },
 };
 
 // Proper mobile viewport: prevents user zoom (keeps layout stable when input focused),
