@@ -46,7 +46,7 @@ class Logger {
     this.config = {
       enabled: isDev || forceDebug,
       categories: {
-        auth: true,           // Always enabled (security)
+        auth: isDev || forceDebug,
         websocket: isDev || forceDebug,
         api: isDev || forceDebug,
         message: isDev || forceDebug,
@@ -90,9 +90,6 @@ class Logger {
   private shouldLog(category: LogCategory, level: LogLevel): boolean {
     // Always log errors
     if (level === 'error') return true;
-
-    // Always log auth category (security)
-    if (category === 'auth') return true;
 
     // Check if category is enabled
     return this.config.enabled && this.config.categories[category];

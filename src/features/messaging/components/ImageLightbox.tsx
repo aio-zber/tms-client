@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Download, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, RotateCw, Play, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -56,7 +56,10 @@ export function ImageLightbox({
   // Resolved URLs: starts as the passed-in urls, updated as E2EE images are decrypted
   const [resolvedUrls, setResolvedUrls] = useState<string[]>(() => images.map((img) => img.url));
 
-  const currentImage = { ...images[currentIndex], url: resolvedUrls[currentIndex] };
+  const currentImage = useMemo(
+    () => ({ ...images[currentIndex], url: resolvedUrls[currentIndex] }),
+    [images, currentIndex, resolvedUrls]
+  );
   const hasMultiple = images.length > 1;
 
   // Mount guard — prevents SSR hydration mismatch (portal needs document)
@@ -124,49 +127,6 @@ export function ImageLightbox({
     setIsVideoDecrypting(false);
   }, [currentIndex]);
 
-  // Handle keyboard navigation
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      switch (e.key) {
-        case 'Escape':
-          e.stopPropagation(); // prevent parent Radix Dialog from also closing
-          onClose();
-          break;
-        case 'ArrowLeft':
-          if (hasMultiple) goToPrevious();
-          break;
-        case 'ArrowRight':
-          if (hasMultiple) goToNext();
-          break;
-        case '+':
-        case '=':
-          handleZoomIn();
-          break;
-        case '-':
-          handleZoomOut();
-          break;
-        case '0':
-          resetZoom();
-          break;
-        case 'r':
-          handleRotate();
-          break;
-      }
-    };
-
-    // capture: true fires before Radix Dialog's document-level bubble listener
-    window.addEventListener('keydown', handleKeyDown, true);
-    return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [hasMultiple, currentIndex, onClose]);
-
-  // Prevent body scroll when lightbox is open
-  useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, []);
-
   // Navigation
   const goToPrevious = useCallback(() => {
     setCurrentIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1));
@@ -200,6 +160,49 @@ export function ImageLightbox({
   // Rotate
   const handleRotate = useCallback(() => {
     setRotation((prev) => (prev + 90) % 360);
+  }, []);
+
+  // Handle keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      switch (e.key) {
+        case 'Escape':
+          e.stopPropagation(); // prevent parent Radix Dialog from also closing
+          onClose();
+          break;
+        case 'ArrowLeft':
+          if (hasMultiple) goToPrevious();
+          break;
+        case 'ArrowRight':
+          if (hasMultiple) goToNext();
+          break;
+        case '+':
+        case '=':
+          handleZoomIn();
+          break;
+        case '-':
+          handleZoomOut();
+          break;
+        case '0':
+          resetZoom();
+          break;
+        case 'r':
+          handleRotate();
+          break;
+      }
+    };
+
+    // capture: true fires before Radix Dialog's document-level bubble listener
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [hasMultiple, onClose, goToPrevious, goToNext, handleZoomIn, handleZoomOut, resetZoom, handleRotate]);
+
+  // Prevent body scroll when lightbox is open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
   }, []);
 
   // Video play-click: decrypt E2EE video on demand, then start playback.
@@ -541,7 +544,8 @@ export function ImageLightbox({
             )}
           </>
         ) : (
-          /* Image */
+          /* Image — native img required for arbitrary CSS transforms (scale/rotate/translate) and E2EE blob URLs */
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             ref={imageRef}
             src={currentImage.url}
