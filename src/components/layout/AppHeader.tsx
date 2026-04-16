@@ -15,7 +15,9 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import { getUserInitials, getUserDisplayName, User } from '@/types';
 import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -38,6 +40,7 @@ import { cn } from '@/lib/utils';
 import { NotificationBadge, NotificationSettings } from '@/features/notifications';
 import { useEncryptionStore } from '@/features/encryption/stores/keyStore';
 import { KeyBackupDialog } from '@/features/encryption/components/KeyBackupDialog';
+import toast from 'react-hot-toast';
 
 export function AppHeader() {
   const [user, setUser] = useState<User | null>(null);
@@ -52,6 +55,7 @@ export function AppHeader() {
   const encryptionInitStatus = useEncryptionStore((s) => s.initStatus);
   const hasBackup = useEncryptionStore((s) => s.hasBackup);
   const [showBackupDialog, setShowBackupDialog] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const isE2EEReady = encryptionInitStatus === 'ready' || encryptionInitStatus === 'needs_restore';
 
   useEffect(() => {
@@ -150,7 +154,7 @@ export function AppHeader() {
     <header className="h-[60px] md:h-[70px] bg-white dark:bg-dark-surface border-b border-gray-200 dark:border-dark-border flex items-center justify-between px-4 md:px-6 shrink-0">
       {/* App Branding */}
       <div className="flex items-center gap-2 md:gap-3">
-        <h1 className="text-lg md:text-xl lg:text-2xl font-bold text-viber-purple">GCG Team Chat</h1>
+        <h1 className="text-lg md:text-xl lg:text-2xl font-bold text-viber-purple">Chat GCG</h1>
       </div>
 
       {/* Right side actions */}
@@ -318,8 +322,8 @@ export function AppHeader() {
 
           {/* Logout */}
           <DropdownMenuItem
-            className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50"
-            onClick={handleLogout}
+            className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950/40"
+            onClick={() => setShowLogoutConfirm(true)}
           >
             <LogOut className="w-4 h-4 mr-3" />
             <span>Logout</span>
@@ -338,6 +342,44 @@ export function AppHeader() {
         </DialogContent>
       </Dialog>
 
+      {/* Sign Out Confirmation Dialog */}
+      <Dialog open={showLogoutConfirm} onOpenChange={setShowLogoutConfirm}>
+        <DialogContent className="max-w-sm bg-white dark:bg-dark-surface border border-gray-200 dark:border-dark-border shadow-xl">
+          <DialogHeader>
+            <div className="flex items-center gap-3 mb-1">
+              <div className="flex items-center justify-center w-10 h-10 rounded-full bg-red-100 dark:bg-red-950/40 shrink-0">
+                <LogOut className="w-5 h-5 text-red-600 dark:text-red-400" />
+              </div>
+              <DialogTitle className="text-gray-900 dark:text-dark-text text-lg">
+                Sign out?
+              </DialogTitle>
+            </div>
+            <DialogDescription className="text-gray-500 dark:text-dark-text-secondary text-sm pl-[52px]">
+              You will be redirected to the sign-in page. Any unsent messages will be lost.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2 mt-2">
+            <Button
+              variant="outline"
+              className="flex-1 border-gray-200 dark:border-dark-border text-gray-700 dark:text-dark-text hover:bg-gray-100 dark:hover:bg-dark-border"
+              onClick={() => setShowLogoutConfirm(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="flex-1 bg-red-600 hover:bg-red-700 text-white border-0"
+              onClick={() => {
+                setShowLogoutConfirm(false);
+                handleLogout();
+              }}
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign Out
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Unified Encryption Keys Dialog (backup + restore in one) */}
       <KeyBackupDialog
         open={showBackupDialog}
@@ -351,7 +393,13 @@ export function AppHeader() {
           try {
             const { reinitializeEncryption } = await import('@/features/encryption');
             await reinitializeEncryption();
-          } catch { /* will retry on next message */ }
+          } catch (err) {
+            log.encryption.error('Failed to re-initialize after manage-dialog restore:', err);
+            toast.error(
+              'Session restore failed. Your keys were restored but messages may not decrypt. Please refresh the page.',
+              { duration: 8000 }
+            );
+          }
 
           // Clear decryption failure cache and decrypted content cache so all
           // previously-failed messages are re-attempted with the restored keys.
@@ -359,6 +407,15 @@ export function AppHeader() {
           const { decryptedContentCache } = await import('@/features/messaging/hooks/useMessages');
           clearFailedDecryptions();
           decryptedContentCache.clear();
+
+          // Clear IndexedDB persistent plaintext cache so restored session keys
+          // are used for re-decryption rather than serving stale cached content.
+          try {
+            const { clearDecryptedMessages } = await import('@/features/encryption/db/cryptoDb');
+            await clearDecryptedMessages();
+          } catch {
+            log.encryption.warn('Failed to clear IndexedDB decrypted messages cache after manage-dialog restore');
+          }
 
           // Invalidate all message queries so they re-fetch and re-decrypt.
           queryClient.invalidateQueries({ queryKey: queryKeys.messages.all });

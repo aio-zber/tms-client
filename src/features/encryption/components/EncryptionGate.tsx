@@ -6,6 +6,7 @@ import { useEncryptionStore } from '../stores/keyStore';
 import { KeyBackupDialog } from './KeyBackupDialog';
 import { queryKeys } from '@/lib/queryClient';
 import { log } from '@/lib/logger';
+import toast from 'react-hot-toast';
 
 /**
  * EncryptionGate — App-level E2EE gating (Messenger pattern).
@@ -59,6 +60,12 @@ export function EncryptionGate({ children }: { children: React.ReactNode }) {
       log.encryption.info('E2EE restored from backup — all conversations now decryptable');
     } catch (err) {
       log.encryption.error('Failed to re-initialize after restore:', err);
+      // Inform the user so they know to refresh rather than wondering why messages
+      // are still showing "[Unable to decrypt message]" placeholders.
+      toast.error(
+        'Session restore failed. Your keys were restored but messages may not decrypt. Please refresh the page.',
+        { duration: 8000 }
+      );
     }
 
     // Clear decryption failure/content caches and invalidate message queries
@@ -67,12 +74,24 @@ export function EncryptionGate({ children }: { children: React.ReactNode }) {
     const { decryptedContentCache } = await import('@/features/messaging/hooks/useMessages');
     clearFailedDecryptions();
     decryptedContentCache.clear();
+
+    // Also clear the IndexedDB persistent plaintext cache. On a same-device restore
+    // (e.g. PIN update via Settings → Security), old decrypted content cached in
+    // IndexedDB would be served without re-decryption, bypassing the fresh session keys.
+    // On a fresh device this store is empty, so the clear is a cheap no-op.
+    try {
+      const { clearDecryptedMessages } = await import('@/features/encryption/db/cryptoDb');
+      await clearDecryptedMessages();
+    } catch {
+      log.encryption.warn('Failed to clear IndexedDB decrypted messages cache after restore');
+    }
+
     queryClient.invalidateQueries({ queryKey: queryKeys.messages.all });
 
     useEncryptionStore.getState().setHasBackup(true);
   };
 
-  const handleBackupComplete = () => {
+  const handleBackupComplete = async () => {
     setShowBackupPrompt(false);
     useEncryptionStore.getState().setHasBackup(true);
   };
