@@ -207,6 +207,23 @@ export async function initialize(forceUploadBundle = false): Promise<void> {
 export async function reinitialize(): Promise<void> {
   initStatus = 'uninitialized';
   useEncryptionStore.getState().setInitStatus('uninitialized');
+
+  // Clear all module-level state accumulated under the old identity keys.
+  // Without this:
+  //   - distributedGroupKeys causes distributeSenderKey() to skip re-distribution
+  //     on the next group chat open, so members never receive the current key.
+  //   - groupKeyRecoveryCache may hold stale failed-recovery Promises, preventing
+  //     a fresh recovery attempt after keys are restored.
+  //   - keyBundleCache holds public bundles fetched under the old identity, which
+  //     would be used for X3DH with the wrong sender identity key.
+  //   - pendingX3DHHeaders / processingX3DH hold stale in-flight session state
+  //     that is no longer valid after an identity key change.
+  distributedGroupKeys.clear();
+  groupKeyRecoveryCache.clear();
+  pendingX3DHHeaders.clear();
+  processingX3DH.clear();
+  keyBundleCache.clear();
+
   // forceUploadBundle=true: keys were just restored from PIN backup into IndexedDB,
   // so the server needs the fresh public bundle from this device.
   await initialize(true);
@@ -620,7 +637,7 @@ async function tryRecoverFromKeyBackup(
   remoteUserId: string
 ): Promise<boolean> {
   try {
-    const { getSession, storeSession } = await import('../db/cryptoDb');
+    const { getSession, storeSession, deleteSession } = await import('../db/cryptoDb');
 
     // Fast path: check if bulk restore already cached this conversation key.
     // If so, copy it to the exact sender key and skip the network call.
@@ -632,6 +649,12 @@ async function tryRecoverFromKeyBackup(
         createdAt: bulkCached.createdAt,
         updatedAt: Date.now(),
       });
+      // Delete the sentinel after materialising it to the real sender key.
+      // Keeps IndexedDB tidy and prevents getConversationSessions() from returning
+      // the sentinel entry alongside real per-sender sessions. A second sender for
+      // the same conversation will fall through to the network path below, which
+      // correctly returns the same conversation key from the server backup.
+      await deleteSession(conversationId, BULK_RESTORE_SENTINEL);
       log.encryption.debug(`Session restored from bulk cache for ${conversationId}:${remoteUserId}`);
       return true;
     }

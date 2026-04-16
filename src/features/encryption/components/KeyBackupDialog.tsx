@@ -35,7 +35,7 @@ interface KeyBackupDialogProps {
   onOpenChange: (open: boolean) => void;
   /** 'backup' | 'restore' | 'manage' (unified tab view) */
   mode: 'backup' | 'restore' | 'manage';
-  onComplete: () => void;
+  onComplete: () => Promise<void>;
   /** When true the dialog cannot be dismissed (used by EncryptionGate for forced restore) */
   disableClose?: boolean;
   /** Pre-select which tab opens in 'manage' mode. Defaults to 'backup'. */
@@ -193,8 +193,14 @@ export function KeyBackupDialog({
         toast.success('Keys restored successfully');
       }
 
+      // Await onComplete before closing so the dialog stays visible (spinner)
+      // while reinitializeEncryption() + restoreAllConversationSessions() run.
+      // Without this await, the dialog closes immediately and message queries
+      // refetch before sessions are written to IndexedDB — causing a decryption
+      // race that permanently marks messages as failed in failedDecryptionIds.
+      await onComplete();
+
       resetState();
-      onComplete();
       onOpenChange(false);
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Operation failed';
