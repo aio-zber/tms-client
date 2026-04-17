@@ -98,7 +98,9 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
           continue;
         }
 
-        if (!msg.encrypted) {
+        if (!msg.encrypted || !msg.content.startsWith('{"v":')) {
+          // Not encrypted, OR encrypted flag is stale (e.g. plaintext-edited message where
+          // the server kept encrypted=true but content is now plaintext). Either way, use as-is.
           processedMessages.push(msg);
           continue;
         }

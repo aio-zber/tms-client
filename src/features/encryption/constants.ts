@@ -5,7 +5,7 @@
 
 // Encryption algorithm identifiers
 export const ENCRYPTION_VERSION = 2;
-export const ALGORITHM = 'AES-256-GCM';
+export const ALGORITHM = 'XSalsa20-Poly1305'; // libsodium crypto_secretbox_easy
 
 // Key sizes in bytes
 export const KEY_SIZE = 32; // 256 bits for AES-256

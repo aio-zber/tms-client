@@ -64,7 +64,14 @@ export function Chat({
 
   const { messages, loading, hasMore, loadMore, addOptimisticMessage, replaceOptimisticMessage } = useMessages(conversationId);
   const { sendMessage, sending } = useSendMessage();
-  const { editMessage, deleteMessage, addReaction, removeReaction, switchReaction } = useMessageActions({ currentUserId });
+  const { editMessage, deleteMessage, addReaction, removeReaction, switchReaction } = useMessageActions({
+    currentUserId,
+    conversationId,
+    conversationType: conversation?.type as 'dm' | 'group' | undefined,
+    recipientId: conversation?.type === 'dm'
+      ? conversation?.members?.find((m) => m.userId !== currentUserId)?.userId
+      : undefined,
+  });
   const handleLeaveConversationWithNav = useLeaveConversation(conversationId);
   const getUserName = useUserDisplayName(conversation ?? null);
 
@@ -144,8 +151,11 @@ export function Chat({
             sender_keys: Array<{
               sender_id: string;
               key_id: string;
-              public_signing_key: string;
+              public_signing_key: string | null;
               chain_key: string | null;
+              encrypted_key: string | null;
+              nonce: string | null;
+              ephemeral_public_key: string | null;
             }>;
           }>(`/encryption/sender-keys/${conversationId}`);
           const senderKeys = response?.sender_keys;
@@ -157,8 +167,11 @@ export function Chat({
                 conversation_id: conversationId,
                 sender_id: sk.sender_id,
                 key_id: sk.key_id,
-                public_signing_key: sk.public_signing_key,
+                public_signing_key: sk.public_signing_key ?? undefined,
                 chain_key: sk.chain_key,
+                encrypted_key: sk.encrypted_key ?? undefined,
+                nonce: sk.nonce ?? undefined,
+                ephemeral_public_key: sk.ephemeral_public_key ?? undefined,
               });
               groupKeyLoaded = true;
             }

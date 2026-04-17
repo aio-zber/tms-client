@@ -15,6 +15,9 @@ import {
   encrypt,
   decrypt,
   generateKey,
+  generateX25519KeyPair,
+  x25519,
+  hkdf,
   toBase64,
   fromBase64,
   toHex,
@@ -1124,15 +1127,43 @@ export async function distributeSenderKey(
   // random key if this is genuinely a brand-new group with no backup on the server yet.
   const session = await getOrCreateGroupKey(conversationId);
 
+  // Encrypt the group key per-recipient (WhatsApp/Signal pattern).
+  // Each recipient's copy is encrypted with ECDH so the server never sees the plaintext key.
+  const encryptedDistributions: Array<{
+    recipient_id: string;
+    encrypted_key: string;
+    nonce: string;
+    ephemeral_public_key: string;
+  }> = [];
+
+  for (const memberId of memberIds) {
+    try {
+      const bundle = await fetchKeyBundle(memberId);
+      const recipientIdentityKey = fromBase64(bundle.identity_key);
+      const { encryptedKey, nonce, ephemeralPublicKey } = encryptGroupKeyForRecipient(
+        session.conversationKey,
+        recipientIdentityKey
+      );
+      encryptedDistributions.push({
+        recipient_id: memberId,
+        encrypted_key: encryptedKey,
+        nonce,
+        ephemeral_public_key: ephemeralPublicKey,
+      });
+    } catch (bundleErr) {
+      log.encryption.warn(`[distributeSenderKey] Could not fetch bundle for ${memberId}, skipping:`, bundleErr);
+    }
+  }
+
   // Distribute via server (stored + relayed to online members)
   await apiClient.post(`${ENCRYPTION_API}/sender-keys/distribute`, {
     conversation_id: conversationId,
     recipients: memberIds,
     distribution: {
       sender_key_id: session.groupKeyId,
-      public_key: toBase64(session.conversationKey), // group key bytes
-      chain_key: null, // no chain in static key model
+      // public_key omitted — server uses encrypted_distributions instead
     },
+    encrypted_distributions: encryptedDistributions,
   });
 
   // Upload own backup so we can recover on new devices
@@ -1155,14 +1186,45 @@ export async function distributeSenderKey(
 export async function receiveSenderKeyDistribution(
   data: {
     conversation_id: string;
-    sender_id?: string; // unused in static key model
+    sender_id?: string;
     key_id: string;
-    chain_key?: string | null; // unused in static key model
-    public_signing_key: string; // carries group key bytes (repurposed field)
+    chain_key?: string | null;
+    // Legacy plaintext path
+    public_signing_key?: string;
+    // Per-recipient encrypted path (WhatsApp pattern)
+    encrypted_key?: string;
+    nonce?: string;
+    ephemeral_public_key?: string;
   }
 ): Promise<void> {
-  const groupKey = fromBase64(data.public_signing_key);
+  let groupKey: Uint8Array;
   const groupKeyId = data.key_id;
+
+  if (data.encrypted_key && data.nonce && data.ephemeral_public_key) {
+    // New: decrypt using own identity private key
+    const ourKeys = await getIdentityKey();
+    if (!ourKeys) {
+      log.encryption.error('[receiveSenderKeyDistribution] No identity key — cannot decrypt group key');
+      return;
+    }
+    try {
+      groupKey = decryptGroupKeyFromDistribution(
+        data.encrypted_key,
+        data.nonce,
+        data.ephemeral_public_key,
+        ourKeys.identityKeyPair.privateKey
+      );
+    } catch (err) {
+      log.encryption.error('[receiveSenderKeyDistribution] Failed to decrypt group key blob:', err);
+      return;
+    }
+  } else if (data.public_signing_key) {
+    // Legacy: plaintext key bytes (backwards compat with old clients/server)
+    groupKey = fromBase64(data.public_signing_key);
+  } else {
+    log.encryption.warn('[receiveSenderKeyDistribution] No key material in distribution event');
+    return;
+  }
 
   await storeReceivedGroupKey(data.conversation_id, groupKey, groupKeyId);
 
@@ -1185,6 +1247,46 @@ export async function receiveSenderKeyDistribution(
  */
 export function invalidateGroupKeyDistribution(conversationId: string): void {
   distributedGroupKeys.delete(conversationId);
+}
+
+// ==================== Per-Recipient Group Key Encryption (WhatsApp pattern) ====================
+
+/**
+ * Encrypt a group key for a specific recipient using ECDH.
+ * Ephemeral X25519 key × recipient identity key → HKDF → shared secret → XSalsa20-Poly1305.
+ * The server never sees the plaintext group key.
+ */
+function encryptGroupKeyForRecipient(
+  groupKey: Uint8Array,
+  recipientIdentityKey: Uint8Array  // X25519 public key from their bundle
+): { encryptedKey: string; nonce: string; ephemeralPublicKey: string } {
+  const ephemeral = generateX25519KeyPair();
+  const sharedDH = x25519(ephemeral.privateKey, recipientIdentityKey);
+  // Derive a symmetric key from the DH output
+  const encKey = hkdf(sharedDH, null, stringToBytes('TMA-GroupKeyWrap'), 32);
+  // encrypt() generates its own nonce internally and returns { ciphertext, nonce }
+  const { ciphertext, nonce } = encrypt(groupKey, encKey);
+  return {
+    encryptedKey: toBase64(ciphertext),
+    nonce: toBase64(nonce),
+    ephemeralPublicKey: toBase64(ephemeral.publicKey),
+  };
+}
+
+/**
+ * Decrypt a group key blob received via per-recipient distribution.
+ * Uses own X25519 identity private key to recover the ECDH shared secret.
+ */
+function decryptGroupKeyFromDistribution(
+  encryptedKey: string,
+  nonce: string,
+  ephemeralPublicKey: string,
+  ownIdentityPrivateKey: Uint8Array  // X25519 private key
+): Uint8Array {
+  const ephemeral = fromBase64(ephemeralPublicKey);
+  const sharedDH = x25519(ownIdentityPrivateKey, ephemeral);
+  const encKey = hkdf(sharedDH, null, stringToBytes('TMA-GroupKeyWrap'), 32);
+  return decrypt(fromBase64(encryptedKey), fromBase64(nonce), encKey);
 }
 
 // ==================== Serialization ====================
@@ -1310,12 +1412,16 @@ export async function decryptOwnDirectMessage(
 
   const { getConversationSessions, getSession } = await import('../db/cryptoDb');
 
-  // Step 1: Try any existing session for this conversation
+  // Step 1: Try existing sessions for this conversation.
+  // Filter out sentinel entries (__bulk__, __self__, GROUP) — they are recovery artifacts
+  // and their conversationKey may not match the real sender's session key.
   const sessions = await getConversationSessions(conversationId);
-  if (sessions.length > 0) {
-    const { session } = sessions[0];
+  const SENTINELS = new Set([BULK_RESTORE_SENTINEL, '__self__', GROUP_KEY_SENTINEL]);
+  const realSessions = sessions.filter(s => !SENTINELS.has(s.userId));
+  const sessionToTry = (realSessions[0] ?? sessions[0])?.session;
+  if (sessionToTry) {
     try {
-      const plaintext = decrypt(encrypted.ciphertext, encrypted.nonce, session.conversationKey);
+      const plaintext = decrypt(encrypted.ciphertext, encrypted.nonce, sessionToTry.conversationKey);
       return bytesToString(plaintext);
     } catch {
       // Fall through to recovery

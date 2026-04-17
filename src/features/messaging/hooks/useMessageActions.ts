@@ -39,10 +39,16 @@ interface UseMessageActionsReturn {
 
 interface UseMessageActionsOptions {
   currentUserId?: string;
+  /** Conversation context — required for encrypted edits */
+  conversationId?: string;
+  /** 'dm' = 1:1 DM, 'group' = group chat */
+  conversationType?: 'dm' | 'group';
+  /** Recipient user ID for DMs (the other person in the conversation) */
+  recipientId?: string;
 }
 
 export function useMessageActions(options: UseMessageActionsOptions = {}): UseMessageActionsReturn {
-  const { currentUserId } = options;
+  const { currentUserId, conversationId, conversationType, recipientId } = options;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const queryClient = useQueryClient();
@@ -102,8 +108,44 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
 
         
 
+        // Encrypt the edited content before sending (WhatsApp/Messenger pattern).
+        // The server always stores ciphertext so other devices can decrypt on any device.
+        // Falls back to plaintext if encryption is unavailable (graceful degradation).
+        let editPayload: EditMessageRequest = { content: data.content };
+        if (conversationId) {
+          try {
+            const { encryptionService } = await import('@/features/encryption');
+            if (encryptionService.isInitialized()) {
+              if (conversationType === 'group') {
+                const { encryptedContent, senderKeyId } = await encryptionService.encryptGroupMessageContent(
+                  conversationId, currentUserId ?? '', data.content
+                );
+                editPayload = {
+                  content: encryptedContent,
+                  encrypted: true,
+                  encryption_version: 2,
+                  sender_key_id: senderKeyId,
+                };
+              } else if (recipientId) {
+                // DM: encrypt with existing conversation session key.
+                // Edits always have an established session so no X3DH header needed.
+                const { encryptedContent } = await encryptionService.encryptDirectMessage(
+                  conversationId, recipientId, data.content
+                );
+                editPayload = {
+                  content: encryptedContent,
+                  encrypted: true,
+                  encryption_version: 2,
+                };
+              }
+            }
+          } catch (encErr) {
+            log.message.warn('[useMessageActions] Edit encryption failed, sending plaintext:', encErr);
+          }
+        }
+
         // Now make the actual API call in background
-        const updatedMessage = await messageService.editMessage(messageId, data);
+        const updatedMessage = await messageService.editMessage(messageId, editPayload);
 
         
         
@@ -131,7 +173,7 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
         setLoading(false);
       }
     },
-    [queryClient]
+    [queryClient, conversationId, conversationType, currentUserId, recipientId]
   );
 
   const deleteMessage = useCallback(async (messageId: string, scope: 'me' | 'everyone' = 'me') => {

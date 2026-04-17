@@ -77,8 +77,9 @@ async function decryptMessageContent(
     return decryptedContentCache.get(message.id)!;
   }
 
-  // If not encrypted, return original content
-  if (!message.encrypted) {
+  // If not encrypted, or content is not actually ciphertext (e.g. plaintext-edited
+  // message where server kept encrypted=true but content is now plaintext), use as-is.
+  if (!message.encrypted || !message.content.startsWith('{"v":')) {
     return message.content;
   }
 
@@ -665,6 +666,13 @@ export function useMessages(
       // The message will show a placeholder via the deletedAt check in MessageBubble.
       if (deletedAt) {
         decryptedContentCache.delete(messageId);
+      } else if (newContent) {
+        // Edit arrived — the WS payload contains the decrypted/plaintext new content
+        // (either the sender decrypted it locally for optimistic update, or the server
+        // broadcast it). Cache it so refetches serve the new content immediately, and
+        // clear any prior decryption failure so this message is never permanently blocked.
+        cacheDecryptedContent(messageId, newContent);
+        failedDecryptionIds.delete(messageId);
       }
 
       // Update cache for other users who didn't initiate the edit
