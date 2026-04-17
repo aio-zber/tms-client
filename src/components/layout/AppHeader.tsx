@@ -125,7 +125,7 @@ export function AppHeader() {
       const gcgcUrl = process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL || '';
       if (gcgcUrl) {
         // Invalidate the NextAuth session server-side (clears the session cookie)
-        // so SSO doesn't auto-log the user back in on the GCGC landing page.
+        // so SSO doesn't auto-log the user back in on the GCGC signin page.
         try {
           await fetch(`${gcgcUrl}/api/auth/signout`, {
             method: 'POST',
@@ -135,7 +135,7 @@ export function AppHeader() {
         } catch {
           // Best-effort — redirect regardless
         }
-        window.location.href = gcgcUrl;
+        window.location.href = `${gcgcUrl}/auth/signin`;
       } else {
         window.location.href = '/';
       }
