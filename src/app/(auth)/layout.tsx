@@ -9,7 +9,7 @@ export default function AuthLayout({
         {/* Logo/Branding */}
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-viber-purple mb-2">
-            GCG Team Chat
+            Chat GCG
           </h1>
           <p className="text-gray-600 text-sm">
             Connect with your team instantly
