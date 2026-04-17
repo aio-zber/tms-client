@@ -122,7 +122,23 @@ export function AppHeader() {
     } catch (error) {
       log.error('Logout failed:', error);
     } finally {
-      window.location.href = '/';
+      const gcgcUrl = process.env.NEXT_PUBLIC_TEAM_MANAGEMENT_API_URL || '';
+      if (gcgcUrl) {
+        // Invalidate the NextAuth session server-side (clears the session cookie)
+        // so SSO doesn't auto-log the user back in on the GCGC landing page.
+        try {
+          await fetch(`${gcgcUrl}/api/auth/signout`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          });
+        } catch {
+          // Best-effort — redirect regardless
+        }
+        window.location.href = gcgcUrl;
+      } else {
+        window.location.href = '/';
+      }
     }
   };
 
