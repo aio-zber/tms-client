@@ -23,6 +23,8 @@ import { VideoLightbox } from './VideoLightbox';
 import { VoiceMessagePlayer } from './VoiceMessagePlayer';
 import { decryptedContentCache } from '../hooks/useMessages';
 import { getApiBaseUrl, STORAGE_KEYS } from '@/lib/constants';
+import { useEncryptionStore } from '@/features/encryption/stores/keyStore';
+import { Lock } from 'lucide-react';
 
 /** Build a proxy URL for a raw OSS file URL (avoids CORS; works with <img src> via ?token=). */
 function ossProxyUrl(ossUrl: string): string {
@@ -79,6 +81,10 @@ export const MessageBubble = memo(function MessageBubble({
   isSearchHighlighted = false,
   onOpenMediaLightbox,
 }: MessageBubbleProps) {
+  // E2EE init status — gates media decryption so encrypted files are not decrypted
+  // before the user has entered their PIN (needs_restore / uninitialized state).
+  const encryptionInitStatus = useEncryptionStore((s) => s.initStatus);
+
   const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showTimestamp, setShowTimestamp] = useState(false);
@@ -144,6 +150,10 @@ export const MessageBubble = memo(function MessageBubble({
     if (!isInView) return; // Wait until bubble is near viewport
     if (isEncryptedVideo) return; // Videos decrypt on play-click, not viewport entry
     if (decryptionFailedRef.current) return; // Don't retry after a permanent decryption failure
+    // Gate: don't decrypt media before the user has entered their PIN.
+    // Encrypted file keys are in message metadata (not session-key-protected),
+    // so we enforce PIN state here to prevent pre-PIN media access.
+    if (encryptionInitStatus !== 'ready') return;
 
     let objectUrl: string | null = null;
     const decryptFileContent = async () => {
@@ -170,7 +180,7 @@ export const MessageBubble = memo(function MessageBubble({
     decryptFileContent();
     return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [message.id, message.metadata?.encryption?.fileKey, proxyFileUrl, isInView, isEncryptedVideo]);
+  }, [message.id, message.metadata?.encryption?.fileKey, proxyFileUrl, isInView, isEncryptedVideo, encryptionInitStatus]);
 
   // E2EE video: decrypt on play-click. Returns a blob URL for immediate playback.
   const handleEncryptedVideoPlay = async (): Promise<string | null> => {
@@ -179,6 +189,12 @@ export const MessageBubble = memo(function MessageBubble({
     if (!proxyFileUrl) return null;
     const encMeta = message.metadata?.encryption;
     if (!encMeta?.fileKey || !encMeta?.fileNonce) return null;
+    // Gate: require PIN to be entered before decrypting media
+    if (encryptionInitStatus !== 'ready') {
+      const { default: toast } = await import('react-hot-toast');
+      toast.error('Enter your encryption PIN to view this media.');
+      return null;
+    }
 
     setIsDecryptingFile(true);
     try {
@@ -654,6 +670,14 @@ export const MessageBubble = memo(function MessageBubble({
                 else setLightboxOpen(true);
               }}
             >
+              {/* Locked placeholder — shown when file is E2EE but PIN not yet entered */}
+              {message.metadata?.encryption?.fileKey && encryptionInitStatus !== 'ready' ? (
+                <div className="w-64 h-48 bg-gray-100 dark:bg-gray-800 flex flex-col items-center justify-center gap-2 text-gray-400 dark:text-gray-500">
+                  <Lock className="w-8 h-8" />
+                  <span className="text-xs">Enter PIN to view</span>
+                </div>
+              ) : (
+              <>
               {/* Shimmer — shown until the image element mounts and fires onLoad */}
               {!imgLoaded && (
                 <div className="w-64 h-48 bg-gray-200 dark:bg-gray-700 animate-pulse" />
@@ -685,6 +709,8 @@ export const MessageBubble = memo(function MessageBubble({
                 <div className="absolute bottom-2 right-2 bg-black/40 rounded-full p-1">
                   {renderStatusIcon()}
                 </div>
+              )}
+              </>
               )}
             </div>
           ) : message.type === 'FILE' && message.metadata?.fileUrl && message.metadata?.mimeType?.startsWith('video/') ? (

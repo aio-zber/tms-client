@@ -146,6 +146,9 @@ export interface SendMessageRequest {
 
 export interface EditMessageRequest {
   content: string;
+  encrypted?: boolean;
+  encryption_version?: number;
+  sender_key_id?: string;
 }
 
 export interface AddReactionRequest {
