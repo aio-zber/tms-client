@@ -419,6 +419,30 @@ export function Chat({
     }
   }, [conversationId]);
 
+  const handleResetEncryption = useCallback(async () => {
+    if (!confirm('Reset the encryption session for this conversation? Your next message will re-establish a fresh secure connection. Use this if you see "Unable to decrypt" messages.')) return;
+
+    try {
+      const { resetConversationSession } = await import('@/features/encryption');
+      const isGroup = conversation?.type === 'group';
+
+      if (isGroup) {
+        await resetConversationSession(conversationId, 'GROUP');
+      } else {
+        const otherMember = conversation?.members?.find((m) => m.userId !== currentUserId);
+        if (otherMember) {
+          await resetConversationSession(conversationId, otherMember.userId);
+        }
+      }
+
+      const toast = (await import('react-hot-toast')).default;
+      toast.success('Encryption session reset. Send a new message to re-establish the secure connection.');
+    } catch {
+      const toast = (await import('react-hot-toast')).default;
+      toast.error('Failed to reset encryption session.');
+    }
+  }, [conversationId, conversation, currentUserId]);
+
   const getConversationTitle = (): string => {
     if (!conversation) return 'Loading...';
     if (conversation.type === 'group') return conversation.name || 'Group Chat';
@@ -504,6 +528,7 @@ export function Chat({
             }}
             onClearConversation={handleClearConversation}
             onLeaveConversation={handleLeaveConversationWithNav}
+            onResetEncryption={handleResetEncryption}
             onMobileMenuToggle={() => setIsMobileDrawerOpen(true)}
             showMobileMenu={true}
           />
