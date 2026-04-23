@@ -7,7 +7,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { UserMinus, LogOut, X, UserPlus, Camera, Bell, BellOff } from 'lucide-react';
+import { UserMinus, LogOut, X, UserPlus, Camera, Bell, BellOff, ShieldOff } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -256,6 +256,35 @@ export default function ConversationSettingsDialog({
       if (avatarInputRef.current) {
         avatarInputRef.current.value = '';
       }
+    }
+  };
+
+  const [isResettingSession, setIsResettingSession] = useState(false);
+
+  const handleResetEncryptionSession = async () => {
+    if (!confirm('Reset the encryption session for this conversation? Your next message will re-establish a fresh encrypted connection. Messages already received may remain unreadable until both sides re-key.')) return;
+
+    setIsResettingSession(true);
+    try {
+      const { resetConversationSession } = await import('@/features/encryption');
+
+      if (isGroup) {
+        await resetConversationSession(conversation.id, 'GROUP');
+      } else {
+        // DM: reset session with the other participant
+        const otherMember = (currentConversation.members || []).find(
+          (m: ConversationMember) => m.userId !== currentUserId
+        );
+        if (otherMember) {
+          await resetConversationSession(conversation.id, otherMember.userId);
+        }
+      }
+
+      toast.success('Encryption session reset. Send a new message to re-establish the secure connection.');
+    } catch {
+      toast.error('Failed to reset encryption session. Please try again.');
+    } finally {
+      setIsResettingSession(false);
     }
   };
 
@@ -546,6 +575,26 @@ export default function ConversationSettingsDialog({
                 </ScrollArea>
               </div>
 
+              {/* Reset Encryption Session */}
+              <div className="pt-2 border-t dark:border-dark-border">
+                <Button
+                  variant="outline"
+                  onClick={handleResetEncryptionSession}
+                  disabled={isResettingSession}
+                  className="w-full text-amber-600 border-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/30 hover:text-amber-700"
+                >
+                  {isResettingSession ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <ShieldOff className="h-4 w-4 mr-2" />
+                  )}
+                  Reset Encryption Session
+                </Button>
+                <p className="text-xs text-gray-400 mt-1 text-center">
+                  Use this if messages show &quot;Unable to decrypt&quot;
+                </p>
+              </div>
+
               {/* Leave Conversation */}
               {currentUserIsMember && (
                 <div className="pt-2 border-t dark:border-dark-border">
@@ -570,8 +619,29 @@ export default function ConversationSettingsDialog({
           )}
 
           {/* Media History Tab */}
-          <TabsContent value="media">
+          <TabsContent value="media" className="flex flex-col gap-4">
             <MediaHistoryTab conversationId={conversation.id} />
+            {/* Reset encryption — shown for DMs here (groups have it in Members tab) */}
+            {!isGroup && (
+              <div className="pt-2 border-t dark:border-dark-border">
+                <Button
+                  variant="outline"
+                  onClick={handleResetEncryptionSession}
+                  disabled={isResettingSession}
+                  className="w-full text-amber-600 border-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/30 hover:text-amber-700"
+                >
+                  {isResettingSession ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <ShieldOff className="h-4 w-4 mr-2" />
+                  )}
+                  Reset Encryption Session
+                </Button>
+                <p className="text-xs text-gray-400 mt-1 text-center">
+                  Use this if messages show &quot;Unable to decrypt&quot;
+                </p>
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       </DialogContent>

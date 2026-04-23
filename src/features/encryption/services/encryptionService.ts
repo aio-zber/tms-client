@@ -784,6 +784,39 @@ export async function encryptDirectMessage(
   if (!sessionExists) {
     // Establish session - returns X3DH header for first message
     header = await establishSession(conversationId, recipientId);
+  } else {
+    // Session exists — verify the recipient's identity key hasn't changed on the server.
+    // If it has (e.g. after a server reset or the user cleared their keys), the stored
+    // session key is wrong and every message will fail to decrypt. Force re-key now,
+    // before the message is sent, so the recipient can decrypt it without any manual action.
+    try {
+      const { getSession: getStoredSession } = await import('../db/cryptoDb');
+      const storedSession = await getStoredSession(conversationId, recipientId);
+      if (storedSession) {
+        // Bypass cache to get the freshest bundle from the server
+        keyBundleCache.delete(recipientId);
+        const freshBundle = await fetchKeyBundle(recipientId);
+        const freshIdentityKey = fromBase64(freshBundle.identity_key);
+        const storedIdentityKey = storedSession.remoteIdentityKey;
+
+        // Compare byte-by-byte
+        const keysMatch =
+          freshIdentityKey.length === storedIdentityKey.length &&
+          freshIdentityKey.every((b, i) => b === storedIdentityKey[i]);
+
+        if (!keysMatch) {
+          log.encryption.warn(
+            `Identity key changed for ${recipientId} — forcing session re-key for ${conversationId}`
+          );
+          await removeSession(conversationId, recipientId);
+          pendingX3DHHeaders.delete(sessionKey);
+          header = await establishSession(conversationId, recipientId);
+        }
+      }
+    } catch (err) {
+      // Non-critical — if identity key check fails, proceed with existing session
+      log.encryption.warn('Identity key mismatch check failed (non-fatal):', err);
+    }
   }
 
   // Encrypt message
@@ -1424,6 +1457,42 @@ export async function clearEncryptionData(): Promise<void> {
   distributedGroupKeys.clear();
   initStatus = 'uninitialized';
   log.encryption.info('Encryption data cleared');
+}
+
+/**
+ * Reset the encryption session for a single conversation.
+ *
+ * Clears the local session key and any in-flight state so the next message
+ * triggers a fresh X3DH exchange. This is the per-conversation equivalent of
+ * Telegram's "close and reopen secret chat" — useful when a user sees
+ * [Unable to decrypt] and wants to self-recover without wiping all data.
+ *
+ * The remote party's next received message will carry a fresh X3DH header
+ * (because we re-run establishSession), so they also get a new key automatically.
+ */
+export async function resetConversationSession(
+  conversationId: string,
+  remoteUserId: string
+): Promise<void> {
+  const { deleteSession } = await import('../db/cryptoDb');
+  const sessionKey = `${conversationId}:${remoteUserId}`;
+
+  // Clear local session from IndexedDB
+  await deleteSession(conversationId, remoteUserId);
+
+  // Clear any in-flight state
+  pendingX3DHHeaders.delete(sessionKey);
+  processingX3DH.delete(sessionKey);
+  keyBundleCache.delete(remoteUserId);
+
+  // For groups: also clear the shared group key so it gets re-distributed
+  if (remoteUserId === 'GROUP') {
+    await deleteSession(conversationId, 'GROUP');
+    distributedGroupKeys.delete(conversationId);
+    groupKeyRecoveryCache.delete(conversationId);
+  }
+
+  log.encryption.info(`Session reset for ${conversationId}:${remoteUserId}`);
 }
 
 // ==================== Own Message Decryption (Messenger Labyrinth pattern) ====================
