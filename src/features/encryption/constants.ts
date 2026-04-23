@@ -23,7 +23,7 @@ export const CONVERSATION_KEY_INFO = 'TMA-ConversationKey';
 
 // IndexedDB Configuration
 export const CRYPTO_DB_NAME = 'tma-e2ee-keys';
-export const CRYPTO_DB_VERSION = 9;
+export const CRYPTO_DB_VERSION = 10;
 
 // Group key constants
 // GROUP_KEY_SENTINEL is used as the userId when storing the shared group
