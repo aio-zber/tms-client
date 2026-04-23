@@ -154,6 +154,12 @@ export async function getDb(): Promise<IDBPDatabase<any>> {
         }
         log.encryption.info('Cleared sessions for v9 key state resync');
       }
+
+      // v10: No-op version bump — stabilizes DB version after the v9 session wipe.
+      // Prevents the v9 wipe from re-running on clients that already went through it.
+      if (oldVersion < 10 && oldVersion >= 1) {
+        log.encryption.info('Upgraded to v10 (no-op)');
+      }
     },
     blocked() {
       log.encryption.warn('Crypto DB upgrade blocked - close other tabs');
