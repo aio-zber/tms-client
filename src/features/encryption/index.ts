@@ -14,6 +14,7 @@ export {
   reinitialize as reinitializeEncryption,
   isInitialized as isEncryptionInitialized,
   clearEncryptionData,
+  resetConversationSession,
 } from './services/encryptionService';
 
 // Hooks
