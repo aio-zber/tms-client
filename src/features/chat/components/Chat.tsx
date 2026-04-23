@@ -181,8 +181,8 @@ export function Chat({
         // 3. Only invalidate the message cache if we actually received new keys.
         //    Avoid unnecessary re-fetches on every conversation revisit.
         if (groupKeyLoaded) {
-          const { clearFailedDecryptions } = await import('@/features/messaging/hooks/useMessagesQuery');
-          clearFailedDecryptions();
+          const { clearConversationFailedDecryptions } = await import('@/features/messaging/hooks/useMessagesQuery');
+          clearConversationFailedDecryptions(conversationId);
           queryClient.invalidateQueries({
             queryKey: [...queryKeys.messages.lists(), conversationId],
           });
