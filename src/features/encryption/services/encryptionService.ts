@@ -784,39 +784,6 @@ export async function encryptDirectMessage(
   if (!sessionExists) {
     // Establish session - returns X3DH header for first message
     header = await establishSession(conversationId, recipientId);
-  } else {
-    // Session exists — verify the recipient's identity key hasn't changed on the server.
-    // If it has (e.g. after a server reset or the user cleared their keys), the stored
-    // session key is wrong and every message will fail to decrypt. Force re-key now,
-    // before the message is sent, so the recipient can decrypt it without any manual action.
-    try {
-      const { getSession: getStoredSession } = await import('../db/cryptoDb');
-      const storedSession = await getStoredSession(conversationId, recipientId);
-      if (storedSession) {
-        // Bypass cache to get the freshest bundle from the server
-        keyBundleCache.delete(recipientId);
-        const freshBundle = await fetchKeyBundle(recipientId);
-        const freshIdentityKey = fromBase64(freshBundle.identity_key);
-        const storedIdentityKey = storedSession.remoteIdentityKey;
-
-        // Compare byte-by-byte
-        const keysMatch =
-          freshIdentityKey.length === storedIdentityKey.length &&
-          freshIdentityKey.every((b, i) => b === storedIdentityKey[i]);
-
-        if (!keysMatch) {
-          log.encryption.warn(
-            `Identity key changed for ${recipientId} — forcing session re-key for ${conversationId}`
-          );
-          await removeSession(conversationId, recipientId);
-          pendingX3DHHeaders.delete(sessionKey);
-          header = await establishSession(conversationId, recipientId);
-        }
-      }
-    } catch (err) {
-      // Non-critical — if identity key check fails, proceed with existing session
-      log.encryption.warn('Identity key mismatch check failed (non-fatal):', err);
-    }
   }
 
   // Encrypt message

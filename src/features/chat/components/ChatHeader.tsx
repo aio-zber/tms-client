@@ -1,6 +1,6 @@
 'use client';
 
-import { Menu, MoreVertical, Search, Users, LogOut, User, Bell, BellOff, Lock } from 'lucide-react';
+import { Menu, MoreVertical, Search, Users, LogOut, User, Bell, BellOff, Lock, ShieldOff } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { OnlineIndicator } from '@/components/ui/OnlineIndicator';
 import {
@@ -27,6 +27,7 @@ interface ChatHeaderProps {
   onViewProfile?: (userId: string) => void;
   onClearConversation: () => void;
   onLeaveConversation: () => void;
+  onResetEncryption?: () => void;
   onMobileMenuToggle?: () => void;
   showMobileMenu?: boolean;
 }
@@ -41,6 +42,7 @@ export function ChatHeader({
   onViewProfile,
   onClearConversation,
   onLeaveConversation,
+  onResetEncryption,
   onMobileMenuToggle,
   showMobileMenu = true,
 }: ChatHeaderProps) {
@@ -171,6 +173,15 @@ export function ChatHeader({
               <Search className="w-4 h-4 mr-2" />
               Search Messages
             </DropdownMenuItem>
+            {onResetEncryption && (
+              <DropdownMenuItem
+                onClick={onResetEncryption}
+                className="text-amber-600"
+              >
+                <ShieldOff className="w-4 h-4 mr-2" />
+                Reset Encryption
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem
               onClick={onClearConversation}
               className="text-orange-600"
