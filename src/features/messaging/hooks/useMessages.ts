@@ -19,7 +19,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { socketClient } from '@/lib/socket';
 import { queryKeys } from '@/lib/queryClient';
 import { useMessagesQuery, failedDecryptionIds } from './useMessagesQuery';
-import { isPendingDelete } from './useMessageActions';
+import { isPendingDelete, isPendingEdit } from './useMessageActions';
 import { isRecentlySentMessage } from './useSendMessage';
 import { nowUTC } from '@/lib/dateUtils';
 import { useUserStore } from '@/store/userStore';
@@ -657,53 +657,149 @@ export function useMessages(
     // Listen for message edits - optimistic cache update (regular function, not useCallback)
     const handleMessageEdited = (updatedMessage: Record<string, unknown>) => {
       const messageId = updatedMessage.message_id as string;
-      const newContent = updatedMessage.content as string;
-      const deletedAt = updatedMessage.deleted_at as string | undefined; // Handle deletions via message:edit
+      const rawContent = updatedMessage.content as string;
+      const deletedAt = updatedMessage.deleted_at as string | undefined;
 
       log.message.debug(`Message edited:`, { messageId, deletedAt: !!deletedAt });
 
       // For deletions: evict from decryption cache so ciphertext can't flash.
-      // The message will show a placeholder via the deletedAt check in MessageBubble.
       if (deletedAt) {
         decryptedContentCache.delete(messageId);
-      } else if (newContent) {
-        // Edit arrived — the WS payload contains the decrypted/plaintext new content
-        // (either the sender decrypted it locally for optimistic update, or the server
-        // broadcast it). Cache it so refetches serve the new content immediately, and
-        // clear any prior decryption failure so this message is never permanently blocked.
-        cacheDecryptedContent(messageId, newContent);
-        failedDecryptionIds.delete(messageId);
+        queryClient.setQueryData(
+          queryKeys.messages.list(conversationId, { limit }),
+          (oldData: unknown) => {
+            if (!oldData) return oldData;
+            const data = oldData as { pages: Array<{ data: Message[] }> };
+            return {
+              ...data,
+              pages: data.pages.map(page => ({
+                ...page,
+                data: page.data.map(msg =>
+                  msg.id === messageId
+                    ? { ...msg, content: '', isEdited: true, deletedAt, updatedAt: nowUTC() }
+                    : msg
+                )
+              }))
+            };
+          }
+        );
+        return;
       }
 
-      // Update cache for other users who didn't initiate the edit
-      queryClient.setQueryData(
-        queryKeys.messages.list(conversationId, { limit }),
-        (oldData: unknown) => {
-          if (!oldData) return oldData;
+      // Sender's own edit: the optimistic update in useMessageActions already put the
+      // plaintext in both the cache and decryptedContentCache. The WS echo arrives with
+      // ciphertext — skip it entirely so we don't overwrite the correct plaintext.
+      if (isPendingEdit(messageId)) {
+        log.message.debug('Skipping WS edit echo for own pending edit:', messageId);
+        return;
+      }
 
-          const data = oldData as { pages: Array<{ data: Message[] }> };
-          return {
-            ...data,
-            pages: data.pages.map(page => ({
-              ...page,
-              data: page.data.map(msg =>
-                msg.id === messageId
-                  ? {
-                      ...msg,
-                      // For deletions, blank the content so ciphertext can never leak
-                      // through any render path. MessageBubble gates on deletedAt anyway.
-                      // For edits, write the new (plaintext) content as normal.
-                      content: deletedAt ? '' : newContent,
-                      isEdited: !deletedAt,
-                      deletedAt: deletedAt,
-                      updatedAt: nowUTC()
-                    }
-                  : msg
-              )
-            }))
-          };
+      // For other users' edits: the WS payload carries whatever the server stored.
+      // After Fix 1A, that will be ciphertext ({"v":...}). Decrypt it before caching.
+      const isCiphertext = rawContent?.startsWith('{"v":');
+
+      if (isCiphertext) {
+        // Async decrypt then update cache — we need the message object for context
+        // Read it from the current cache to get conversationId, senderId, senderKeyId
+        const currentCache = queryClient.getQueryData(
+          queryKeys.messages.list(conversationId, { limit })
+        ) as { pages: Array<{ data: Message[] }> } | undefined;
+
+        let msgRef: Message | undefined;
+        if (currentCache) {
+          for (const page of currentCache.pages) {
+            msgRef = page.data.find(m => m.id === messageId);
+            if (msgRef) break;
+          }
         }
-      );
+
+        // Decrypt asynchronously, then update the cache with plaintext
+        (async () => {
+          try {
+            let plaintext: string;
+            const { encryptionService } = await import('@/features/encryption');
+            const isGroupMsg = !!msgRef?.senderKeyId;
+            const senderId = (msgRef?.senderId ?? updatedMessage.sender_id) as string;
+
+            if (isGroupMsg) {
+              plaintext = await encryptionService.decryptGroupMessageContent(
+                conversationId, senderId, rawContent
+              );
+            } else {
+              plaintext = await encryptionService.decryptDirectMessage(
+                conversationId, senderId, rawContent
+              );
+            }
+
+            // Cache the decrypted content and clear any prior failure
+            cacheDecryptedContent(messageId, plaintext, conversationId);
+            failedDecryptionIds.delete(messageId);
+
+            queryClient.setQueryData(
+              queryKeys.messages.list(conversationId, { limit }),
+              (oldData: unknown) => {
+                if (!oldData) return oldData;
+                const data = oldData as { pages: Array<{ data: Message[] }> };
+                return {
+                  ...data,
+                  pages: data.pages.map(page => ({
+                    ...page,
+                    data: page.data.map(msg =>
+                      msg.id === messageId
+                        ? { ...msg, content: plaintext, isEdited: true, updatedAt: nowUTC() }
+                        : msg
+                    )
+                  }))
+                };
+              }
+            );
+          } catch (decryptErr) {
+            log.message.warn(`[handleMessageEdited] Could not decrypt edited message ${messageId}:`, decryptErr);
+            // Still update metadata (isEdited) but keep existing cached content
+            queryClient.setQueryData(
+              queryKeys.messages.list(conversationId, { limit }),
+              (oldData: unknown) => {
+                if (!oldData) return oldData;
+                const data = oldData as { pages: Array<{ data: Message[] }> };
+                return {
+                  ...data,
+                  pages: data.pages.map(page => ({
+                    ...page,
+                    data: page.data.map(msg =>
+                      msg.id === messageId
+                        ? { ...msg, isEdited: true, updatedAt: nowUTC() }
+                        : msg
+                    )
+                  }))
+                };
+              }
+            );
+          }
+        })();
+      } else {
+        // Plaintext content (legacy path or non-encrypted conversation)
+        cacheDecryptedContent(messageId, rawContent, conversationId);
+        failedDecryptionIds.delete(messageId);
+
+        queryClient.setQueryData(
+          queryKeys.messages.list(conversationId, { limit }),
+          (oldData: unknown) => {
+            if (!oldData) return oldData;
+            const data = oldData as { pages: Array<{ data: Message[] }> };
+            return {
+              ...data,
+              pages: data.pages.map(page => ({
+                ...page,
+                data: page.data.map(msg =>
+                  msg.id === messageId
+                    ? { ...msg, content: rawContent, isEdited: true, updatedAt: nowUTC() }
+                    : msg
+                )
+              }))
+            };
+          }
+        );
+      }
     };
 
     // Listen for message deletions - update with deletedAt instead of removing (Messenger pattern)

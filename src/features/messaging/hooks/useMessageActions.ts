@@ -11,7 +11,7 @@ import { messageService } from '../services/messageService';
 import { queryKeys } from '@/lib/queryClient';
 import type { EditMessageRequest, Message } from '@/types/message';
 import { log } from '@/lib/logger';
-import { decryptedContentCache } from './useMessages';
+import { decryptedContentCache, cacheDecryptedContent } from './useMessages';
 
 // Module-level tracking of pending operations to prevent WebSocket race conditions
 // These Sets track operations initiated by the current user to prevent duplicate cache updates
@@ -107,6 +107,12 @@ export function useMessageActions(options: UseMessageActionsOptions = {}): UseMe
         });
 
         
+
+        // Cache the plaintext immediately so the optimistic update survives a refetch
+        // and the WS echo (which carries ciphertext) is safely skipped by handleMessageEdited.
+        if (conversationId) {
+          cacheDecryptedContent(messageId, data.content, conversationId);
+        }
 
         // Encrypt the edited content before sending (WhatsApp/Messenger pattern).
         // The server always stores ciphertext so other devices can decrypt on any device.
