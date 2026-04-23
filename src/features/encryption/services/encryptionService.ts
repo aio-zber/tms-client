@@ -24,6 +24,7 @@ import {
   randomBytes,
   stringToBytes,
   bytesToString,
+  ed25519SecretKeyToPublicKey,
 } from './cryptoService';
 import {
   initializeKeys,
@@ -259,6 +260,15 @@ export function getInitStatus(): EncryptionInitStatus {
 async function uploadKeyBundle(): Promise<void> {
   const bundle = await getPublicKeyBundle();
 
+  // Include Ed25519 public signing key so recipients can verify SPK signatures
+  let signingKeyB64: string | undefined;
+  try {
+    const keys = await getIdentityKey();
+    if (keys?.identityKeyPair.signingKey) {
+      signingKeyB64 = toBase64(ed25519SecretKeyToPublicKey(keys.identityKeyPair.signingKey));
+    }
+  } catch { /* non-critical — omit signing_key if unavailable */ }
+
   const request: UploadKeyBundleRequest = {
     identity_key: toBase64(bundle.identityKey),
     signed_prekey: {
@@ -270,6 +280,7 @@ async function uploadKeyBundle(): Promise<void> {
       key_id: pk.keyId,
       public_key: toBase64(pk.publicKey),
     })),
+    signing_key: signingKeyB64,
   };
 
   try {
@@ -365,7 +376,7 @@ export async function establishSession(
     throw new EncryptionError('Local keys not found', 'KEY_GENERATION_FAILED');
   }
 
-  // Perform X3DH key agreement
+  // Perform X3DH key agreement (SPK signature is verified inside x3dhSend when signing_key is present)
   const { sharedSecret, header: x3dhHeader } = x3dhSend(ourKeys.identityKeyPair, {
     identityKey: fromBase64(theirBundle.identity_key),
     signedPreKey: {
@@ -379,6 +390,7 @@ export async function establishSession(
           publicKey: fromBase64(theirBundle.one_time_prekey.public_key),
         }
       : undefined,
+    signingKey: theirBundle.signing_key ? fromBase64(theirBundle.signing_key) : undefined,
   });
 
   // Derive conversation key from X3DH shared secret
@@ -389,8 +401,9 @@ export async function establishSession(
     fromBase64(theirBundle.identity_key)
   );
 
-  // Upload conversation key backup for multi-device recovery (fire-and-forget)
-  uploadConversationKeyBackup(conversationId, userId);
+  // Upload conversation key backup before first message so multi-device recovery
+  // is available immediately (not fire-and-forget — must complete before first send).
+  await uploadConversationKeyBackup(conversationId, userId);
 
   // Store header for first message (consumed after use)
   const sessionKey = `${conversationId}:${userId}`;
@@ -464,8 +477,9 @@ export async function processX3DHHeader(
           header.identityKey
         );
 
-        // Upload conversation key backup for multi-device recovery (fire-and-forget)
-        uploadConversationKeyBackup(conversationId, senderId);
+        // Upload conversation key backup before returning so multi-device recovery
+        // is available immediately on the sender's other devices.
+        await uploadConversationKeyBackup(conversationId, senderId);
 
         log.encryption.info(`Session established as recipient with ${senderId} for ${conversationId}`);
       } catch (x3dhError) {

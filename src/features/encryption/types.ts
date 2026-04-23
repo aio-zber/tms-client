@@ -177,6 +177,7 @@ export interface UploadKeyBundleRequest {
     key_id: number;
     public_key: string; // Base64
   }>;
+  signing_key?: string; // Base64 Ed25519 public key for SPK verification
 }
 
 /**
@@ -194,6 +195,7 @@ export interface FetchKeyBundleResponse {
     key_id: number;
     public_key: string; // Base64
   };
+  signing_key?: string; // Base64 Ed25519 public key for SPK verification
 }
 
 // ==================== Encryption Status Types ====================

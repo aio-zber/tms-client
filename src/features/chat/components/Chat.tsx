@@ -194,8 +194,8 @@ export function Chat({
         // 3. Only invalidate the message cache if we actually received new keys.
         //    Avoid unnecessary re-fetches on every conversation revisit.
         if (groupKeyLoaded) {
-          const { clearFailedDecryptions } = await import('@/features/messaging/hooks/useMessagesQuery');
-          clearFailedDecryptions();
+          const { clearConversationFailedDecryptions } = await import('@/features/messaging/hooks/useMessagesQuery');
+          clearConversationFailedDecryptions(conversationId);
           queryClient.invalidateQueries({
             queryKey: [...queryKeys.messages.lists(), conversationId],
           });
@@ -424,6 +424,8 @@ export function Chat({
 
     try {
       const { resetConversationSession } = await import('@/features/encryption');
+      const { clearConversationFailedDecryptions } = await import('@/features/messaging/hooks/useMessagesQuery');
+      const { decryptedContentCache } = await import('@/features/messaging/hooks/useMessages');
       const isGroup = conversation?.type === 'group';
 
       if (isGroup) {
@@ -435,13 +437,32 @@ export function Chat({
         }
       }
 
+      // Clear failure cache + decrypted content cache for this conversation only
+      clearConversationFailedDecryptions(conversationId);
+      // Also clear any in-memory decrypted content so it's re-decrypted with new key
+      const cachedData = queryClient.getQueryData<{ pages: Array<{ data: Array<{ id: string }> }> }>(
+        queryKeys.messages.list(conversationId, { limit: 30 })
+      );
+      if (cachedData?.pages) {
+        for (const page of cachedData.pages) {
+          for (const msg of page.data) {
+            decryptedContentCache.delete(msg.id);
+          }
+        }
+      }
+
+      // Force re-fetch so messages are decrypted fresh with the new session key
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.messages.list(conversationId, { limit: 30 }),
+      });
+
       const toast = (await import('react-hot-toast')).default;
       toast.success('Encryption session reset. Send a new message to re-establish the secure connection.');
     } catch {
       const toast = (await import('react-hot-toast')).default;
       toast.error('Failed to reset encryption session.');
     }
-  }, [conversationId, conversation, currentUserId]);
+  }, [conversationId, conversation, currentUserId, queryClient]);
 
   const getConversationTitle = (): string => {
     if (!conversation) return 'Loading...';

@@ -247,6 +247,15 @@ export function ed25519PrivateKeyToX25519(edPrivateKey: Uint8Array): Uint8Array 
   return s.crypto_sign_ed25519_sk_to_curve25519(edPrivateKey);
 }
 
+/**
+ * Extract Ed25519 public key from combined 64-byte secret key
+ * libsodium stores combined key as seed(32) + public(32)
+ */
+export function ed25519SecretKeyToPublicKey(secretKey: Uint8Array): Uint8Array {
+  const s = getSodium();
+  return s.crypto_sign_ed25519_sk_to_pk(secretKey);
+}
+
 // ==================== Key Derivation (HKDF) ====================
 
 /**
@@ -427,6 +436,7 @@ export const cryptoService = {
   verify,
   ed25519PublicKeyToX25519,
   ed25519PrivateKeyToX25519,
+  ed25519SecretKeyToPublicKey,
   hkdf,
   deriveKey,
   sha256,

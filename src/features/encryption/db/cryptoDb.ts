@@ -137,9 +137,22 @@ export async function getDb(): Promise<IDBPDatabase<any>> {
         if (db.objectStoreNames.contains(STORES.SENDER_KEY)) {
           _transaction.objectStore(STORES.SENDER_KEY).clear();
         }
-        // Also clear group SESSION entries from prior migration attempts
-        // (SESSION entries with userId='GROUP' from any intermediate state)
         log.encryption.info('Cleared sender keys for v8 static group key upgrade');
+      }
+
+      // v9: Clear all sessions — forces fresh X3DH for all conversations.
+      // Required after server key state reset: existing local sessions derive keys
+      // that no longer match what the server has, causing "wrong secret key" on every
+      // decrypt. Identity keys, OPKs, known identity keys, and decrypted message cache
+      // are preserved — only the derived conversation keys are wiped.
+      if (oldVersion < 9 && oldVersion >= 1) {
+        if (db.objectStoreNames.contains(STORES.SESSION)) {
+          _transaction.objectStore(STORES.SESSION).clear();
+        }
+        if (db.objectStoreNames.contains(STORES.SENDER_KEY)) {
+          _transaction.objectStore(STORES.SENDER_KEY).clear();
+        }
+        log.encryption.info('Cleared sessions for v9 key state resync');
       }
     },
     blocked() {
