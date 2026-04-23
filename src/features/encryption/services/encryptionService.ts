@@ -447,26 +447,42 @@ export async function processX3DHHeader(
         throw new EncryptionError('Local keys not found', 'KEY_GENERATION_FAILED');
       }
 
-      // Perform X3DH as recipient
-      const sharedSecret = await x3dhReceive(
-        header,
-        ourKeys.identityKeyPair,
-        ourKeys.signedPreKey,
-        header.preKeyId
-      );
+      try {
+        // Perform X3DH as recipient
+        const sharedSecret = await x3dhReceive(
+          header,
+          ourKeys.identityKeyPair,
+          ourKeys.signedPreKey,
+          header.preKeyId
+        );
 
-      // Derive conversation key from X3DH shared secret
-      await initSessionAsRecipient(
-        conversationId,
-        senderId,
-        sharedSecret,
-        header.identityKey
-      );
+        // Derive conversation key from X3DH shared secret
+        await initSessionAsRecipient(
+          conversationId,
+          senderId,
+          sharedSecret,
+          header.identityKey
+        );
 
-      // Upload conversation key backup for multi-device recovery (fire-and-forget)
-      uploadConversationKeyBackup(conversationId, senderId);
+        // Upload conversation key backup for multi-device recovery (fire-and-forget)
+        uploadConversationKeyBackup(conversationId, senderId);
 
-      log.encryption.info(`Session established as recipient with ${senderId} for ${conversationId}`);
+        log.encryption.info(`Session established as recipient with ${senderId} for ${conversationId}`);
+      } catch (x3dhError) {
+        // X3DH failed (most likely OPK already consumed). Fall back to key backup
+        // recovery — this covers the case where the session was previously deleted
+        // after a decryption failure, causing X3DH to be attempted again with an
+        // already-consumed OPK.
+        log.encryption.warn(
+          `X3DH failed for ${conversationId}:${senderId} — attempting key backup recovery:`,
+          x3dhError
+        );
+        const recovered = await tryRecoverFromKeyBackup(conversationId, senderId);
+        if (!recovered) {
+          throw x3dhError;
+        }
+        log.encryption.info(`Session recovered from key backup (X3DH fallback) for ${conversationId}:${senderId}`);
+      }
     } finally {
       processingX3DH.delete(key);
     }
@@ -841,9 +857,43 @@ export async function decryptDirectMessage(
     return bytesToString(plaintext);
   } catch (error) {
     if (error instanceof EncryptionError && error.code === 'DECRYPTION_FAILED') {
-      await removeSession(conversationId, senderId);
       log.encryption.warn(
-        `Deleted corrupt session ${conversationId}:${senderId} — will re-establish on next message`
+        `Decryption failed for ${conversationId}:${senderId} — attempting session recovery`
+      );
+
+      // Strategy 1: If this message carries a fresh X3DH header, the sender may have
+      // re-keyed (e.g. after clearing their keys or after a server reset). Force-replace
+      // the stale local session and retry with the new key derived from the header.
+      if (header) {
+        try {
+          await removeSession(conversationId, senderId);
+          await processX3DHHeader(conversationId, senderId, header);
+          const plaintext = await decryptWithSession(conversationId, senderId, encrypted);
+          log.encryption.info(`Decryption recovered via fresh X3DH header for ${conversationId}:${senderId}`);
+          return bytesToString(plaintext);
+        } catch {
+          // Header-based recovery failed — fall through to key backup
+        }
+      }
+
+      // Strategy 2: Try recovering the conversation key from the server backup.
+      const recovered = await tryRecoverFromKeyBackup(conversationId, senderId);
+      if (recovered) {
+        try {
+          const plaintext = await decryptWithSession(conversationId, senderId, encrypted);
+          log.encryption.info(`Decryption recovered via key backup for ${conversationId}:${senderId}`);
+          return bytesToString(plaintext);
+        } catch {
+          // Key backup recovery didn't help either
+        }
+      }
+
+      // Neither strategy worked. Do NOT delete the session — a deleted session forces
+      // X3DH re-run which will fail if the OPK has already been consumed, making every
+      // subsequent message undecryptable. Keep whatever session we have so that
+      // newly-established sessions (with fresh OPKs) can still work.
+      log.encryption.warn(
+        `All recovery strategies failed for ${conversationId}:${senderId} — keeping existing session`
       );
     }
     throw error;
