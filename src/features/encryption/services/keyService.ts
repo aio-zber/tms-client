@@ -271,15 +271,22 @@ export function x3dhSend(
     identityKey: Uint8Array;
     signedPreKey: { keyId: number; publicKey: Uint8Array; signature: Uint8Array };
     oneTimePreKey?: { keyId: number; publicKey: Uint8Array };
+    signingKey?: Uint8Array; // Ed25519 public key for SPK verification (optional: new clients only)
   }
 ): { sharedSecret: Uint8Array; header: X3DHHeader; ephemeralKeyPair: KeyPair } {
-  // SPK signature verification:
-  // The signature was created with the recipient's Ed25519 signing key, but the bundle
-  // currently only exposes the derived X25519 identity key — not the Ed25519 public key.
-  // Full verification requires the server to return `signing_key` (Ed25519 pub) alongside
-  // `identity_key` (X25519). Once the server includes it, verify here with:
-  //   verifyPreKeySignature(theirBundle.signedPreKey.publicKey, theirBundle.signedPreKey.signature, theirBundle.signingKey)
-  // TODO(Fix5): Add `signing_key` field to KeyBundleUpload + server response, then enable.
+  // Verify SPK signature if the Ed25519 signing key is available.
+  // Old clients that haven't re-uploaded their bundle won't have signing_key yet (signingKey=undefined),
+  // so verification is skipped for them — falls back to trust-on-first-use.
+  if (theirBundle.signingKey) {
+    const valid = verifyPreKeySignature(
+      theirBundle.signedPreKey.publicKey,
+      theirBundle.signedPreKey.signature,
+      theirBundle.signingKey
+    );
+    if (!valid) {
+      throw new Error('Invalid signed pre-key signature — possible MITM attack');
+    }
+  }
 
   // Generate ephemeral key pair
   const ephemeralKey = generateX25519KeyPair();

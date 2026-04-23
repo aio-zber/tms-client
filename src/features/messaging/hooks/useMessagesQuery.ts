@@ -26,13 +26,37 @@ function isChunkLoadError(err: unknown): boolean {
   return err.name === 'ChunkLoadError' || err.message.includes('Loading chunk');
 }
 
-// Track message IDs that permanently failed decryption so we never retry
-// Exported so useMessages (WS path) can also check/update this set
-export const failedDecryptionIds = new Set<string>();
+// Track permanently failed decryptions keyed by conversationId → Set<messageId>
+// Per-conversation scoping allows surgical clearing after a session reset
+// without affecting failures from unrelated conversations.
+const _failedDecryptionIds = new Map<string, Set<string>>();
 
-/** Clear failed decryption cache (call on logout) */
+export function isFailedDecryption(conversationId: string, messageId: string): boolean {
+  return _failedDecryptionIds.get(conversationId)?.has(messageId) ?? false;
+}
+
+export function markDecryptionFailed(conversationId: string, messageId: string): void {
+  let ids = _failedDecryptionIds.get(conversationId);
+  if (!ids) {
+    ids = new Set();
+    _failedDecryptionIds.set(conversationId, ids);
+  }
+  ids.add(messageId);
+}
+
+/** Remove a single message from the failed set (e.g. after a message edit clears a prior failure). */
+export function clearMessageFailedDecryption(conversationId: string, messageId: string): void {
+  _failedDecryptionIds.get(conversationId)?.delete(messageId);
+}
+
+/** Clear failed decryptions for a single conversation (e.g. after a session reset). */
+export function clearConversationFailedDecryptions(conversationId: string): void {
+  _failedDecryptionIds.delete(conversationId);
+}
+
+/** Clear ALL failed decryption state (call on logout or full key wipe). */
 export function clearFailedDecryptions(): void {
-  failedDecryptionIds.clear();
+  _failedDecryptionIds.clear();
 }
 
 interface UseMessagesQueryOptions {
@@ -152,7 +176,7 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
         }
 
         // 4. Already failed — don't retry
-        if (failedDecryptionIds.has(msg.id)) {
+        if (isFailedDecryption(msg.conversationId, msg.id)) {
           processedMessages.push({ ...msg, content: '[Unable to decrypt message]' });
           continue;
         }
@@ -193,7 +217,7 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
           if (isChunkLoadError(err)) { window.location.reload(); }
           log.message.error(`[useMessagesQuery] Failed to decrypt message ${msg.id}:`, err);
           // 8. Mark as permanently failed — never retry this message
-          failedDecryptionIds.add(msg.id);
+          markDecryptionFailed(msg.conversationId, msg.id);
           // Show friendly message for legacy v1 encryption vs genuine failures
           const isLegacy = err instanceof Error && 'code' in err && (err as { code: string }).code === 'LEGACY_VERSION';
           const fallback = isLegacy

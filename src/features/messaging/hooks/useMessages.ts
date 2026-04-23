@@ -18,7 +18,12 @@ import { useEffect, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { socketClient } from '@/lib/socket';
 import { queryKeys } from '@/lib/queryClient';
-import { useMessagesQuery, failedDecryptionIds } from './useMessagesQuery';
+import {
+  useMessagesQuery,
+  isFailedDecryption,
+  markDecryptionFailed,
+  clearMessageFailedDecryption,
+} from './useMessagesQuery';
 import { isPendingDelete, isPendingEdit } from './useMessageActions';
 import { isRecentlySentMessage } from './useSendMessage';
 import { nowUTC } from '@/lib/dateUtils';
@@ -84,7 +89,7 @@ async function decryptMessageContent(
   }
 
   // Skip already-failed messages (shared with useMessagesQuery)
-  if (failedDecryptionIds.has(message.id)) {
+  if (isFailedDecryption(message.conversationId, message.id)) {
     return '[Unable to decrypt message]';
   }
 
@@ -138,7 +143,7 @@ async function decryptMessageContent(
     }
 
     // For DM failures and non-recoverable errors: track as permanently failed
-    failedDecryptionIds.add(message.id);
+    markDecryptionFailed(message.conversationId, message.id);
     return isLegacy
       ? '[This message uses an older encryption version]'
       : '[Unable to decrypt message]';
@@ -733,7 +738,7 @@ export function useMessages(
 
             // Cache the decrypted content and clear any prior failure
             cacheDecryptedContent(messageId, plaintext, conversationId);
-            failedDecryptionIds.delete(messageId);
+            clearMessageFailedDecryption(conversationId, messageId);
 
             queryClient.setQueryData(
               queryKeys.messages.list(conversationId, { limit }),
@@ -779,7 +784,7 @@ export function useMessages(
       } else {
         // Plaintext content (legacy path or non-encrypted conversation)
         cacheDecryptedContent(messageId, rawContent, conversationId);
-        failedDecryptionIds.delete(messageId);
+        clearMessageFailedDecryption(conversationId, messageId);
 
         queryClient.setQueryData(
           queryKeys.messages.list(conversationId, { limit }),

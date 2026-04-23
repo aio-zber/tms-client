@@ -8,9 +8,9 @@ export const ENCRYPTION_VERSION = 2;
 export const ALGORITHM = 'XSalsa20-Poly1305'; // libsodium crypto_secretbox_easy
 
 // Key sizes in bytes
-export const KEY_SIZE = 32; // 256 bits for AES-256
-export const NONCE_SIZE = 24; // 192 bits for XChaCha20 nonce (libsodium)
-export const AUTH_TAG_SIZE = 16; // 128 bits for GCM auth tag
+export const KEY_SIZE = 32; // 256-bit key for XSalsa20-Poly1305
+export const NONCE_SIZE = 24; // 192-bit nonce for XSalsa20-Poly1305 (crypto_secretbox_easy)
+export const AUTH_TAG_SIZE = 16; // 128-bit Poly1305 auth tag
 
 // X3DH Parameters
 export const IDENTITY_KEY_TYPE = 'X25519';
@@ -23,7 +23,7 @@ export const CONVERSATION_KEY_INFO = 'TMA-ConversationKey';
 
 // IndexedDB Configuration
 export const CRYPTO_DB_NAME = 'tma-e2ee-keys';
-export const CRYPTO_DB_VERSION = 8;
+export const CRYPTO_DB_VERSION = 9;
 
 // Group key constants
 // GROUP_KEY_SENTINEL is used as the userId when storing the shared group
