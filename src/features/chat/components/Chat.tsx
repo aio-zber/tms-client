@@ -119,79 +119,90 @@ export function Chat({
     if (!conversation || conversation.type !== 'group' || !currentUserId || !encryptionInitStatus) return;
     if (encryptionInitStatus !== 'ready') return;
 
-    // Skip if already synced for this conversation this session.
-    if (syncedGroupsRef.current.has(conversationId)) return;
-    syncedGroupsRef.current.add(conversationId);
-
     const memberIds = conversation.members
       .map((m: { userId: string }) => m.userId)
       .filter((id: string) => id !== currentUserId);
 
     if (memberIds.length === 0) return;
 
-    // Defer the entire key-sync operation so the UI renders cached messages first.
-    // This is exactly how Messenger handles it: render first, sync keys in background.
-    const timer = setTimeout(() => {
-      import('@/features/encryption').then(async ({ encryptionService }) => {
-        if (!encryptionService.isInitialized()) return;
+    // rAF ensures the browser paints cached messages before any network I/O starts
+    // (render-first, sync-keys-in-background — Messenger pattern).
+    // The inner setTimeout(0) yields the JS thread so scroll/input handlers stay
+    // responsive during the async key-sync work.
+    // The ref is marked INSIDE the callback (not before) so that React StrictMode's
+    // double-invoke of effects — which cancels the first timer before it fires —
+    // leaves the ref clean for the second run, guaranteeing exactly one sync per mount.
+    let timeoutHandle: ReturnType<typeof setTimeout>;
 
-        let groupKeyLoaded = false;
+    const rafHandle = requestAnimationFrame(() => {
+      timeoutHandle = setTimeout(() => {
+        if (syncedGroupsRef.current.has(conversationId)) return;
+        syncedGroupsRef.current.add(conversationId);
 
-        // 1. Fetch existing group keys from the server for all group members.
-        try {
-          const { apiClient } = await import('@/lib/apiClient');
-          const response = await apiClient.get<{
-            sender_keys: Array<{
-              sender_id: string;
-              key_id: string;
-              public_signing_key: string;
-              chain_key: string | null;
-            }>;
-          }>(`/encryption/sender-keys/${conversationId}`);
-          const senderKeys = response?.sender_keys;
+        import('@/features/encryption').then(async ({ encryptionService }) => {
+          if (!encryptionService.isInitialized()) return;
 
-          if (senderKeys && senderKeys.length > 0) {
-            for (const sk of senderKeys) {
-              if (sk.sender_id === currentUserId) continue;
-              await encryptionService.receiveSenderKeyDistribution({
-                conversation_id: conversationId,
-                sender_id: sk.sender_id,
-                key_id: sk.key_id,
-                public_signing_key: sk.public_signing_key,
-                chain_key: sk.chain_key,
-              });
-              groupKeyLoaded = true;
+          let groupKeyLoaded = false;
+
+          // 1. Fetch existing group keys from the server for all group members.
+          try {
+            const { apiClient } = await import('@/lib/apiClient');
+            const response = await apiClient.get<{
+              sender_keys: Array<{
+                sender_id: string;
+                key_id: string;
+                public_signing_key: string;
+                chain_key: string | null;
+              }>;
+            }>(`/encryption/sender-keys/${conversationId}`);
+            const senderKeys = response?.sender_keys;
+
+            if (senderKeys && senderKeys.length > 0) {
+              for (const sk of senderKeys) {
+                if (sk.sender_id === currentUserId) continue;
+                await encryptionService.receiveSenderKeyDistribution({
+                  conversation_id: conversationId,
+                  sender_id: sk.sender_id,
+                  key_id: sk.key_id,
+                  public_signing_key: sk.public_signing_key,
+                  chain_key: sk.chain_key,
+                });
+                groupKeyLoaded = true;
+              }
+              log.debug(`[Chat] Loaded group keys from server for ${conversationId}`);
             }
-            log.debug(`[Chat] Loaded group keys from server for ${conversationId}`);
+          } catch (err) {
+            log.warn('[Chat] Failed to fetch group sender keys:', err);
           }
-        } catch (err) {
-          log.warn('[Chat] Failed to fetch group sender keys:', err);
-        }
 
-        // 2. Distribute our own group key to all members.
-        // encryptionService.distributeSenderKey is also guarded by distributedGroupKeys
-        // (module-level Set) — double protection against concurrent calls.
-        try {
-          await encryptionService.distributeSenderKey(conversationId, currentUserId, memberIds);
-          log.debug(`[Chat] Distributed group key to ${memberIds.length} members`);
-        } catch (err) {
-          log.warn('[Chat] Failed to distribute group key:', err);
-        }
+          // 2. Distribute our own group key to all members.
+          // encryptionService.distributeSenderKey is also guarded by distributedGroupKeys
+          // (module-level Set) — double protection against concurrent calls.
+          try {
+            await encryptionService.distributeSenderKey(conversationId, currentUserId, memberIds);
+            log.debug(`[Chat] Distributed group key to ${memberIds.length} members`);
+          } catch (err) {
+            log.warn('[Chat] Failed to distribute group key:', err);
+          }
 
-        // 3. Only invalidate the message cache if we actually received new keys.
-        //    Avoid unnecessary re-fetches on every conversation revisit.
-        if (groupKeyLoaded) {
-          const { clearFailedDecryptions } = await import('@/features/messaging/hooks/useMessagesQuery');
-          clearFailedDecryptions();
-          queryClient.invalidateQueries({
-            queryKey: [...queryKeys.messages.lists(), conversationId],
-          });
-          log.debug('[Chat] Group key loaded — invalidated message cache for re-decryption');
-        }
-      }).catch(() => {});
-    }, 0); // setTimeout(0) yields to the browser to render the cached messages first
+          // 3. Only invalidate the message cache if we actually received new keys.
+          //    Avoid unnecessary re-fetches on every conversation revisit.
+          if (groupKeyLoaded) {
+            const { clearFailedDecryptions } = await import('@/features/messaging/hooks/useMessagesQuery');
+            clearFailedDecryptions();
+            queryClient.invalidateQueries({
+              queryKey: [...queryKeys.messages.lists(), conversationId],
+            });
+            log.debug('[Chat] Group key loaded — invalidated message cache for re-decryption');
+          }
+        }).catch(() => {});
+      }, 0);
+    });
 
-    return () => clearTimeout(timer);
+    return () => {
+      cancelAnimationFrame(rafHandle);
+      clearTimeout(timeoutHandle);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId, conversation?.type, currentUserId, encryptionInitStatus, queryClient]);
 
