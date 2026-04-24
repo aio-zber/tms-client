@@ -127,8 +127,12 @@ export function Chat({
     if (encryptionInitStatus !== 'ready') return;
 
     // Skip if already synced for this conversation this session.
+    // NOTE: The check is intentionally placed here (outside the timer) so that
+    // re-renders don't re-schedule. The ref is only *written* inside the timer
+    // so that StrictMode's double-invocation works correctly: the first effect's
+    // timer is cancelled by cleanup before it fires (so the ref stays unset), and
+    // the second effect's timer fires and marks the ref — exactly one sync runs.
     if (syncedGroupsRef.current.has(conversationId)) return;
-    syncedGroupsRef.current.add(conversationId);
 
     const memberIds = conversation.members
       .map((m: { userId: string }) => m.userId)
@@ -137,8 +141,19 @@ export function Chat({
     if (memberIds.length === 0) return;
 
     // Defer the entire key-sync operation so the UI renders cached messages first.
-    // This is exactly how Messenger handles it: render first, sync keys in background.
-    const timer = setTimeout(() => {
+    // requestAnimationFrame guarantees a paint cycle completes before the macrotask
+    // fires — this is exactly how Messenger handles it: render first, sync keys in
+    // background. The nested setTimeout ensures we yield to the macrotask queue
+    // after the paint so network calls don't block the first frame.
+    let timeoutHandle: ReturnType<typeof setTimeout>;
+
+    const groupKeySyncFn = () => {
+      // Double-check inside the timer: guards against the case where two timers
+      // were scheduled before either fired (should not happen with the outer
+      // check, but this is a belt-and-suspenders guard).
+      if (syncedGroupsRef.current.has(conversationId)) return;
+      syncedGroupsRef.current.add(conversationId);
+
       import('@/features/encryption').then(async ({ encryptionService }) => {
         if (!encryptionService.isInitialized()) return;
 
@@ -202,9 +217,18 @@ export function Chat({
           log.debug('[Chat] Group key loaded — invalidated message cache for re-decryption');
         }
       }).catch(() => {});
-    }, 0); // setTimeout(0) yields to the browser to render the cached messages first
+    };
 
-    return () => clearTimeout(timer);
+    // requestAnimationFrame → setTimeout(0): guarantees one paint cycle before
+    // network calls fire (cached messages are visible before any loading occurs).
+    const rafHandle = requestAnimationFrame(() => {
+      timeoutHandle = setTimeout(groupKeySyncFn, 0);
+    });
+
+    return () => {
+      cancelAnimationFrame(rafHandle);
+      clearTimeout(timeoutHandle);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId, conversation?.type, currentUserId, encryptionInitStatus, queryClient]);
 
@@ -301,35 +325,36 @@ export function Chat({
       }
     } catch { /* E2EE not available — send unencrypted */ }
 
-    const message = await sendMessage(
-      {
-        conversation_id: conversationId,
-        content,
-        type: 'TEXT',
-        reply_to_id: replyToId,
-      },
-      // onOptimisticAdd: called immediately with temp message (Messenger pattern)
-      (optimisticMessage) => {
-        addOptimisticMessage(optimisticMessage);
-        // Only fire onMessageSent for the real message (checked by id prefix below)
-      },
-      encryptionOptions,
-      // onReplaceOptimistic: called after send completes — swaps temp with real message
-      // and patches the sidebar to show plaintext immediately (no more "Encrypted Message")
-      (tempId, realMessage) => {
-        replaceOptimisticMessage(tempId, realMessage);
-        // Patch sidebar to show decrypted content — decryptedContentCache is already
-        // populated by cacheDecryptedContent() in useSendMessage at this point
-        patchSidebarLastMessageContent(queryClient, conversationId, realMessage.id, realMessage.content);
-        onMessageSent?.(realMessage);
-      },
-    );
+    try {
+      const message = await sendMessage(
+        {
+          conversation_id: conversationId,
+          content,
+          type: 'TEXT',
+          reply_to_id: replyToId,
+        },
+        (optimisticMessage) => {
+          addOptimisticMessage(optimisticMessage);
+        },
+        encryptionOptions,
+        (tempId, realMessage) => {
+          replaceOptimisticMessage(tempId, realMessage);
+          patchSidebarLastMessageContent(queryClient, conversationId, realMessage.id, realMessage.content);
+          onMessageSent?.(realMessage);
+        },
+      );
 
-    if (message) {
-      log.debug('[Chat] Message confirmed:', message.id);
-      setReplyToMessage(undefined);
-    } else {
-      log.error('[Chat] Failed to send message');
+      if (message) {
+        log.debug('[Chat] Message confirmed:', message.id);
+        setReplyToMessage(undefined);
+      } else {
+        log.error('[Chat] Failed to send message');
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message === 'ENCRYPTION_FAILED') {
+        const toast = (await import('react-hot-toast')).default;
+        toast.error('Message could not be encrypted — not sent. Please try again.');
+      }
     }
   };
 

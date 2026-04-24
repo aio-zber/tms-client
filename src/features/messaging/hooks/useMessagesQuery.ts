@@ -26,25 +26,35 @@ function isChunkLoadError(err: unknown): boolean {
   return err.name === 'ChunkLoadError' || err.message.includes('Loading chunk');
 }
 
-// Track permanently failed decryptions keyed by conversationId → Set<messageId>
+// Track failed decryptions keyed by conversationId → Map<messageId, failedAtTimestamp>
 // Per-conversation scoping allows surgical clearing after a session reset
 // without affecting failures from unrelated conversations.
-const _failedDecryptionIds = new Map<string, Set<string>>();
+// Entries expire after FAILED_DECRYPTION_TTL_MS to allow automatic retry.
+const _failedDecryptionIds = new Map<string, Map<string, number>>();
+const FAILED_DECRYPTION_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 export function isFailedDecryption(conversationId: string, messageId: string): boolean {
-  return _failedDecryptionIds.get(conversationId)?.has(messageId) ?? false;
+  const inner = _failedDecryptionIds.get(conversationId);
+  const failedAt = inner?.get(messageId);
+  if (failedAt === undefined) return false;
+  // Expired entry — treat as not failed so decryption is retried
+  if (Date.now() - failedAt >= FAILED_DECRYPTION_TTL_MS) {
+    inner!.delete(messageId);
+    return false;
+  }
+  return true;
 }
 
 export function markDecryptionFailed(conversationId: string, messageId: string): void {
   let ids = _failedDecryptionIds.get(conversationId);
   if (!ids) {
-    ids = new Set();
+    ids = new Map();
     _failedDecryptionIds.set(conversationId, ids);
   }
-  ids.add(messageId);
+  ids.set(messageId, Date.now());
 }
 
-/** Remove a single message from the failed set (e.g. after a message edit clears a prior failure). */
+/** Remove a single message from the failed map (e.g. after a message edit clears a prior failure). */
 export function clearMessageFailedDecryption(conversationId: string, messageId: string): void {
   _failedDecryptionIds.get(conversationId)?.delete(messageId);
 }
