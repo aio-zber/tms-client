@@ -7,7 +7,7 @@
  * - Raw ciphertext NEVER reaches the UI — encrypted content is replaced immediately
  * - Decrypted content is cached; failed decryptions are cached as placeholders
  * - Sender's own messages use locally cached plaintext (Double Ratchet encrypts for recipient only)
- * - Decryption is attempted once per message; failures are not retried on refetch
+ * - Failed decryptions expire after 5 minutes and are retried on refetch (important for late group keys)
  */
 
 import { useMemo } from 'react';
@@ -26,11 +26,55 @@ function isChunkLoadError(err: unknown): boolean {
   return err.name === 'ChunkLoadError' || err.message.includes('Loading chunk');
 }
 
-// Track message IDs that permanently failed decryption so we never retry
-// Exported so useMessages (WS path) can also check/update this set
-export const failedDecryptionIds = new Set<string>();
+/** How long a failed decryption is suppressed before being retried (ms). */
+const FAILED_DECRYPTION_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
-/** Clear failed decryption cache (call on logout) */
+/**
+ * Track message IDs that failed decryption, per conversation, with a timestamp.
+ * Outer key: conversationId. Inner key: messageId. Value: failedAt timestamp (ms).
+ * Entries expire after FAILED_DECRYPTION_TTL_MS so late-arriving group keys can trigger a retry.
+ */
+export const failedDecryptionIds = new Map<string, Map<string, number>>();
+
+/** Returns true when a message is within its suppression window (should not be retried yet). */
+function isDecryptionSuppressed(conversationId: string, messageId: string): boolean {
+  const inner = failedDecryptionIds.get(conversationId);
+  if (!inner) return false;
+  const failedAt = inner.get(messageId);
+  if (failedAt === undefined) return false;
+  if (Date.now() - failedAt >= FAILED_DECRYPTION_TTL_MS) {
+    // Entry has expired — remove it and allow retry
+    inner.delete(messageId);
+    if (inner.size === 0) failedDecryptionIds.delete(conversationId);
+    return false;
+  }
+  return true;
+}
+
+/** Mark a message as having failed decryption (starts the 5-minute suppression window). */
+export function markDecryptionFailed(conversationId: string, messageId: string): void {
+  let inner = failedDecryptionIds.get(conversationId);
+  if (!inner) {
+    inner = new Map<string, number>();
+    failedDecryptionIds.set(conversationId, inner);
+  }
+  inner.set(messageId, Date.now());
+}
+
+/** Remove a single failed-decryption entry so the next refetch will retry. */
+export function clearMessageFailedDecryption(conversationId: string, messageId: string): void {
+  const inner = failedDecryptionIds.get(conversationId);
+  if (!inner) return;
+  inner.delete(messageId);
+  if (inner.size === 0) failedDecryptionIds.delete(conversationId);
+}
+
+/** Remove all failed-decryption entries for a conversation (e.g. after a group key arrives). */
+export function clearConversationFailedDecryptions(conversationId: string): void {
+  failedDecryptionIds.delete(conversationId);
+}
+
+/** Clear all failed decryption state (call on logout). */
 export function clearFailedDecryptions(): void {
   failedDecryptionIds.clear();
 }
@@ -149,8 +193,8 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
           continue;
         }
 
-        // 4. Already failed — don't retry
-        if (failedDecryptionIds.has(msg.id)) {
+        // 4. Already failed recently — skip until the suppression window expires
+        if (isDecryptionSuppressed(msg.conversationId, msg.id)) {
           processedMessages.push({ ...msg, content: '[Unable to decrypt message]' });
           continue;
         }
@@ -190,8 +234,8 @@ export function useMessagesQuery(options: UseMessagesQueryOptions) {
           // ChunkLoadError means the encryption module chunk hash changed after deploy — reload
           if (isChunkLoadError(err)) { window.location.reload(); }
           log.message.error(`[useMessagesQuery] Failed to decrypt message ${msg.id}:`, err);
-          // 8. Mark as permanently failed — never retry this message
-          failedDecryptionIds.add(msg.id);
+          // 8. Mark as temporarily failed — will be retried after FAILED_DECRYPTION_TTL_MS
+          markDecryptionFailed(msg.conversationId, msg.id);
           // Show friendly message for legacy v1 encryption vs genuine failures
           const isLegacy = err instanceof Error && 'code' in err && (err as { code: string }).code === 'LEGACY_VERSION';
           const fallback = isLegacy

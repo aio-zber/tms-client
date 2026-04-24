@@ -18,7 +18,12 @@ import { useEffect, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { socketClient } from '@/lib/socket';
 import { queryKeys } from '@/lib/queryClient';
-import { useMessagesQuery, failedDecryptionIds } from './useMessagesQuery';
+import {
+  useMessagesQuery,
+  failedDecryptionIds,
+  markDecryptionFailed,
+  clearConversationFailedDecryptions,
+} from './useMessagesQuery';
 import { isPendingDelete } from './useMessageActions';
 import { isRecentlySentMessage } from './useSendMessage';
 import { nowUTC } from '@/lib/dateUtils';
@@ -82,8 +87,9 @@ async function decryptMessageContent(
     return message.content;
   }
 
-  // Skip already-failed messages (shared with useMessagesQuery)
-  if (failedDecryptionIds.has(message.id)) {
+  // Skip already-failed messages that are within the suppression window
+  const inner = failedDecryptionIds.get(message.conversationId);
+  if (inner?.has(message.id)) {
     return '[Unable to decrypt message]';
   }
 
@@ -130,14 +136,12 @@ async function decryptMessageContent(
     const isGroupKeyMissing = error instanceof Error && 'code' in error && (error as { code: string }).code === 'SESSION_NOT_FOUND' && isGroup;
 
     if (isGroupKeyMissing) {
-      // Don't permanently blacklist — the Chat.tsx useEffect will fetch the sender key
-      // and then clear failedDecryptionIds + invalidate the cache for a retry.
-      // Returning a placeholder here; useMessagesQuery will re-decrypt on cache invalidation.
+      // Don't mark as failed — the group-key-received event will clear and retry.
       return '[Unable to decrypt message]';
     }
 
-    // For DM failures and non-recoverable errors: track as permanently failed
-    failedDecryptionIds.add(message.id);
+    // For DM failures and non-recoverable errors: track as temporarily failed
+    markDecryptionFailed(message.conversationId, message.id);
     return isLegacy
       ? '[This message uses an older encryption version]'
       : '[Unable to decrypt message]';
@@ -303,6 +307,22 @@ export function useMessages(
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId]); // Only depend on conversationId to prevent running on every message update
+
+  // When a group key arrives (via WS or Chat.tsx fetch), clear failed decryption state
+  // for this conversation and re-fetch so previously undecryptable messages are retried.
+  useEffect(() => {
+    if (!conversationId) return;
+    const handler = (e: Event) => {
+      const { conversationId: evtConvId } = (e as CustomEvent<{ conversationId: string }>).detail;
+      if (evtConvId !== conversationId) return;
+      clearConversationFailedDecryptions(conversationId);
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.messages.list(conversationId, { limit }),
+      });
+    };
+    window.addEventListener('group-key-received', handler);
+    return () => window.removeEventListener('group-key-received', handler);
+  }, [conversationId, queryClient, limit]);
 
   // Add message optimistically (for sender's own messages)
   const addOptimisticMessage = useCallback((message: Message) => {
@@ -1025,6 +1045,7 @@ export function useMessages(
     // Listen for E2EE sender key distribution events
     const handleSenderKeyDistribution = (data: Record<string, unknown>) => {
       log.message.debug('[useMessages] Received sender key distribution:', data);
+      const distConvId = (data.conversation_id ?? data.conversationId) as string;
       import('@/features/encryption').then(({ encryptionService }) => {
         encryptionService.receiveSenderKeyDistribution(data as {
           conversation_id: string;
@@ -1032,6 +1053,13 @@ export function useMessages(
           key_id: string;
           chain_key: string;
           public_signing_key: string;
+        }).then(() => {
+          // Notify any listener (e.g. the group-key retry effect) that a new key arrived
+          if (typeof window !== 'undefined' && distConvId) {
+            window.dispatchEvent(new CustomEvent('group-key-received', {
+              detail: { conversationId: distConvId },
+            }));
+          }
         }).catch((err: unknown) => {
           log.message.error('[useMessages] Failed to process sender key distribution:', err);
         });
