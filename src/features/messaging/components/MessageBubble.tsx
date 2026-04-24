@@ -8,6 +8,7 @@
 import { log } from '@/lib/logger';
 import { useState, useRef, useEffect, memo, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { formatMessageTimestamp } from '@/lib/dateUtils';
 import { Check, CheckCheck, Reply, Trash2, Smile, Edit, Download, File, FileText, FileSpreadsheet, Play, Copy } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -22,6 +23,8 @@ import { VideoPlayer } from './VideoPlayer';
 import { VideoLightbox } from './VideoLightbox';
 import { VoiceMessagePlayer } from './VoiceMessagePlayer';
 import { decryptedContentCache } from '../hooks/useMessages';
+import { clearMessageFailedDecryption } from '../hooks/useMessagesQuery';
+import { queryKeys } from '@/lib/queryClient';
 import { getApiBaseUrl, STORAGE_KEYS } from '@/lib/constants';
 import { useEncryptionStore } from '@/features/encryption/stores/keyStore';
 import { Lock } from 'lucide-react';
@@ -40,6 +43,8 @@ interface MessageBubbleProps {
   showSender?: boolean;
   senderName?: string;
   currentUserId?: string;
+  /** Used by the per-message Retry button to clear the failed-decryption entry and refetch. */
+  conversationId?: string;
   onEdit?: (messageId: string) => void;
   onDelete?: (messageId: string, scope: 'me' | 'everyone') => void;
   onReply?: (message: Message) => void;
@@ -70,6 +75,7 @@ export const MessageBubble = memo(function MessageBubble({
   showSender = false,
   senderName,
   currentUserId,
+  conversationId,
   onEdit,
   onDelete,
   onReply,
@@ -84,6 +90,7 @@ export const MessageBubble = memo(function MessageBubble({
   // E2EE init status — gates media decryption so encrypted files are not decrypted
   // before the user has entered their PIN (needs_restore / uninitialized state).
   const encryptionInitStatus = useEncryptionStore((s) => s.initStatus);
+  const queryClient = useQueryClient();
 
   const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -891,6 +898,23 @@ export const MessageBubble = memo(function MessageBubble({
                 message.deletedAt ? 'italic opacity-60' : ''
               }`}>
                 {highlightedContent}
+                {/* Retry button for permanently failed decryptions */}
+                {message.encrypted && message.content === '[Unable to decrypt message]' && conversationId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      clearMessageFailedDecryption(conversationId, message.id);
+                      // Prefix-match invalidation: hits all limit variants for this conversation
+                      // without hardcoding the limit value used by the parent hook.
+                      queryClient.invalidateQueries({
+                        queryKey: [...queryKeys.messages.lists(), conversationId],
+                      });
+                    }}
+                    className="text-xs text-blue-500 underline ml-1 hover:text-blue-700"
+                  >
+                    Retry
+                  </button>
+                )}
               </div>
 
               {/* Metadata (edited label and status only, NO timestamp) */}

@@ -15,6 +15,8 @@ export {
   isInitialized as isEncryptionInitialized,
   clearEncryptionData,
   resetConversationSession,
+  confirmMessageSent,
+  rotateAndInvalidateGroupKey,
 } from './services/encryptionService';
 
 // Hooks

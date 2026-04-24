@@ -47,6 +47,7 @@ import {
   decryptGroupMessage,
   getOrCreateGroupKey,
   hasGroupKey,
+  rotateGroupKey,
   storeReceivedGroupKey,
 } from './groupCryptoService';
 import { getIdentityKey, hasIdentityKey, getIdentityKeyUserId } from '../db/cryptoDb';
@@ -76,6 +77,9 @@ const pendingX3DHHeaders = new Map<string, X3DHHeader>();
 // Encryption initialization status
 let initStatus: EncryptionInitStatus = 'uninitialized';
 
+// Singleton init promise — shared across all concurrent callers (Bug 19)
+let _initPromise: Promise<void> | null = null;
+
 // Per-conversation group key recovery deduplication.
 // Maps conversationId → in-flight recovery Promise (or resolved true/false).
 // Ensures tryRecoverGroupKey is called at most once per conversation per session,
@@ -98,17 +102,12 @@ const distributedGroupKeys = new Set<string>();
  */
 export async function initialize(forceUploadBundle = false): Promise<void> {
   if (initStatus === 'ready') return;
-  if (initStatus === 'initializing') {
-    // Wait for existing initialization
-    while (initStatus === 'initializing') {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    return;
-  }
+  // All concurrent callers share one Promise — no spin-wait (Bug 19)
+  if (_initPromise !== null) return _initPromise;
 
-  initStatus = 'initializing';
-
+  _initPromise = (async () => {
   try {
+    initStatus = 'initializing';
     // Initialize libsodium
     await initCrypto();
 
@@ -199,7 +198,12 @@ export async function initialize(forceUploadBundle = false): Promise<void> {
       'INIT_FAILED',
       error as Error
     );
+  } finally {
+    _initPromise = null;
   }
+  })();
+
+  return _initPromise;
 }
 
 /**
@@ -209,6 +213,7 @@ export async function initialize(forceUploadBundle = false): Promise<void> {
  * initStatus is still 'ready' from the pre-restore initialization.
  */
 export async function reinitialize(): Promise<void> {
+  _initPromise = null;
   initStatus = 'uninitialized';
   useEncryptionStore.getState().setInitStatus('uninitialized');
 
@@ -535,13 +540,28 @@ async function uploadConversationKeyBackup(
     // Encrypt with our own identity private key (32-byte X25519)
     const { ciphertext, nonce } = encrypt(payload, ourKeys.identityKeyPair.privateKey);
 
-    await apiClient.post(`${ENCRYPTION_API}/keys/conversation`, {
+    // Retry once on failure — network glitches should not silently drop key backups (Bug 9)
+    const requestPayload = {
       conversation_id: conversationId,
       encrypted_key: toBase64(ciphertext),
       nonce: toBase64(nonce),
-    });
-
-    log.encryption.debug(`Conversation key backup uploaded for ${conversationId}`);
+    };
+    let attempt = 0;
+    while (attempt < 2) {
+      try {
+        await apiClient.post(`${ENCRYPTION_API}/keys/conversation`, requestPayload);
+        log.encryption.debug(`Conversation key backup uploaded for ${conversationId}`);
+        return;
+      } catch (err: unknown) {
+        attempt++;
+        if (attempt >= 2) {
+          log.encryption.error(`[E2EE] Conversation key backup upload failed after retry for ${conversationId}:`, err);
+          // Non-critical — X3DH recovery remains as fallback, don't throw
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    }
   } catch (err) {
     // Non-critical — X3DH recovery remains as fallback
     log.encryption.warn(`Conversation key backup upload failed for ${conversationId}:`, err);
@@ -807,13 +827,29 @@ export async function encryptDirectMessage(
   // Serialize encrypted message
   const encryptedContent = serializeEncryptedMessage(encrypted);
 
-  // Consume the pending header after first message (one-time use)
+  // NOTE: Do NOT consume pendingX3DHHeaders here (Bug 8).
+  // The header must survive a network failure so retries still include it.
+  // Call confirmMessageSent() only after a successful server acknowledgement.
   if (header) {
-    pendingX3DHHeaders.delete(sessionKey);
     log.encryption.debug(`X3DH header included for first message to ${recipientId}`);
   }
 
   return { encryptedContent, header };
+}
+
+/**
+ * Mark a direct message as successfully sent — consumes the pending X3DH header
+ * so it is not re-sent on the next message (one-time use, Signal/Viber pattern).
+ *
+ * Must be called by the caller only after the server has acknowledged the send.
+ * This prevents the header from being lost on network retries (Bug 8).
+ */
+export function confirmMessageSent(conversationId: string, recipientId: string): void {
+  const sessionKey = `${conversationId}:${recipientId}`;
+  if (pendingX3DHHeaders.has(sessionKey)) {
+    pendingX3DHHeaders.delete(sessionKey);
+    log.encryption.debug(`X3DH header confirmed sent for ${conversationId}:${recipientId}`);
+  }
 }
 
 /**
@@ -937,17 +973,15 @@ export async function encryptGroupMessageContent(
     await initialize();
   }
 
-  // isNewKey: true if this is the first time we're encrypting for this group
-  // (no group key existed yet). Signals the caller to AWAIT distribution before sending.
-  const isNewKey = !(await hasGroupKey(conversationId));
-
   const plaintext = stringToBytes(content);
-  const encrypted = await encryptGroupMessage(conversationId, plaintext);
+  // wasCreated is set atomically inside getOrCreateGroupKey — no TOCTOU race.
+  const { encrypted, wasCreated } = await encryptGroupMessage(conversationId, plaintext);
 
   return {
     encryptedContent: serializeEncryptedMessage(encrypted),
     senderKeyId: encrypted.senderKeyId ?? '',
-    isNewKey,
+    // isNewKey reflects whether a new key was just generated (not a stale pre-call check).
+    isNewKey: wasCreated,
   };
 }
 
@@ -1144,6 +1178,8 @@ function tryRecoverGroupKey(conversationId: string): Promise<boolean> {
       await storeReceivedGroupKey(conversationId, conversationKey, groupKeyId);
 
       log.encryption.info(`Group key recovered from backup for ${conversationId}`);
+      // Expire success entry after 60s so key rotation can trigger a fresh recovery (Bug 18)
+      setTimeout(() => groupKeyRecoveryCache.delete(conversationId), 60_000);
       return true;
     } catch {
       // Remove from cache on failure so a later manual retry can try again
@@ -1189,7 +1225,7 @@ export async function distributeSenderKey(
 
   // Get or create: if recovery succeeded we use the recovered key; only generates a new
   // random key if this is genuinely a brand-new group with no backup on the server yet.
-  const session = await getOrCreateGroupKey(conversationId);
+  const { session } = await getOrCreateGroupKey(conversationId);
 
   // Encrypt the group key per-recipient (WhatsApp/Signal pattern).
   // Each recipient's copy is encrypted with ECDH so the server never sees the plaintext key.
@@ -1311,6 +1347,21 @@ export async function receiveSenderKeyDistribution(
  */
 export function invalidateGroupKeyDistribution(conversationId: string): void {
   distributedGroupKeys.delete(conversationId);
+}
+
+/**
+ * Atomically rotate the group key AND invalidate all session-level caches for a conversation.
+ *
+ * Combines rotateGroupKey + distributedGroupKeys.delete + groupKeyRecoveryCache.delete
+ * so that the very next distributeSenderKey call distributes the new key and the next
+ * decryption attempt can recover the rotated key from the server backup (Bug 10).
+ *
+ * @param conversationId - Group conversation ID
+ */
+export async function rotateAndInvalidateGroupKey(conversationId: string): Promise<void> {
+  await rotateGroupKey(conversationId);
+  distributedGroupKeys.delete(conversationId);
+  groupKeyRecoveryCache.delete(conversationId);
 }
 
 // ==================== Per-Recipient Group Key Encryption (WhatsApp pattern) ====================
@@ -1436,6 +1487,7 @@ export async function clearEncryptionData(): Promise<void> {
   processingX3DH.clear();
   groupKeyRecoveryCache.clear();
   distributedGroupKeys.clear();
+  _initPromise = null;
   initStatus = 'uninitialized';
   log.encryption.info('Encryption data cleared');
 }
@@ -1562,6 +1614,8 @@ export const encryptionService = {
   decryptFile,
   distributeSenderKey,
   invalidateGroupKeyDistribution,
+  rotateAndInvalidateGroupKey,
+  confirmMessageSent,
   receiveSenderKeyDistribution,
   serializeX3DHHeader,
   deserializeX3DHHeader,

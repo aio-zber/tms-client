@@ -157,6 +157,26 @@ export function patchSidebarLastMessageContent(
   );
 }
 
+// ==================== Sidebar Decryption Semaphore ====================
+// Limit concurrent sidebar decryption operations to prevent chain-key corruption
+// under high message volume (e.g. multiple conversations receiving messages simultaneously).
+const MAX_CONCURRENT_SIDEBAR_DECRYPTS = 3;
+let _sidebarDecryptRunning = 0;
+const _sidebarDecryptQueue: Array<() => void> = [];
+
+async function withSidebarDecryptLimit<T>(fn: () => Promise<T>): Promise<T> {
+  if (_sidebarDecryptRunning >= MAX_CONCURRENT_SIDEBAR_DECRYPTS) {
+    await new Promise<void>(resolve => _sidebarDecryptQueue.push(resolve));
+  }
+  _sidebarDecryptRunning++;
+  try {
+    return await fn();
+  } finally {
+    _sidebarDecryptRunning--;
+    _sidebarDecryptQueue.shift()?.();
+  }
+}
+
 // ==================== Singleton Socket Manager ====================
 // useConversations is mounted in multiple components (ConversationList, UserProfileDialog).
 // If each instance registers its own socket.on('new_message') listener, Socket.IO
@@ -317,25 +337,9 @@ export function useConversations(
         import('@/features/encryption').then(async ({ encryptionService }) => {
           if (!encryptionService.isInitialized()) return;
 
-          if (isOwnMessage) {
-            await new Promise((r) => setTimeout(r, 200));
-            const { cacheDecryptedContent, decryptedContentCache: cache } = await import('@/features/messaging/hooks/useMessages');
-            const cached = cache.get(messageId);
-            if (cached) {
-              patchSidebarWithDecrypted(cached);
-              return;
-            }
-            if (!isGroup) {
-              try {
-                const decryptedContent = await encryptionService.decryptOwnDirectMessage(conversationId, rawContent);
-                cacheDecryptedContent(messageId, decryptedContent, conversationId);
-                patchSidebarWithDecrypted(decryptedContent);
-              } catch {
-                // No backup available yet — sidebar will show placeholder until send path caches it
-              }
-            }
-            return;
-          }
+          // Own messages are already patched by patchSidebarLastMessageContent in Chat.tsx
+          // before any WS event fires — no need to attempt decryption here.
+          if (isOwnMessage) return;
 
           // For received messages: check cache first (useMessages may have already decrypted)
           // This prevents double-advancing the group chain key on the same message.
@@ -346,14 +350,15 @@ export function useConversations(
             return;
           }
 
+          // Semaphore: limit concurrent sidebar decryptions to prevent chain-key state corruption.
           try {
-            let decryptedContent: string;
-            if (isGroup) {
-              decryptedContent = await encryptionService.decryptGroupMessageContent(conversationId, senderId, rawContent);
-            } else {
+            const decryptedContent = await withSidebarDecryptLimit(async () => {
+              if (isGroup) {
+                return encryptionService.decryptGroupMessageContent(conversationId, senderId, rawContent);
+              }
               const header = x3dhHeaderRaw ? encryptionService.deserializeX3DHHeader(x3dhHeaderRaw) : undefined;
-              decryptedContent = await encryptionService.decryptDirectMessage(conversationId, senderId, rawContent, header);
-            }
+              return encryptionService.decryptDirectMessage(conversationId, senderId, rawContent, header);
+            });
 
             cacheDecryptedContent(messageId, decryptedContent, conversationId);
             patchSidebarWithDecrypted(decryptedContent);

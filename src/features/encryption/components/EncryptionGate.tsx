@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEncryptionStore } from '../stores/keyStore';
 import { KeyBackupDialog } from './KeyBackupDialog';
@@ -26,12 +26,19 @@ export function EncryptionGate({ children }: { children: React.ReactNode }) {
   const hasBackup = useEncryptionStore((s) => s.hasBackup);
   const [showRestoreDialog, setShowRestoreDialog] = useState(false);
   const [showBackupPrompt, setShowBackupPrompt] = useState(false);
+  const [showErrorBanner, setShowErrorBanner] = useState(false);
   const backupPromptShownRef = useRef(false);
 
   // Blocking restore: fire immediately when needs_restore
   useEffect(() => {
     if (encryptionInitStatus === 'needs_restore') {
       setShowRestoreDialog(true);
+    }
+    // Surface E2EE init failures as a non-blocking dismissable banner
+    if (encryptionInitStatus === 'error') {
+      setShowErrorBanner(true);
+    } else {
+      setShowErrorBanner(false);
     }
   }, [encryptionInitStatus]);
 
@@ -96,9 +103,43 @@ export function EncryptionGate({ children }: { children: React.ReactNode }) {
     useEncryptionStore.getState().setHasBackup(true);
   };
 
+  const handleRetryInit = useCallback(async () => {
+    try {
+      const { encryptionService } = await import('@/features/encryption');
+      await encryptionService.initialize();
+    } catch (err) {
+      log.encryption.error('E2EE retry init failed:', err);
+    }
+  }, []);
+
   return (
     <>
       {children}
+
+      {/* Non-blocking banner when E2EE init fails — lets user retry without a hard refresh */}
+      {showErrorBanner && (
+        <div
+          role="alert"
+          className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-800 shadow-lg"
+        >
+          <span>
+            End-to-end encryption could not start. Messages may not be encrypted.
+          </span>
+          <button
+            onClick={handleRetryInit}
+            className="ml-2 rounded bg-yellow-200 px-3 py-1 text-xs font-medium text-yellow-900 hover:bg-yellow-300 focus:outline-none focus:ring-2 focus:ring-yellow-500"
+          >
+            Retry
+          </button>
+          <button
+            onClick={() => setShowErrorBanner(false)}
+            aria-label="Dismiss"
+            className="ml-1 text-yellow-700 hover:text-yellow-900 focus:outline-none"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Restore keys on new device — closeable but warns before dismissal */}
       <KeyBackupDialog

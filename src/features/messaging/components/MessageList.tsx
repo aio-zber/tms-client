@@ -65,6 +65,7 @@ interface MessageItemProps {
   showSender: boolean;
   senderName?: string;
   currentUserId: string;
+  conversationId?: string;
   onEdit?: (messageId: string) => void;
   onDelete?: (messageId: string, scope: 'me' | 'everyone') => void;
   onReply?: (message: Message) => void;
@@ -83,6 +84,7 @@ const MessageItem = memo(function MessageItem({
   showSender,
   senderName,
   currentUserId,
+  conversationId,
   onEdit,
   onDelete,
   onReply,
@@ -102,6 +104,7 @@ const MessageItem = memo(function MessageItem({
         showSender={showSender}
         senderName={senderName}
         currentUserId={currentUserId}
+        conversationId={conversationId}
         onEdit={isSent ? onEdit : undefined}
         onDelete={onDelete}
         onReply={onReply}
@@ -149,6 +152,7 @@ interface RowData {
   highlightedMessageId: string | null;
   searchHighlightId?: string | null;
   currentUserId: string;
+  conversationId?: string;
   onEdit?: (messageId: string) => void;
   onDelete?: (messageId: string, scope: 'me' | 'everyone') => void;
   onReply?: (message: Message) => void;
@@ -176,6 +180,7 @@ function RowRenderer({
   highlightedMessageId,
   searchHighlightId,
   currentUserId,
+  conversationId,
   onEdit,
   onDelete,
   onReply,
@@ -216,6 +221,7 @@ function RowRenderer({
           showSender={showSender}
           senderName={getUserName ? getUserName(message.senderId) : undefined}
           currentUserId={currentUserId}
+          conversationId={conversationId}
           onEdit={onEdit}
           onDelete={onDelete}
           onReply={onReply}
@@ -415,6 +421,7 @@ export function MessageList({
       highlightedMessageId,
       searchHighlightId,
       currentUserId,
+      conversationId,
       onEdit,
       onDelete,
       onReply,
@@ -432,6 +439,7 @@ export function MessageList({
       highlightedMessageId,
       searchHighlightId,
       currentUserId,
+      conversationId,
       onEdit,
       onDelete,
       onReply,

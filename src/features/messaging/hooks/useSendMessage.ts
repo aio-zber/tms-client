@@ -107,8 +107,8 @@ export function useSendMessage(): UseSendMessageReturn {
       setSending(true);
       setError(null);
 
-      // Generate a temp ID for the optimistic message
-      const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      // Generate a collision-proof temp ID for the optimistic message (Bug 11)
+      const tempId = `temp_${crypto.randomUUID()}`;
 
       // STEP 1: Add temp message to UI instantly (Messenger pattern)
       // This happens BEFORE encryption and network — so the user sees their message immediately.
@@ -214,12 +214,22 @@ export function useSendMessage(): UseSendMessageReturn {
             log.message.debug('[useSendMessage] Message encrypted successfully');
           } catch (encryptError) {
             log.message.error('[useSendMessage] Encryption failed:', encryptError);
-            // Fall back to unencrypted if encryption fails
+            // Bug 12: Do NOT silently fall through to plaintext — abort the send.
+            // Sending plaintext when the user expects E2EE is a confidentiality breach.
+            throw new Error('ENCRYPTION_FAILED');
           }
         }
 
         // STEP 3: Send to server
         const rawMessage = await messageService.sendMessage(requestData);
+
+        // Bug 8 follow-up: consume the pending X3DH header only after a confirmed send.
+        // Consuming it before means a network failure would lose the header and the
+        // recipient would never be able to establish the session.
+        if (wasEncrypted && options?.recipientId && !options.isGroup) {
+          const { encryptionService } = await import('@/features/encryption');
+          encryptionService.confirmMessageSent?.(data.conversation_id, options.recipientId);
+        }
 
         if (rawMessage) {
           // Transform API response from snake_case to camelCase
@@ -253,9 +263,12 @@ export function useSendMessage(): UseSendMessageReturn {
       } catch (err) {
         setError(err as Error);
         log.message.error('Failed to send message:', err);
-        // On failure, remove the temp message by replacing it with nothing
-        // We can't easily "remove" it with the current API, but the WS won't echo it back,
-        // so it will be cleaned up on next cache invalidation / refetch.
+        // Re-throw encryption failures so the caller (Chat.tsx) can show a specific toast.
+        // All other errors are swallowed here — the temp message stays visible and will be
+        // cleaned up on the next cache invalidation / refetch.
+        if (err instanceof Error && err.message === 'ENCRYPTION_FAILED') {
+          throw err;
+        }
         return null;
       } finally {
         setSending(false);
