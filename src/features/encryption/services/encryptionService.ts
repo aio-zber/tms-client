@@ -369,8 +369,9 @@ export async function establishSession(
     fromBase64(theirBundle.identity_key)
   );
 
-  // Upload conversation key backup for multi-device recovery (fire-and-forget)
-  uploadConversationKeyBackup(conversationId, userId);
+  // Upload conversation key backup before sending first message — ensures
+  // multi-device recovery works immediately on the recipient's other devices.
+  await uploadConversationKeyBackup(conversationId, userId);
 
   // Store header for first message (consumed after use)
   const sessionKey = `${conversationId}:${userId}`;
@@ -443,8 +444,9 @@ export async function processX3DHHeader(
         header.identityKey
       );
 
-      // Upload conversation key backup for multi-device recovery (fire-and-forget)
-      uploadConversationKeyBackup(conversationId, senderId);
+      // Upload conversation key backup — ensures recovery works on other devices
+      // before any subsequent messages are processed.
+      await uploadConversationKeyBackup(conversationId, senderId);
 
       log.encryption.info(`Session established as recipient with ${senderId} for ${conversationId}`);
     } finally {
