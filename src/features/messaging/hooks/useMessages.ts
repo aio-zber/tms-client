@@ -28,6 +28,10 @@ import { conversationService } from '@/features/conversations/services/conversat
 import type { Message, MessageReaction } from '@/types/message';
 import { log } from '@/lib/logger';
 
+// Debounce map for group key rotation — prevents stacked setTimeout calls when
+// multiple membership events arrive in quick succession (Bug 2).
+const groupRotationTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
 // Bounded LRU cache for decrypted message content (prevents re-decryption)
 // Viber/Messenger pattern: keep recent messages in memory, evict oldest when full
 const DECRYPTION_CACHE_MAX_SIZE = 1000;
@@ -626,28 +630,33 @@ export function useMessages(
             queryKey: queryKeys.conversations.all,
           });
 
-          // E2EE: Rotate group key when group membership changes
+          // E2EE: Rotate group key when group membership changes.
+          // Debounced to avoid stacked calls when multiple membership events arrive rapidly.
           if (eventType === 'member_added' || eventType === 'member_removed' || eventType === 'member_left') {
-            import('@/features/encryption').then(async ({ encryptionService, groupCryptoService }) => {
+            const existingTimer = groupRotationTimers.get(conversationId);
+            if (existingTimer) clearTimeout(existingTimer);
+            groupRotationTimers.set(conversationId, setTimeout(async () => {
+              groupRotationTimers.delete(conversationId);
+              const { encryptionService, groupCryptoService } = await import('@/features/encryption');
               if (!encryptionService.isInitialized()) return;
               if (!currentUserId) return;
               try {
-                // Rotate to a new random key (old key stays for backward compat read, but new messages use new key)
+                // Rotate to a new random key (old key stays for backward compat reads)
                 await groupCryptoService.rotateGroupKey(conversationId);
-                // Invalidate the session distribution cache so the rotated key actually gets distributed.
+                // Invalidate the distribution cache so the rotated key actually gets sent out
                 encryptionService.invalidateGroupKeyDistribution(conversationId);
-                setTimeout(async () => {
-                  try {
-                    const { getConversationById } = await import('@/features/conversations/services/conversationService');
-                    const conv = await getConversationById(conversationId);
-                    if (conv?.type === 'group') {
-                      const memberIds = conv.members.map((m: { userId: string }) => m.userId).filter((id: string) => id !== currentUserId);
-                      await encryptionService.distributeSenderKey(conversationId, currentUserId, memberIds);
-                    }
-                  } catch (err) { log.message.error('[useMessages] Group key distribution failed:', err); }
-                }, 1000);
+                try {
+                  const { getConversationById } = await import('@/features/conversations/services/conversationService');
+                  const conv = await getConversationById(conversationId);
+                  if (conv?.type === 'group') {
+                    const memberIds = conv.members
+                      .map((m: { userId: string }) => m.userId)
+                      .filter((id: string) => id !== currentUserId);
+                    await encryptionService.distributeSenderKey(conversationId, currentUserId, memberIds);
+                  }
+                } catch (err) { log.message.error('[useMessages] Group key distribution failed:', err); }
               } catch (err) { log.message.error('[useMessages] Group key rotation failed:', err); }
-            }).catch(() => {});
+            }, 500));
           }
         }
       }

@@ -20,6 +20,26 @@ import { decryptedContentCache } from '@/features/messaging/hooks/useMessages';
 import { useUserStore } from '@/store/userStore';
 import type { Conversation, ConversationType, ConversationListResponse } from '@/types/conversation';
 
+// ==================== Sidebar Decryption Semaphore ====================
+// Limits concurrent sidebar preview decryptions to avoid CPU spikes when
+// many conversations have unread encrypted messages (Bug 13).
+const MAX_CONCURRENT_SIDEBAR_DECRYPTS = 3;
+let sidebarDecryptRunning = 0;
+const sidebarDecryptQueue: Array<() => void> = [];
+
+async function withSidebarDecryptSemaphore<T>(fn: () => Promise<T>): Promise<T> {
+  if (sidebarDecryptRunning >= MAX_CONCURRENT_SIDEBAR_DECRYPTS) {
+    await new Promise<void>(resolve => sidebarDecryptQueue.push(resolve));
+  }
+  sidebarDecryptRunning++;
+  try {
+    return await fn();
+  } finally {
+    sidebarDecryptRunning--;
+    sidebarDecryptQueue.shift()?.();
+  }
+}
+
 interface UseConversationsOptions {
   limit?: number;
   type?: ConversationType;
@@ -314,53 +334,38 @@ export function useConversations(
           );
         };
 
-        import('@/features/encryption').then(async ({ encryptionService }) => {
-          if (!encryptionService.isInitialized()) return;
+        // Own messages: sidebar is already patched by patchSidebarLastMessageContent in Chat.tsx
+        // (called immediately after send). No async wait needed here.
+        if (!isOwnMessage) {
+          withSidebarDecryptSemaphore(async () => {
+            const { encryptionService } = await import('@/features/encryption');
+            if (!encryptionService.isInitialized()) return;
 
-          if (isOwnMessage) {
-            await new Promise((r) => setTimeout(r, 200));
-            const { cacheDecryptedContent, decryptedContentCache: cache } = await import('@/features/messaging/hooks/useMessages');
-            const cached = cache.get(messageId);
-            if (cached) {
-              patchSidebarWithDecrypted(cached);
+            // Check cache first — useMessages may have already decrypted this message,
+            // preventing double-advancing the group chain key on the same message.
+            const { cacheDecryptedContent, decryptedContentCache: rcvCache } = await import('@/features/messaging/hooks/useMessages');
+            const alreadyDecrypted = messageId ? rcvCache.get(messageId) : undefined;
+            if (alreadyDecrypted) {
+              patchSidebarWithDecrypted(alreadyDecrypted);
               return;
             }
-            if (!isGroup) {
-              try {
-                const decryptedContent = await encryptionService.decryptOwnDirectMessage(conversationId, rawContent);
-                cacheDecryptedContent(messageId, decryptedContent, conversationId);
-                patchSidebarWithDecrypted(decryptedContent);
-              } catch {
-                // No backup available yet — sidebar will show placeholder until send path caches it
+
+            try {
+              let decryptedContent: string;
+              if (isGroup) {
+                decryptedContent = await encryptionService.decryptGroupMessageContent(conversationId, senderId, rawContent);
+              } else {
+                const header = x3dhHeaderRaw ? encryptionService.deserializeX3DHHeader(x3dhHeaderRaw) : undefined;
+                decryptedContent = await encryptionService.decryptDirectMessage(conversationId, senderId, rawContent, header);
               }
+
+              cacheDecryptedContent(messageId, decryptedContent, conversationId);
+              patchSidebarWithDecrypted(decryptedContent);
+            } catch {
+              // Decryption failed — keep the encrypted placeholder, no retry
             }
-            return;
-          }
-
-          // For received messages: check cache first (useMessages may have already decrypted)
-          // This prevents double-advancing the group chain key on the same message.
-          const { cacheDecryptedContent, decryptedContentCache: rcvCache } = await import('@/features/messaging/hooks/useMessages');
-          const alreadyDecrypted = messageId ? rcvCache.get(messageId) : undefined;
-          if (alreadyDecrypted) {
-            patchSidebarWithDecrypted(alreadyDecrypted);
-            return;
-          }
-
-          try {
-            let decryptedContent: string;
-            if (isGroup) {
-              decryptedContent = await encryptionService.decryptGroupMessageContent(conversationId, senderId, rawContent);
-            } else {
-              const header = x3dhHeaderRaw ? encryptionService.deserializeX3DHHeader(x3dhHeaderRaw) : undefined;
-              decryptedContent = await encryptionService.decryptDirectMessage(conversationId, senderId, rawContent, header);
-            }
-
-            cacheDecryptedContent(messageId, decryptedContent, conversationId);
-            patchSidebarWithDecrypted(decryptedContent);
-          } catch {
-            // Decryption failed — keep the encrypted placeholder, no retry
-          }
-        }).catch(() => {});
+          }).catch(() => {});
+        }
       }
 
       // Update unread counts for messages from others
