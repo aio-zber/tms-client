@@ -86,12 +86,19 @@ async function generateGroupKey(conversationId: string): Promise<ConversationKey
 /**
  * Get or create the group key for a conversation.
  * Thread-safe via per-group mutex.
+ *
+ * Returns `wasCreated: true` only when a brand-new key was generated.
+ * Use this flag (instead of a pre-call `hasGroupKey()` check) to decide
+ * whether distribution must be awaited — avoids a TOCTOU race.
  */
-export function getOrCreateGroupKey(conversationId: string): Promise<ConversationKeySession> {
+export function getOrCreateGroupKey(
+  conversationId: string
+): Promise<{ session: ConversationKeySession; wasCreated: boolean }> {
   return withGroupKeyLock(conversationId, async () => {
     const existing = await getGroupSession(conversationId);
-    if (existing) return existing;
-    return generateGroupKey(conversationId);
+    if (existing) return { session: existing, wasCreated: false };
+    const session = await generateGroupKey(conversationId);
+    return { session, wasCreated: true };
   });
 }
 
@@ -130,20 +137,24 @@ export async function storeReceivedGroupKey(
  * Encrypt a group message using the shared group key.
  * Stateless and idempotent — no chain advancement.
  *
- * @returns encrypted message envelope with groupKeyId as senderKeyId
+ * @returns encrypted message envelope with groupKeyId as senderKeyId,
+ *          plus `wasCreated` flag indicating if a new key was just generated.
  */
 export async function encryptGroupMessage(
   conversationId: string,
   plaintext: Uint8Array
-): Promise<EncryptedMessage> {
-  const session = await getOrCreateGroupKey(conversationId);
+): Promise<{ encrypted: EncryptedMessage; wasCreated: boolean }> {
+  const { session, wasCreated } = await getOrCreateGroupKey(conversationId);
   const { ciphertext, nonce } = encrypt(plaintext, session.conversationKey);
 
   return {
-    version: 2,
-    ciphertext,
-    nonce,
-    senderKeyId: session.groupKeyId,
+    encrypted: {
+      version: 2,
+      ciphertext,
+      nonce,
+      senderKeyId: session.groupKeyId,
+    },
+    wasCreated,
   };
 }
 

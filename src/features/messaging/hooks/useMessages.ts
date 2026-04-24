@@ -23,15 +23,55 @@ import {
   isFailedDecryption,
   markDecryptionFailed,
   clearMessageFailedDecryption,
+  clearConversationFailedDecryptions,
 } from './useMessagesQuery';
 import { isPendingDelete, isPendingEdit } from './useMessageActions';
 import { isRecentlySentMessage } from './useSendMessage';
 import { nowUTC } from '@/lib/dateUtils';
+import { SEARCH_DEBOUNCE_DELAY } from '@/lib/constants';
 import { useUserStore } from '@/store/userStore';
 import { markMessagesAsDelivered } from '../services/messageService';
 import { conversationService } from '@/features/conversations/services/conversationService';
 import type { Message, MessageReaction } from '@/types/message';
 import { log } from '@/lib/logger';
+
+/**
+ * Wait until E2EE is initialized.
+ * WebSocket messages can arrive before encryptionService.initialize() completes.
+ * This helper serializes them so decryption only runs on a ready store.
+ */
+async function waitForE2EEReady(timeoutMs = 10_000): Promise<void> {
+  const { encryptionService, useEncryptionStore } = await import('@/features/encryption');
+  if (encryptionService.isInitialized()) return;
+  return new Promise<void>((resolve, reject) => {
+    const deadline = setTimeout(
+      () => reject(new Error('E2EE init timeout')),
+      timeoutMs
+    );
+    const checkStatus = (status: string) => {
+      if (status === 'ready') {
+        clearTimeout(deadline);
+        unsub();
+        resolve();
+      } else if (status === 'error') {
+        clearTimeout(deadline);
+        unsub();
+        reject(new Error('E2EE init failed'));
+      }
+    };
+    // Zustand v4: subscribe(listener) receives full state snapshot
+    const unsub = useEncryptionStore.subscribe((state) => {
+      checkStatus(state.initStatus);
+    });
+    // Check current status after subscribing to avoid a race where the store
+    // transitions to 'ready' between the isInitialized() check and subscribe().
+    checkStatus(useEncryptionStore.getState().initStatus);
+  });
+}
+
+// Debounce timers for group key rotation — coalesces rapid membership changes
+// (e.g. bulk add) into a single rotation instead of stacking independent timeouts.
+const groupRotationTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 // Bounded LRU cache for decrypted message content (prevents re-decryption)
 // Viber/Messenger pattern: keep recent messages in memory, evict oldest when full
@@ -151,18 +191,16 @@ async function decryptMessageContent(
 }
 
 /**
- * Clear decryption cache (call on logout)
+ * Clear decryption cache (call on logout).
+ * Awaits both the failed-decryption tracker and the IndexedDB persistent cache
+ * so that no stale plaintext survives after session end.
  */
-export function clearDecryptionCache(): void {
+export async function clearDecryptionCache(): Promise<void> {
   decryptedContentCache.clear();
-  // Also clear failed decryption tracking so a new session can retry
-  import('./useMessagesQuery').then(({ clearFailedDecryptions }) => {
-    clearFailedDecryptions();
-  }).catch(() => {});
-  // Clear persistent IndexedDB cache
-  import('@/features/encryption/db/cryptoDb').then(({ clearDecryptedMessages }) => {
-    clearDecryptedMessages().catch(() => {});
-  }).catch(() => {});
+  await Promise.allSettled([
+    import('./useMessagesQuery').then(({ clearFailedDecryptions }) => clearFailedDecryptions()),
+    import('@/features/encryption/db/cryptoDb').then(({ clearDecryptedMessages }) => clearDecryptedMessages()),
+  ]);
 }
 
 /**
@@ -309,6 +347,23 @@ export function useMessages(
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId]); // Only depend on conversationId to prevent running on every message update
+
+  // Listen for group-key-received events (dispatched by handleSenderKeyDistribution above).
+  // When a new group key arrives, clear any failed decryptions for this conversation and
+  // invalidate the message cache so the query re-runs and retries decryption.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = (e: Event) => {
+      const { conversationId: evtConvId } = (e as CustomEvent<{ conversationId: string }>).detail;
+      if (evtConvId !== conversationId) return;
+      clearConversationFailedDecryptions(conversationId);
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.messages.list(conversationId, { limit }),
+      });
+    };
+    window.addEventListener('group-key-received', handler);
+    return () => window.removeEventListener('group-key-received', handler);
+  }, [conversationId, queryClient, limit]);
 
   // Add message optimistically (for sender's own messages)
   const addOptimisticMessage = useCallback((message: Message) => {
@@ -547,46 +602,54 @@ export function useMessages(
         if (cached) {
           addMessageToCache({ ...transformedMessage, content: cached });
           patchConversationLastMessage(cached);
-        } else if (currentUserId && transformedMessage.senderId === currentUserId) {
-          // Own message from ANOTHER device — not sent from this device so no optimistic update exists.
-          // Decrypt using decryptOwnDirectMessage (uses our identity key to recover session).
-          const isGroup = !!(wsMessage.sender_key_id || wsMessage.senderKeyId);
-          if (isGroup) {
-            // Group: decrypt normally — we have the group key
-            transformAndDecryptMessage(wsMessage, true).then((decryptedMsg) => {
-              addMessageToCache(decryptedMsg);
-              patchConversationLastMessage(decryptedMsg.content);
-            }).catch(() => {
-              addMessageToCache({ ...transformedMessage, content: '[Unable to decrypt message]' });
-            });
-          } else {
-            // DM: use decryptOwnDirectMessage (recovers via server key backup if needed)
-            import('@/features/encryption').then(async ({ encryptionService }) => {
-              try {
-                const decrypted = await encryptionService.decryptOwnDirectMessage(
-                  transformedMessage.conversationId,
-                  transformedMessage.content
-                );
-                cacheDecryptedContent(transformedMessage.id, decrypted, transformedMessage.conversationId);
-                addMessageToCache({ ...transformedMessage, content: decrypted });
-                patchConversationLastMessage(decrypted);
-              } catch {
-                addMessageToCache({ ...transformedMessage, content: '[Unable to decrypt message]' });
-              }
-            }).catch(() => {
-              addMessageToCache({ ...transformedMessage, content: '[Unable to decrypt message]' });
-            });
-          }
         } else {
-          // Recipient: decrypt the message
-          // Use senderKeyId as the reliable group indicator — it's non-null only for group E2EE.
-          // metadata_json.encryption.isGroup and conversation_type are unreliable (not always present).
-          const isGroup = !!(wsMessage.sender_key_id || wsMessage.senderKeyId);
+          // Wait for E2EE to be ready before attempting decryption
+          waitForE2EEReady(10_000).then(async () => {
+            if (currentUserId && transformedMessage.senderId === currentUserId) {
+              // Own message from ANOTHER device — not sent from this device so no optimistic update exists.
+              // Decrypt using decryptOwnDirectMessage (uses our identity key to recover session).
+              const isGroup = !!(wsMessage.sender_key_id || wsMessage.senderKeyId);
+              if (isGroup) {
+                // Group: decrypt normally — we have the group key
+                transformAndDecryptMessage(wsMessage, true).then((decryptedMsg) => {
+                  addMessageToCache(decryptedMsg);
+                  patchConversationLastMessage(decryptedMsg.content);
+                }).catch(() => {
+                  addMessageToCache({ ...transformedMessage, content: '[Unable to decrypt message]' });
+                });
+              } else {
+                // DM: use decryptOwnDirectMessage (recovers via server key backup if needed)
+                import('@/features/encryption').then(async ({ encryptionService }) => {
+                  try {
+                    const decrypted = await encryptionService.decryptOwnDirectMessage(
+                      transformedMessage.conversationId,
+                      transformedMessage.content
+                    );
+                    cacheDecryptedContent(transformedMessage.id, decrypted, transformedMessage.conversationId);
+                    addMessageToCache({ ...transformedMessage, content: decrypted });
+                    patchConversationLastMessage(decrypted);
+                  } catch {
+                    addMessageToCache({ ...transformedMessage, content: '[Unable to decrypt message]' });
+                  }
+                }).catch(() => {
+                  addMessageToCache({ ...transformedMessage, content: '[Unable to decrypt message]' });
+                });
+              }
+            } else {
+              // Recipient: decrypt the message
+              // Use senderKeyId as the reliable group indicator — it's non-null only for group E2EE.
+              // metadata_json.encryption.isGroup and conversation_type are unreliable (not always present).
+              const isGroup = !!(wsMessage.sender_key_id || wsMessage.senderKeyId);
 
-          transformAndDecryptMessage(wsMessage, isGroup).then((decryptedMsg) => {
-            addMessageToCache(decryptedMsg);
-            patchConversationLastMessage(decryptedMsg.content);
+              transformAndDecryptMessage(wsMessage, isGroup).then((decryptedMsg) => {
+                addMessageToCache(decryptedMsg);
+                patchConversationLastMessage(decryptedMsg.content);
+              }).catch(() => {
+                addMessageToCache({ ...transformedMessage, content: '[Unable to decrypt message]' });
+              });
+            }
           }).catch(() => {
+            log.message.warn('[useMessages] Skipping decryption for message', transformedMessage.id, '— E2EE not ready');
             addMessageToCache({ ...transformedMessage, content: '[Unable to decrypt message]' });
           });
         }
@@ -642,7 +705,12 @@ export function useMessages(
                 await groupCryptoService.rotateGroupKey(conversationId);
                 // Invalidate the session distribution cache so the rotated key actually gets distributed.
                 encryptionService.invalidateGroupKeyDistribution(conversationId);
-                setTimeout(async () => {
+                // Debounce distribution — coalesce rapid membership changes (e.g. bulk add)
+                // into a single key distribution instead of one per event.
+                const existing = groupRotationTimers.get(conversationId);
+                if (existing) clearTimeout(existing);
+                groupRotationTimers.set(conversationId, setTimeout(async () => {
+                  groupRotationTimers.delete(conversationId);
                   try {
                     const { getConversationById } = await import('@/features/conversations/services/conversationService');
                     const conv = await getConversationById(conversationId);
@@ -651,7 +719,7 @@ export function useMessages(
                       await encryptionService.distributeSenderKey(conversationId, currentUserId, memberIds);
                     }
                   } catch (err) { log.message.error('[useMessages] Group key distribution failed:', err); }
-                }, 1000);
+                }, SEARCH_DEBOUNCE_DELAY));
               } catch (err) { log.message.error('[useMessages] Group key rotation failed:', err); }
             }).catch(() => {});
           }
@@ -1134,17 +1202,32 @@ export function useMessages(
     // Listen for E2EE sender key distribution events
     const handleSenderKeyDistribution = (data: Record<string, unknown>) => {
       log.message.debug('[useMessages] Received sender key distribution:', data);
-      import('@/features/encryption').then(({ encryptionService }) => {
-        encryptionService.receiveSenderKeyDistribution(data as {
-          conversation_id: string;
-          sender_id: string;
-          key_id: string;
-          chain_key: string;
-          public_signing_key: string;
-        }).catch((err: unknown) => {
-          log.message.error('[useMessages] Failed to process sender key distribution:', err);
+      // Wait for E2EE to be ready before processing distribution
+      waitForE2EEReady(10_000).then(() => {
+        return import('@/features/encryption').then(({ encryptionService }) => {
+          return encryptionService.receiveSenderKeyDistribution(data as {
+            conversation_id: string;
+            sender_id: string;
+            key_id: string;
+            chain_key: string;
+            public_signing_key: string;
+          });
+        }).then(() => {
+          // Signal that a new group key was received so failed messages can be retried
+          const evtConvId = (data.conversation_id ?? data.conversationId) as string | undefined;
+          if (evtConvId && typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('group-key-received', {
+              detail: { conversationId: evtConvId },
+            }));
+          }
         });
-      }).catch(() => { /* E2EE not available */ });
+      }).catch((err: unknown) => {
+        if (err instanceof Error && err.message.includes('E2EE init')) {
+          log.message.warn('[useMessages] Skipping sender key distribution — E2EE not ready');
+        } else {
+          log.message.error('[useMessages] Failed to process sender key distribution:', err);
+        }
+      });
     };
     socketClient.onSenderKeyDistribution(handleSenderKeyDistribution);
 

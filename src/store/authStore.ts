@@ -8,6 +8,7 @@ import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { authService, LoginCredentials, AuthError } from '@/features/auth/services/authService';
 import { userService } from '@/features/users';
+import { useEncryptionStore } from '@/features/encryption/stores/keyStore';
 
 interface AuthState {
   // State
@@ -19,7 +20,7 @@ interface AuthState {
   // Actions
   login: (credentials: LoginCredentials) => Promise<void>;
   autoLoginFromGCGC: () => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   setToken: (token: string | null) => void;
   checkAuth: () => Promise<void>;
   clearError: () => void;
@@ -68,10 +69,13 @@ export const useAuthStore = create<AuthState>()(
             error: null,
           });
 
-          // Fetch current user data
-          // This will populate the user store
+          // Fetch current user data and stamp current_user_id BEFORE E2EE init
+          // so encryptionService.initialize() can detect cross-user contamination.
           try {
-            await userService.getCurrentUser();
+            const userData = await userService.getCurrentUser();
+            if (typeof window !== 'undefined' && userData?.tmsUserId) {
+              localStorage.setItem('current_user_id', userData.tmsUserId);
+            }
           } catch (userError) {
             log.auth.error('Failed to fetch user after login:', userError);
             // Continue anyway - user data will be fetched on next request
@@ -83,6 +87,7 @@ export const useAuthStore = create<AuthState>()(
             await encryptionService.initialize();
           } catch (err) {
             log.auth.error('E2EE init failed:', err);
+            useEncryptionStore.getState().setInitStatus('error', err instanceof Error ? err.message : String(err));
           }
         } catch (error) {
           log.auth.error('Login error:', error);
@@ -126,9 +131,13 @@ export const useAuthStore = create<AuthState>()(
 
           log.auth.info('✅ SSO: Auto-login successful');
 
-          // Fetch current user data
+          // Fetch current user data and stamp current_user_id BEFORE E2EE init
+          // so encryptionService.initialize() can detect cross-user contamination.
           try {
-            await userService.getCurrentUser();
+            const userData = await userService.getCurrentUser();
+            if (typeof window !== 'undefined' && userData?.tmsUserId) {
+              localStorage.setItem('current_user_id', userData.tmsUserId);
+            }
           } catch (userError) {
             log.auth.error('SSO: Failed to fetch user after auto-login:', userError);
             // Continue anyway - user data will be fetched on next request
@@ -140,6 +149,7 @@ export const useAuthStore = create<AuthState>()(
             await encryptionService.initialize();
           } catch (err) {
             log.auth.error('SSO: E2EE init failed:', err);
+            useEncryptionStore.getState().setInitStatus('error', err instanceof Error ? err.message : String(err));
           }
         } catch (error) {
           log.auth.error('❌ SSO: Auto-login error:', error);
@@ -162,18 +172,21 @@ export const useAuthStore = create<AuthState>()(
 
       /**
        * Logout user.
-       * Clears token, user data, and all caches.
+       * Awaits E2EE cleanup before clearing session so no stale keys linger.
        */
-      logout: () => {
-        // Clear E2EE data and decryption cache before logout
-        import('@/features/encryption')
-          .then(({ encryptionService }) => encryptionService.clearEncryptionData())
-          .catch(() => { /* ignore */ });
-        import('@/features/messaging/hooks/useMessages')
-          .then(({ clearDecryptionCache }) => clearDecryptionCache())
-          .catch(() => { /* ignore */ });
+      logout: async () => {
+        // Await E2EE data and decryption cache cleanup before destroying the session
+        try {
+          const { encryptionService } = await import('@/features/encryption');
+          await encryptionService.clearEncryptionData();
+        } catch { /* ignore */ }
 
-        authService.logout();
+        try {
+          const { clearDecryptionCache } = await import('@/features/messaging/hooks/useMessages');
+          await clearDecryptionCache();
+        } catch { /* ignore */ }
+
+        await authService.logout();
         userService.clearCache();
 
         set({
@@ -269,6 +282,7 @@ export const useAuthStore = create<AuthState>()(
               await encryptionService.initialize();
             } catch (err) {
               log.auth.error('E2EE init failed on checkAuth:', err);
+              useEncryptionStore.getState().setInitStatus('error', err instanceof Error ? err.message : String(err));
             }
           } else {
             // Session is invalid, clear everything
