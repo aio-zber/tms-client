@@ -9,6 +9,29 @@ import { devtools } from 'zustand/middleware';
 import { authService, LoginCredentials, AuthError } from '@/features/auth/services/authService';
 import { userService } from '@/features/users';
 
+/**
+ * Warm the in-memory decrypted content cache from the persisted IndexedDB store.
+ * Called after E2EE initialization on every login so that previously decrypted
+ * messages are immediately available without re-decryption (WhatsApp/Messenger pattern).
+ * Errors are swallowed — cache warming is best-effort and non-blocking.
+ */
+async function loadDecryptedMessagesIntoCache(): Promise<void> {
+  try {
+    const [{ loadAllDecryptedMessages }, { cacheDecryptedContent }] = await Promise.all([
+      import('@/features/encryption/db/cryptoDb'),
+      import('@/features/messaging/hooks/useMessages'),
+    ]);
+    const entries = await loadAllDecryptedMessages();
+    for (const { id, content } of entries) {
+      // Pass undefined for conversationId to skip IDB re-write (already persisted)
+      cacheDecryptedContent(id, content, undefined);
+    }
+    log.auth.info(`[E2EE] Warmed decryption cache with ${entries.length} persisted messages`);
+  } catch (err) {
+    log.auth.warn('[E2EE] Cache warming failed (non-critical):', err);
+  }
+}
+
 interface AuthState {
   // State
   token: string | null;
@@ -81,6 +104,9 @@ export const useAuthStore = create<AuthState>()(
           try {
             const { encryptionService } = await import('@/features/encryption');
             await encryptionService.initialize();
+            // Warm in-memory decryption cache from persisted IDB store so previously
+            // decrypted messages are instantly available without re-decryption.
+            await loadDecryptedMessagesIntoCache();
           } catch (err) {
             log.auth.error('E2EE init failed:', err);
           }
@@ -138,6 +164,8 @@ export const useAuthStore = create<AuthState>()(
           try {
             const { encryptionService } = await import('@/features/encryption');
             await encryptionService.initialize();
+            // Warm in-memory decryption cache from persisted IDB store
+            await loadDecryptedMessagesIntoCache();
           } catch (err) {
             log.auth.error('SSO: E2EE init failed:', err);
           }
@@ -197,6 +225,7 @@ export const useAuthStore = create<AuthState>()(
           // Initialize E2EE after token is set (non-blocking)
           import('@/features/encryption')
             .then(({ encryptionService }) => encryptionService.initialize())
+            .then(() => loadDecryptedMessagesIntoCache())
             .catch((err) => log.auth.error('E2EE init failed on setToken:', err));
         } else {
           authService.logout();
@@ -267,6 +296,8 @@ export const useAuthStore = create<AuthState>()(
             try {
               const { encryptionService } = await import('@/features/encryption');
               await encryptionService.initialize();
+              // Warm in-memory decryption cache from persisted IDB store
+              await loadDecryptedMessagesIntoCache();
             } catch (err) {
               log.auth.error('E2EE init failed on checkAuth:', err);
             }

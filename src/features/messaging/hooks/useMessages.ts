@@ -145,7 +145,11 @@ async function decryptMessageContent(
 }
 
 /**
- * Clear decryption cache (call on logout)
+ * Clear decryption cache (call on logout).
+ * Clears the in-memory LRU cache and failed-decryption tracking only.
+ * The IndexedDB decryptedMessages store is intentionally preserved across
+ * logout/login cycles so that plaintext is immediately available on next login
+ * without requiring key material (WhatsApp/Messenger pattern).
  */
 export function clearDecryptionCache(): void {
   decryptedContentCache.clear();
@@ -153,10 +157,7 @@ export function clearDecryptionCache(): void {
   import('./useMessagesQuery').then(({ clearFailedDecryptions }) => {
     clearFailedDecryptions();
   }).catch(() => {});
-  // Clear persistent IndexedDB cache
-  import('@/features/encryption/db/cryptoDb').then(({ clearDecryptedMessages }) => {
-    clearDecryptedMessages().catch(() => {});
-  }).catch(() => {});
+  // NOTE: Do NOT clear IndexedDB decryptedMessages here — it survives logout intentionally.
 }
 
 /**

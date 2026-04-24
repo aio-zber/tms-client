@@ -166,14 +166,17 @@ export async function closeDb(): Promise<void> {
 }
 
 /**
- * Clear all data from the database (for logout)
+ * Clear all crypto key data from the database (for logout).
+ * NOTE: decryptedMessages is intentionally preserved across logout/login cycles
+ * so that previously decrypted plaintext is immediately available after re-login
+ * without requiring key material (WhatsApp/Messenger decrypt-once-store-forever pattern).
  */
 export async function clearAllData(): Promise<void> {
   const db = await getDb();
+  // Deliberately excludes STORES.DECRYPTED_MESSAGES — plaintext cache survives logout
   const storeNames = [
     STORES.IDENTITY, STORES.PREKEY, STORES.SESSION,
     STORES.SENDER_KEY, STORES.MESSAGE_KEY, STORES.KNOWN_KEYS,
-    STORES.DECRYPTED_MESSAGES,
   ];
   const tx = db.transaction(storeNames, 'readwrite');
 
@@ -182,7 +185,22 @@ export async function clearAllData(): Promise<void> {
     tx.done,
   ]);
 
-  log.encryption.info('Cleared all crypto data from database');
+  log.encryption.info('Cleared crypto key data from database (decryptedMessages preserved)');
+}
+
+/**
+ * Load all decrypted messages from IndexedDB for warming the in-memory cache on login.
+ * Returns entries sorted by storedAt descending, capped at 10,000 to bound memory usage.
+ */
+export async function loadAllDecryptedMessages(): Promise<Array<{ id: string; content: string }>> {
+  const db = await getDb();
+  const all = await db.getAll(STORES.DECRYPTED_MESSAGES);
+
+  // Sort by storedAt descending (most recent first) and cap at 10,000 entries
+  all.sort((a, b) => (b.storedAt ?? 0) - (a.storedAt ?? 0));
+  const limited = all.slice(0, 10000);
+
+  return limited.map((entry) => ({ id: entry.messageId, content: entry.content }));
 }
 
 // ==================== Identity Key Operations ====================
