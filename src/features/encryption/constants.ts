@@ -46,3 +46,6 @@ export const MESSAGE_KEY_STORE = 'messageKeys';
 
 // Key bundle TTL
 export const KEY_BUNDLE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+// SSO backup key derivation identifier (server-side HMAC-SHA256)
+export const SSO_BACKUP_KEY_DERIVATION = 'hmac-server';

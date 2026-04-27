@@ -27,12 +27,17 @@ export function EncryptionGate({ children }: { children: React.ReactNode }) {
   const [showRestoreDialog, setShowRestoreDialog] = useState(false);
   const [showBackupPrompt, setShowBackupPrompt] = useState(false);
   const [showErrorBanner, setShowErrorBanner] = useState(false);
+  const [backupType, setBackupType] = useState<'pin' | 'sso' | null>(null);
   const backupPromptShownRef = useRef(false);
 
-  // Blocking restore: fire immediately when needs_restore
+  // Blocking restore: fire immediately when needs_restore; fetch backup type for UI
   useEffect(() => {
     if (encryptionInitStatus === 'needs_restore') {
       setShowRestoreDialog(true);
+      import('@/features/encryption/services/backupService')
+        .then(({ getBackupStatus }) => getBackupStatus())
+        .then((status) => setBackupType(status.backup_type ?? null))
+        .catch(() => {});
     }
     // Surface E2EE init failures as a non-blocking dismissable banner
     if (encryptionInitStatus === 'error') {
@@ -148,6 +153,7 @@ export function EncryptionGate({ children }: { children: React.ReactNode }) {
         mode="restore"
         disableClose={false}
         onComplete={handleRestoreComplete}
+        backupType={backupType}
       />
 
       {/* Blocking: prompt new users to create a backup right after login.
@@ -159,6 +165,7 @@ export function EncryptionGate({ children }: { children: React.ReactNode }) {
         mode="backup"
         disableClose={true}
         onComplete={handleBackupComplete}
+        backupType={backupType}
       />
     </>
   );

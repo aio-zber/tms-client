@@ -32,7 +32,7 @@ import {
   KDF_SALT_LENGTH,
 } from '../constants';
 import { EncryptionError } from '../types';
-import type { KeyBackupData, KeyBackupStatus, KeyBackupServerResponse } from '../types';
+import type { KeyBackupData, KeyBackupStatus, KeyBackupServerResponse, SSOBackupRestoreResponse } from '../types';
 import { log } from '@/lib/logger';
 
 const ENCRYPTION_API = '/encryption';
@@ -219,6 +219,105 @@ export async function restoreKeyBackup(pin: string): Promise<void> {
 }
 
 /**
+ * Create a server-encrypted (SSO) key backup.
+ * Key material is sent in plaintext over TLS; the server encrypts with a per-user
+ * HMAC-derived key. Recovery requires only an authenticated TMS session.
+ */
+export async function createSSOBackup(): Promise<void> {
+  await initCrypto();
+
+  const keys = await getIdentityKey();
+  if (!keys) {
+    throw new EncryptionError('No local keys to backup', 'BACKUP_FAILED');
+  }
+
+  const backupData: KeyBackupData = {
+    identityKeyPair: {
+      publicKey: toBase64(keys.identityKeyPair.publicKey),
+      privateKey: toBase64(keys.identityKeyPair.privateKey),
+      signingKey: keys.identityKeyPair.signingKey
+        ? toBase64(keys.identityKeyPair.signingKey)
+        : undefined,
+      createdAt: keys.identityKeyPair.createdAt,
+    },
+    signedPreKey: {
+      keyId: keys.signedPreKey.keyId,
+      publicKey: toBase64(keys.signedPreKey.keyPair.publicKey),
+      privateKey: toBase64(keys.signedPreKey.keyPair.privateKey),
+      signature: toBase64(keys.signedPreKey.signature),
+      createdAt: keys.signedPreKey.createdAt,
+    },
+    backupTimestamp: Date.now(),
+  };
+
+  const plaintext = stringToBytes(JSON.stringify(backupData));
+  const keyMaterialB64 = toBase64(plaintext);
+  const identityKeyHash = toHex(sha256(keys.identityKeyPair.publicKey));
+
+  await apiClient.post(`${ENCRYPTION_API}/keys/backup/sso-create`, {
+    key_material: keyMaterialB64,
+    identity_key_hash: identityKeyHash,
+  });
+
+  log.encryption.info('SSO key backup created');
+}
+
+/**
+ * Restore keys from a server-encrypted (SSO) backup.
+ * The server decrypts and returns plaintext key material over TLS.
+ * Throws EncryptionError('No SSO backup found', 'RESTORE_FAILED') on 404.
+ */
+export async function restoreKeyBackupViaSSO(): Promise<void> {
+  await initCrypto();
+
+  let response: SSOBackupRestoreResponse;
+  try {
+    response = await apiClient.post<SSOBackupRestoreResponse>(
+      `${ENCRYPTION_API}/keys/backup/sso-restore`,
+      {}
+    );
+  } catch {
+    throw new EncryptionError('No SSO backup found', 'RESTORE_FAILED');
+  }
+
+  const plaintext = fromBase64(response.key_material);
+  const backupData: KeyBackupData = JSON.parse(bytesToString(plaintext));
+
+  const restoredPubKey = fromBase64(backupData.identityKeyPair.publicKey);
+  const computedHash = toHex(sha256(restoredPubKey));
+  if (computedHash !== response.identity_key_hash) {
+    throw new EncryptionError('SSO backup integrity check failed', 'RESTORE_FAILED');
+  }
+
+  const currentUserId = typeof window !== 'undefined'
+    ? localStorage.getItem('current_user_id') ?? undefined
+    : undefined;
+
+  await storeIdentityKey(
+    {
+      publicKey: fromBase64(backupData.identityKeyPair.publicKey),
+      privateKey: fromBase64(backupData.identityKeyPair.privateKey),
+      signingKey: backupData.identityKeyPair.signingKey
+        ? fromBase64(backupData.identityKeyPair.signingKey)
+        : undefined,
+      createdAt: backupData.identityKeyPair.createdAt,
+    },
+    {
+      keyId: backupData.signedPreKey.keyId,
+      keyPair: {
+        publicKey: fromBase64(backupData.signedPreKey.publicKey),
+        privateKey: fromBase64(backupData.signedPreKey.privateKey),
+      },
+      signature: fromBase64(backupData.signedPreKey.signature),
+      createdAt: backupData.signedPreKey.createdAt,
+    },
+    currentUserId
+  );
+
+  log.encryption.info('Keys restored via SSO backup');
+}
+
+/**
  * Check if a backup exists on the server
  */
 export async function getBackupStatus(): Promise<KeyBackupStatus> {
@@ -232,6 +331,8 @@ export const backupService = {
   createKeyBackup,
   restoreKeyBackup,
   getBackupStatus,
+  createSSOBackup,
+  restoreKeyBackupViaSSO,
 };
 
 export default backupService;

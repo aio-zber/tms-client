@@ -286,6 +286,7 @@ export interface KeyBackupStatus {
   has_backup: boolean;
   created_at: string | null;
   identity_key_hash: string | null;
+  backup_type: 'pin' | 'sso' | null;
 }
 
 export interface KeyBackupServerResponse {
@@ -295,7 +296,13 @@ export interface KeyBackupServerResponse {
   key_derivation: string;
   version: number;
   identity_key_hash: string;
+  backup_type: 'pin' | 'sso';
   created_at: string;
+}
+
+export interface SSOBackupRestoreResponse {
+  key_material: string;
+  identity_key_hash: string;
 }
 
 // ==================== Verification Types ====================
