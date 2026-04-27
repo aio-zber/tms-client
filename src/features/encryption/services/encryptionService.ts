@@ -920,6 +920,10 @@ export async function decryptDirectMessage(
           await processX3DHHeader(conversationId, senderId, header);
           const plaintext = await decryptWithSession(conversationId, senderId, encrypted);
           log.encryption.info(`Decryption recovered via fresh X3DH header for ${conversationId}:${senderId}`);
+          // Notify the UI so other failed DMs from this sender are retried automatically
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('dm-key-recovered', { detail: { conversationId, senderId } }));
+          }
           return bytesToString(plaintext);
         } catch {
           // Header-based recovery failed — fall through to key backup
@@ -932,6 +936,10 @@ export async function decryptDirectMessage(
         try {
           const plaintext = await decryptWithSession(conversationId, senderId, encrypted);
           log.encryption.info(`Decryption recovered via key backup for ${conversationId}:${senderId}`);
+          // Notify the UI so other failed DMs from this sender are retried automatically
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('dm-key-recovered', { detail: { conversationId, senderId } }));
+          }
           return bytesToString(plaintext);
         } catch {
           // Key backup recovery didn't help either
@@ -1018,6 +1026,10 @@ export async function decryptGroupMessageContent(
         const recovered = await tryRecoverGroupKey(conversationId);
         if (recovered) {
           const plaintext = await decryptGroupMessage(conversationId, encrypted);
+          // Notify the UI so other failed messages in this conversation are retried automatically
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('group-key-received', { detail: { conversationId } }));
+          }
           return bytesToString(plaintext);
         }
       } else if (error.code === 'DECRYPTION_FAILED') {
@@ -1028,6 +1040,10 @@ export async function decryptGroupMessageContent(
         if (recovered) {
           try {
             const plaintext = await decryptGroupMessage(conversationId, encrypted);
+            // Notify the UI so other failed messages in this conversation are retried automatically
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('group-key-received', { detail: { conversationId } }));
+            }
             return bytesToString(plaintext);
           } catch {
             // Recovery didn't help — key on server is also wrong; throw original error
