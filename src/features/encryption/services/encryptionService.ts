@@ -80,17 +80,26 @@ let initStatus: EncryptionInitStatus = 'uninitialized';
 // Singleton init promise — shared across all concurrent callers (Bug 19)
 let _initPromise: Promise<void> | null = null;
 
-// Per-conversation group key recovery deduplication.
-// Maps conversationId → in-flight recovery Promise (or resolved true/false).
-// Ensures tryRecoverGroupKey is called at most once per conversation per session,
-// regardless of how many messages fail concurrently.
-const groupKeyRecoveryCache = new Map<string, Promise<boolean>>();
+// Per-conversation group key recovery state.
+// Unified map avoids two parallel maps that always move together.
+//   promise     — in-flight or resolved result; deduplicates concurrent callers
+//   failedUntil — backoff deadline (ms); blocks retries for 30 s after a failure
+const groupKeyRecoveryCache = new Map<string, { promise: Promise<boolean>; failedUntil?: number }>();
+const GROUP_KEY_RECOVERY_BACKOFF_MS = 30_000; // 30 seconds
 
 // Per-conversation distribution tracking.
 // Once we've successfully distributed our group key for a conversation this session,
 // skip redundant POST /distribute + POST /keys/conversation calls on re-visits.
 // Messenger pattern: distribute once per session, reuse cached state thereafter.
-const distributedGroupKeys = new Set<string>();
+// Maps conversationId → timestamp of last successful distribution.
+// Entries expire after 30 minutes so key rotation / new member additions can trigger a fresh distribution.
+const distributedGroupKeys = new Map<string, number>();
+const GROUP_KEY_DISTRIBUTION_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+// In-memory mirror of bulk-restored DM sessions. Populated by restoreAllConversationSessions
+// so that multiple senders in the same conversation all get the fast path without re-fetching.
+// Cleared after 10 minutes (long after any batch decryption finishes).
+const bulkRestoreSessionCache = new Map<string, { conversationKey: Uint8Array; remoteIdentityKey: Uint8Array }>();
 
 // ==================== Initialization ====================
 
@@ -229,6 +238,7 @@ export async function reinitialize(): Promise<void> {
   //     that is no longer valid after an identity key change.
   distributedGroupKeys.clear();
   groupKeyRecoveryCache.clear();
+  bulkRestoreSessionCache.clear();
   pendingX3DHHeaders.clear();
   processingX3DH.clear();
   keyBundleCache.clear();
@@ -666,6 +676,10 @@ async function restoreAllConversationSessions(): Promise<void> {
             createdAt: Date.now(),
             updatedAt: Date.now(),
           });
+          bulkRestoreSessionCache.set(entry.conversation_id, {
+            conversationKey,
+            remoteIdentityKey: remoteIdentityKeyBytes,
+          });
         }
         restored++;
       } catch {
@@ -673,6 +687,7 @@ async function restoreAllConversationSessions(): Promise<void> {
       }
     }
 
+    setTimeout(() => bulkRestoreSessionCache.clear(), 10 * 60 * 1000);
     log.encryption.info(`Bulk session restore: ${restored}/${response.keys.length} conversations restored`);
   } catch (err) {
     log.encryption.warn('Bulk session restore failed:', err);
@@ -691,6 +706,20 @@ async function tryRecoverFromKeyBackup(
 ): Promise<boolean> {
   try {
     const { getSession, storeSession, deleteSession } = await import('../db/cryptoDb');
+
+    // In-memory fast path: populated by restoreAllConversationSessions on PIN restore.
+    // Multiple senders for the same conversation all share this cached session data.
+    const memCached = bulkRestoreSessionCache.get(conversationId);
+    if (memCached) {
+      await storeSession(conversationId, remoteUserId, {
+        conversationKey: memCached.conversationKey,
+        remoteIdentityKey: memCached.remoteIdentityKey,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      log.encryption.debug(`Session restored from bulk memory cache for ${conversationId}:${remoteUserId}`);
+      return true;
+    }
 
     // Fast path: check if bulk restore already cached this conversation key.
     // If so, copy it to the exact sender key and skip the network call.
@@ -1166,10 +1195,17 @@ async function uploadGroupKeyBackup(
  * @returns true if group key was successfully restored
  */
 function tryRecoverGroupKey(conversationId: string): Promise<boolean> {
-  const existing = groupKeyRecoveryCache.get(conversationId);
-  if (existing) return existing;
+  const entry = groupKeyRecoveryCache.get(conversationId);
 
-  const recovery = (async (): Promise<boolean> => {
+  // Backoff guard: a previous attempt failed recently — skip the API call.
+  if (entry?.failedUntil && Date.now() < entry.failedUntil) {
+    return Promise.resolve(false);
+  }
+
+  // Dedup guard: an in-flight (or recently resolved) promise already exists.
+  if (entry?.promise) return entry.promise;
+
+  const promise = (async (): Promise<boolean> => {
     try {
       const response = await apiClient.get<{
         conversation_id: string;
@@ -1198,14 +1234,17 @@ function tryRecoverGroupKey(conversationId: string): Promise<boolean> {
       setTimeout(() => groupKeyRecoveryCache.delete(conversationId), 60_000);
       return true;
     } catch {
-      // Remove from cache on failure so a later manual retry can try again
-      groupKeyRecoveryCache.delete(conversationId);
+      // Hold a resolved-false promise so concurrent callers skip re-entering.
+      // Set failedUntil to block retries for 30 s (prevents 429 storm).
+      const failedUntil = Date.now() + GROUP_KEY_RECOVERY_BACKOFF_MS;
+      groupKeyRecoveryCache.set(conversationId, { promise: Promise.resolve(false), failedUntil });
+      setTimeout(() => groupKeyRecoveryCache.delete(conversationId), GROUP_KEY_RECOVERY_BACKOFF_MS);
       return false;
     }
   })();
 
-  groupKeyRecoveryCache.set(conversationId, recovery);
-  return recovery;
+  groupKeyRecoveryCache.set(conversationId, { promise });
+  return promise;
 }
 
 // ==================== Sender Key Distribution ====================
@@ -1225,10 +1264,11 @@ export async function distributeSenderKey(
   _userId: string, // kept for API compatibility
   memberIds: string[]
 ): Promise<void> {
-  // Messenger pattern: distribute once per session.
+  // Messenger pattern: distribute once per session (with TTL for rotation support).
   // On re-visits (user clicks back into the same group), skip the network round-trips —
   // the key is already on the server and recipients already have it.
-  if (distributedGroupKeys.has(conversationId)) {
+  const lastDistributed = distributedGroupKeys.get(conversationId);
+  if (lastDistributed && Date.now() - lastDistributed < GROUP_KEY_DISTRIBUTION_TTL_MS) {
     log.encryption.debug(`Group key already distributed this session for ${conversationId}, skipping`);
     return;
   }
@@ -1285,9 +1325,9 @@ export async function distributeSenderKey(
   // Upload own backup so we can recover on new devices
   await uploadGroupKeyBackup(conversationId, session);
 
-  // Mark as distributed for this session — future calls from Chat.tsx re-visits
-  // or useSendMessage fire-and-forget calls will skip the network round-trips.
-  distributedGroupKeys.add(conversationId);
+  // Mark as distributed for this session (with timestamp for TTL) — future calls from Chat.tsx
+  // re-visits or useSendMessage fire-and-forget calls will skip the network round-trips.
+  distributedGroupKeys.set(conversationId, Date.now());
 
   log.encryption.info(`Distributed group key ${session.groupKeyId} to ${memberIds.length} members for ${conversationId}`);
 }
@@ -1345,9 +1385,10 @@ export async function receiveSenderKeyDistribution(
   await storeReceivedGroupKey(data.conversation_id, groupKey, groupKeyId);
 
   // Upload own backup for cross-device recovery — but only if we haven't already
-  // distributed (and backed up) this session. distributeSenderKey already calls
+  // distributed (and backed up) this session recently. distributeSenderKey already calls
   // uploadGroupKeyBackup, so this avoids a redundant POST /keys/conversation.
-  if (!distributedGroupKeys.has(data.conversation_id)) {
+  const lastDist = distributedGroupKeys.get(data.conversation_id);
+  if (!lastDist || Date.now() - lastDist >= GROUP_KEY_DISTRIBUTION_TTL_MS) {
     const { getSession } = await import('../db/cryptoDb');
     const session = await getSession(data.conversation_id, GROUP_KEY_SENTINEL);
     if (session) {
@@ -1503,6 +1544,7 @@ export async function clearEncryptionData(): Promise<void> {
   processingX3DH.clear();
   groupKeyRecoveryCache.clear();
   distributedGroupKeys.clear();
+  bulkRestoreSessionCache.clear();
   _initPromise = null;
   initStatus = 'uninitialized';
   log.encryption.info('Encryption data cleared');
