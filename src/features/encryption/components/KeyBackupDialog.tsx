@@ -2,14 +2,14 @@
  * Key Backup Dialog
  *
  * Three modes:
- * - 'backup'  — create/update a PIN-protected backup
- * - 'restore' — enter PIN to restore keys from server backup
+ * - 'backup'  — create/update a backup (PIN or TMS Login)
+ * - 'restore' — enter PIN or use TMS Login to restore keys from server backup
  * - 'manage'  — unified view with tab switcher (backup + restore in one dialog)
  *
- * Backup flow: verify account password → enter PIN → confirm PIN → encrypt + upload
- * Restore flow: enter PIN → decrypt (PIN itself proves identity)
- *
- * Viber-style: 6-digit PIN with show/hide toggle, loading during Argon2id KDF
+ * Backup flow (PIN): verify account password → enter PIN → confirm PIN → encrypt + upload
+ * Backup flow (SSO): verify account password → click "Use TMS Login" → upload plaintext
+ * Restore flow (PIN): enter PIN → decrypt
+ * Restore flow (SSO): click "Use TMS Login" → server decrypts + returns keys
  */
 
 'use client';
@@ -40,16 +40,16 @@ interface KeyBackupDialogProps {
   disableClose?: boolean;
   /** Pre-select which tab opens in 'manage' mode. Defaults to 'backup'. */
   hasExistingBackup?: boolean;
+  /** Passed by EncryptionGate so the restore flow knows which method to offer */
+  backupType?: 'pin' | 'sso' | null;
 }
 
 type Step = 'verify_password' | 'enter' | 'confirm';
 
 async function verifyAccountPassword(password: string): Promise<void> {
-  // Get user email from stored user data or /users/me
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || getApiBaseUrl();
   const jwtToken = localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
 
-  // Fetch email from /users/me
   const meRes = await fetch(`${apiBaseUrl}/users/me`, {
     headers: { Authorization: `Bearer ${jwtToken}` },
   });
@@ -66,12 +66,8 @@ async function verifyAccountPassword(password: string): Promise<void> {
     body: JSON.stringify({ email, password }),
   });
 
-  if (res.status === 401) {
-    throw new Error('Incorrect password');
-  }
-  if (!res.ok) {
-    throw new Error('Verification failed. Please try again.');
-  }
+  if (res.status === 401) throw new Error('Incorrect password');
+  if (!res.ok) throw new Error('Verification failed. Please try again.');
 }
 
 export function KeyBackupDialog({
@@ -81,8 +77,8 @@ export function KeyBackupDialog({
   onComplete,
   disableClose = false,
   hasExistingBackup = false,
+  backupType = null,
 }: KeyBackupDialogProps) {
-  // In 'manage' mode, allow switching between backup and restore tabs
   const [activeTab, setActiveTab] = useState<'backup' | 'restore'>(
     mode === 'restore' ? 'restore' : 'backup'
   );
@@ -95,12 +91,12 @@ export function KeyBackupDialog({
   const [loading, setLoading] = useState(false);
   const [showPinConfirmModal, setShowPinConfirmModal] = useState(false);
   const [showCloseWarning, setShowCloseWarning] = useState(false);
-  // Backup starts with password verification; restore goes straight to PIN entry
   const [step, setStep] = useState<Step>(
     mode === 'restore' ? 'enter' : 'verify_password'
   );
+  // Which backup method the user chooses during backup creation
+  const [backupMethod, setBackupMethod] = useState<'pin' | 'sso'>('pin');
 
-  // Effective mode: in 'manage' mode use the active tab
   const effectiveMode = mode === 'manage' ? activeTab : mode;
   const isBackup = effectiveMode === 'backup';
   const isPinValid = pin.length === PIN_LENGTH && /^\d+$/.test(pin);
@@ -113,11 +109,10 @@ export function KeyBackupDialog({
     setConfirmPin('');
     setShowPin(false);
     setLoading(false);
-    // Backup starts at password verification; restore starts at PIN entry
+    setBackupMethod('pin');
     setStep(isBackup ? 'verify_password' : 'enter');
   }, [isBackup]);
 
-  // When switching tabs in manage mode, reset form state
   const switchTab = (tab: 'backup' | 'restore') => {
     setPassword('');
     setShowPassword(false);
@@ -125,6 +120,7 @@ export function KeyBackupDialog({
     setConfirmPin('');
     setShowPin(false);
     setLoading(false);
+    setBackupMethod('pin');
     setStep(tab === 'backup' ? 'verify_password' : 'enter');
     setActiveTab(tab);
   };
@@ -140,6 +136,11 @@ export function KeyBackupDialog({
     setLoading(true);
     try {
       await verifyAccountPassword(password);
+      // If user chose SSO, skip PIN entry and create SSO backup immediately
+      if (backupMethod === 'sso') {
+        await executeSSOBackup();
+        return;
+      }
       setStep('enter');
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Verification failed';
@@ -168,7 +169,6 @@ export function KeyBackupDialog({
       return;
     }
 
-    // Show confirmation modal before final backup submit
     if (isBackup && step === 'confirm') {
       setShowPinConfirmModal(true);
       return;
@@ -176,6 +176,44 @@ export function KeyBackupDialog({
 
     setLoading(true);
     await executeBackupRestore();
+  };
+
+  const executeSSOBackup = async () => {
+    setLoading(true);
+    try {
+      const { createSSOBackup } = await import('../services/backupService');
+      await createSSOBackup();
+      toast.success('Backup created — recoverable with your TMS Login');
+      await onComplete();
+      resetState();
+      onOpenChange(false);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Backup failed';
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSSORestore = async () => {
+    setLoading(true);
+    try {
+      const { restoreKeyBackupViaSSO } = await import('../services/backupService');
+      await restoreKeyBackupViaSSO();
+      toast.success('Keys restored via TMS Login');
+      await onComplete();
+      resetState();
+      onOpenChange(false);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Restore failed';
+      if (msg.includes('No SSO backup')) {
+        toast.error('No TMS Login backup found — enter your PIN or contact support');
+      } else {
+        toast.error(msg);
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const executeBackupRestore = async () => {
@@ -193,13 +231,7 @@ export function KeyBackupDialog({
         toast.success('Keys restored successfully');
       }
 
-      // Await onComplete before closing so the dialog stays visible (spinner)
-      // while reinitializeEncryption() + restoreAllConversationSessions() run.
-      // Without this await, the dialog closes immediately and message queries
-      // refetch before sessions are written to IndexedDB — causing a decryption
-      // race that permanently marks messages as failed in failedDecryptionIds.
       await onComplete();
-
       resetState();
       onOpenChange(false);
     } catch (error) {
@@ -216,9 +248,7 @@ export function KeyBackupDialog({
 
   const handleOpenChange = (isOpen: boolean) => {
     if (!isOpen) {
-      // Hard block for backup (new users must create a backup)
       if (disableClose && isBackup) return;
-      // Restore: always warn before closing so users know they can recover later
       if (!isBackup) {
         setShowCloseWarning(true);
         return;
@@ -239,8 +269,13 @@ export function KeyBackupDialog({
   const description = isManage
     ? 'Back up your keys to keep them safe, or restore keys you backed up previously.'
     : isBackup
-      ? "Create a PIN to protect your encryption keys. You'll need this PIN to restore keys on a new device."
-      : 'Enter the PIN you used when backing up your encryption keys.';
+      ? "Create a backup to protect your encryption keys and recover them on a new device."
+      : 'Enter your PIN or use your TMS Login to restore your encryption keys.';
+
+  // Whether to offer the "Use TMS Login" restore button
+  const showSSORestoreOption = !isBackup && backupType === 'sso';
+  // Whether to show the "Forgot PIN? Use TMS Login" link even for PIN backups
+  const showForgotPinSSOLink = !isBackup && backupType === 'pin';
 
   return (
     <>
@@ -254,7 +289,6 @@ export function KeyBackupDialog({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
-        {/* Tab switcher — only in 'manage' mode */}
         {isManage && (
           <div className="flex border-b dark:border-dark-border -mx-1">
             <button
@@ -285,141 +319,217 @@ export function KeyBackupDialog({
         <div className="space-y-4 pt-2">
           {/* Step 1 (backup only): verify account password */}
           {isBackup && step === 'verify_password' ? (
-            <div className="space-y-2">
-              <Label htmlFor="account-password">Account Password</Label>
-              <div className="relative">
-                <Input
-                  id="account-password"
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="Enter your account password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
-                  disabled={loading}
-                  className="pr-10"
-                  autoFocus
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                  tabIndex={-1}
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label htmlFor="account-password">Account Password</Label>
+                <div className="relative">
+                  <Input
+                    id="account-password"
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="Enter your account password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
+                    disabled={loading}
+                    className="pr-10"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
-              <div className="flex gap-2 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-3">
-                <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
-                  <span className="font-semibold">Important:</span> The PIN you are about to create cannot be recovered. If you forget it, you will need to generate a new one — but your old encrypted messages will no longer be decryptable.
-                </p>
+
+              {/* Backup method choice */}
+              <div className="space-y-2">
+                <Label>Recovery Method</Label>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={backupMethod === 'pin' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setBackupMethod('pin')}
+                    className={backupMethod === 'pin' ? 'flex-1 bg-viber-purple hover:bg-viber-purple-dark text-white' : 'flex-1'}
+                  >
+                    Set PIN
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={backupMethod === 'sso' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setBackupMethod('sso')}
+                    className={backupMethod === 'sso' ? 'flex-1 bg-viber-purple hover:bg-viber-purple-dark text-white' : 'flex-1'}
+                  >
+                    Use TMS Login
+                  </Button>
+                </div>
+                {backupMethod === 'sso' ? (
+                  <p className="text-xs text-gray-500 dark:text-dark-text-secondary">
+                    Recoverable with your TMS account login. Anyone with access to your TMS account can recover your encryption keys.
+                  </p>
+                ) : (
+                  <div className="flex gap-2 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-3">
+                    <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
+                      <span className="font-semibold">Important:</span> The PIN you create cannot be recovered. If you forget it, you will lose access to old messages.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           ) : (
-            /* Steps 2–3: PIN entry (backup) or PIN entry (restore) */
+            /* Steps 2–3: PIN entry (backup or restore) */
             <div className="space-y-2">
-              <Label htmlFor="backup-pin">
-                {step === 'confirm' ? 'Confirm PIN' : `${PIN_LENGTH}-Digit PIN`}
-              </Label>
-              <div className="relative">
-                <Input
-                  id="backup-pin"
-                  type={showPin ? 'text' : 'password'}
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength={PIN_LENGTH}
-                  placeholder={'0'.repeat(PIN_LENGTH)}
-                  value={step === 'confirm' ? confirmPin : pin}
-                  onChange={(e) =>
-                    handlePinChange(e.target.value, step === 'confirm' ? 'confirm' : 'pin')
-                  }
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
-                  disabled={loading}
-                  className="pr-10 text-center text-lg tracking-[0.5em] font-mono"
-                  autoFocus
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPin(!showPin)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                  tabIndex={-1}
-                >
-                  {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-              {step === 'enter' && !isBackup && (
-                <p className="text-xs text-gray-500 dark:text-dark-text-secondary">
-                  Forgot your PIN? You can only recover it from a device where you are already logged in (Settings → Security → Update Backup). If you no longer have access to that device, you will need to generate a new PIN — but past messages will not be decryptable.
-                </p>
-              )}
-              {step === 'enter' && isBackup && (
-                <div className="flex gap-2 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-3">
-                  <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                  <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
-                    <span className="font-semibold">This PIN cannot be recovered.</span> If you forget it, you will need to generate a new PIN — but this will permanently prevent you from decrypting your old messages.
+              {/* SSO restore: show "Use TMS Login" as primary option */}
+              {showSSORestoreOption && (
+                <div className="space-y-2">
+                  <Button
+                    type="button"
+                    onClick={handleSSORestore}
+                    disabled={loading}
+                    className="w-full bg-viber-purple hover:bg-viber-purple-dark text-white"
+                  >
+                    {loading ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Restoring...</>
+                    ) : (
+                      'Restore with TMS Login'
+                    )}
+                  </Button>
+                  <p className="text-xs text-center text-gray-500 dark:text-dark-text-secondary">
+                    Your keys are protected by your TMS account.
                   </p>
                 </div>
               )}
-              {step === 'confirm' && (
-                <p className="text-xs text-amber-700 dark:text-amber-400">
-                  Remember this PIN. It cannot be reset without losing access to past messages.
-                </p>
+
+              {/* For PIN backups in restore mode, show standard PIN input */}
+              {!showSSORestoreOption && (
+                <>
+                  <Label htmlFor="backup-pin">
+                    {step === 'confirm' ? 'Confirm PIN' : `${PIN_LENGTH}-Digit PIN`}
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      id="backup-pin"
+                      type={showPin ? 'text' : 'password'}
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={PIN_LENGTH}
+                      placeholder={'0'.repeat(PIN_LENGTH)}
+                      value={step === 'confirm' ? confirmPin : pin}
+                      onChange={(e) =>
+                        handlePinChange(e.target.value, step === 'confirm' ? 'confirm' : 'pin')
+                      }
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
+                      disabled={loading}
+                      className="pr-10 text-center text-lg tracking-[0.5em] font-mono"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPin(!showPin)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                      tabIndex={-1}
+                    >
+                      {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+
+                  {step === 'enter' && !isBackup && (
+                    <p className="text-xs text-gray-500 dark:text-dark-text-secondary">
+                      Forgot your PIN? You can only recover it from a device where you are already logged in (Settings → Security → Update Backup). If you no longer have access, generate a new backup — but past messages will not be decryptable.
+                    </p>
+                  )}
+                  {step === 'enter' && !isBackup && showForgotPinSSOLink && (
+                    <button
+                      type="button"
+                      onClick={handleSSORestore}
+                      disabled={loading}
+                      className="text-xs text-viber-purple hover:underline w-full text-left mt-1"
+                    >
+                      Forgot PIN? Use TMS Login instead →
+                    </button>
+                  )}
+                  {step === 'enter' && isBackup && (
+                    <div className="flex gap-2 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-3">
+                      <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                      <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
+                        <span className="font-semibold">This PIN cannot be recovered.</span> If you forget it, you will need to generate a new PIN — but this will permanently prevent you from decrypting your old messages.
+                      </p>
+                    </div>
+                  )}
+                  {step === 'confirm' && (
+                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                      Remember this PIN. It cannot be reset without losing access to past messages.
+                    </p>
+                  )}
+                </>
               )}
             </div>
           )}
 
-          {/* Actions */}
-          <div className="flex gap-2">
-            {step === 'confirm' && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => { setStep('enter'); setConfirmPin(''); }}
-                disabled={loading}
-                className="flex-1"
-              >
-                Back
-              </Button>
-            )}
-            {step === 'enter' && isBackup && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setStep('verify_password')}
-                disabled={loading}
-                className="flex-1"
-              >
-                Back
-              </Button>
-            )}
-            <Button
-              type="button"
-              onClick={handleSubmit}
-              disabled={
-                loading ||
-                (step === 'verify_password' && !password) ||
-                (step !== 'verify_password' && !isPinValid) ||
-                (step === 'confirm' && !pinsMatch)
-              }
-              className="flex-1 bg-viber-purple hover:bg-viber-purple-dark text-white"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  {step === 'verify_password' ? 'Verifying...' : isBackup ? 'Encrypting...' : 'Decrypting...'}
-                </>
-              ) : step === 'verify_password' ? (
-                'Verify'
-              ) : isBackup ? (
-                step === 'enter' ? 'Next' : (hasExistingBackup ? 'Update Backup' : 'Create Backup')
-              ) : (
-                'Restore Keys'
+          {/* Actions — hidden when SSO restore is shown (it has its own button above) */}
+          {!showSSORestoreOption && (
+            <div className="flex gap-2">
+              {step === 'confirm' && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => { setStep('enter'); setConfirmPin(''); }}
+                  disabled={loading}
+                  className="flex-1"
+                >
+                  Back
+                </Button>
               )}
-            </Button>
-          </div>
+              {step === 'enter' && isBackup && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setStep('verify_password')}
+                  disabled={loading}
+                  className="flex-1"
+                >
+                  Back
+                </Button>
+              )}
+              <Button
+                type="button"
+                onClick={handleSubmit}
+                disabled={
+                  loading ||
+                  (step === 'verify_password' && !password) ||
+                  (step !== 'verify_password' && !isPinValid) ||
+                  (step === 'confirm' && !pinsMatch)
+                }
+                className="flex-1 bg-viber-purple hover:bg-viber-purple-dark text-white"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    {step === 'verify_password'
+                      ? backupMethod === 'sso' ? 'Creating backup...' : 'Verifying...'
+                      : isBackup ? 'Encrypting...' : 'Decrypting...'}
+                  </>
+                ) : step === 'verify_password' ? (
+                  backupMethod === 'sso' ? 'Create Backup' : 'Verify'
+                ) : isBackup ? (
+                  step === 'enter' ? 'Next' : (hasExistingBackup ? 'Update Backup' : 'Create Backup')
+                ) : (
+                  'Restore Keys'
+                )}
+              </Button>
+            </div>
+          )}
 
           <p className="text-xs text-center text-gray-400 dark:text-dark-text-secondary">
-            Your PIN is never sent to the server.
+            {backupMethod === 'sso' && isBackup
+              ? 'Recovery requires your TMS Login.'
+              : 'Your PIN is never sent to the server.'}
           </p>
         </div>
       </DialogContent>
@@ -472,18 +582,26 @@ export function KeyBackupDialog({
           </DialogTitle>
           <DialogDescription asChild>
             <div className="space-y-2 text-sm text-gray-600 dark:text-dark-text-secondary pt-1">
-              <p>
-                Without restoring your keys, your <strong className="text-gray-900 dark:text-dark-text-primary">old messages will not be readable</strong> on this device.
-              </p>
-              <p>
-                You can still recover them — go to <strong className="text-gray-900 dark:text-dark-text-primary">Settings → Security → Restore Keys</strong> and enter your PIN. After restoring, <strong className="text-gray-900 dark:text-dark-text-primary">refresh the page</strong> (or hard refresh with Ctrl+Shift+R / Cmd+Shift+R if messages still don&apos;t appear).
-              </p>
+              {backupType === 'sso' ? (
+                <p>
+                  Without restoring your keys, your <strong className="text-gray-900 dark:text-dark-text-primary">old messages will not be readable</strong> on this device. You can recover them at any time using your TMS Login.
+                </p>
+              ) : (
+                <>
+                  <p>
+                    Without restoring your keys, your <strong className="text-gray-900 dark:text-dark-text-primary">old messages will not be readable</strong> on this device.
+                  </p>
+                  <p>
+                    You can still recover them — go to <strong className="text-gray-900 dark:text-dark-text-primary">Settings → Security → Restore Keys</strong> and enter your PIN.
+                  </p>
+                </>
+              )}
             </div>
           </DialogDescription>
         </DialogHeader>
         <div className="flex gap-2 mt-2">
           <Button type="button" variant="outline" className="flex-1" onClick={() => setShowCloseWarning(false)}>
-            Enter My PIN Now
+            {backupType === 'sso' ? 'Restore Now' : 'Enter My PIN Now'}
           </Button>
           <Button
             type="button"
