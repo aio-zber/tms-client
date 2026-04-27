@@ -44,7 +44,7 @@ interface KeyBackupDialogProps {
   backupType?: 'pin' | 'sso' | null;
 }
 
-type Step = 'verify_password' | 'enter' | 'confirm';
+type Step = 'verify_password' | 'enter' | 'confirm' | 'sso_verify';
 
 async function verifyAccountPassword(password: string): Promise<void> {
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || getApiBaseUrl();
@@ -85,10 +85,13 @@ export function KeyBackupDialog({
 
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [ssoRestorePassword, setSsoRestorePassword] = useState('');
+  const [showSsoRestorePassword, setShowSsoRestorePassword] = useState(false);
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [showPin, setShowPin] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [restoreComplete, setRestoreComplete] = useState(false);
   const [showPinConfirmModal, setShowPinConfirmModal] = useState(false);
   const [showCloseWarning, setShowCloseWarning] = useState(false);
   const [step, setStep] = useState<Step>(
@@ -105,10 +108,13 @@ export function KeyBackupDialog({
   const resetState = useCallback(() => {
     setPassword('');
     setShowPassword(false);
+    setSsoRestorePassword('');
+    setShowSsoRestorePassword(false);
     setPin('');
     setConfirmPin('');
     setShowPin(false);
     setLoading(false);
+    setRestoreComplete(false);
     setBackupMethod(backupType === 'sso' ? 'sso' : 'pin');
     setStep(isBackup ? 'verify_password' : 'enter');
   }, [isBackup, backupType]);
@@ -116,10 +122,13 @@ export function KeyBackupDialog({
   const switchTab = (tab: 'backup' | 'restore') => {
     setPassword('');
     setShowPassword(false);
+    setSsoRestorePassword('');
+    setShowSsoRestorePassword(false);
     setPin('');
     setConfirmPin('');
     setShowPin(false);
     setLoading(false);
+    setRestoreComplete(false);
     setBackupMethod(backupType === 'sso' ? 'sso' : 'pin');
     setStep(tab === 'backup' ? 'verify_password' : 'enter');
     setActiveTab(tab);
@@ -196,17 +205,22 @@ export function KeyBackupDialog({
   };
 
   const handleSSORestore = async () => {
+    if (!ssoRestorePassword) return;
     setLoading(true);
     try {
+      await verifyAccountPassword(ssoRestorePassword);
       const { restoreKeyBackupViaSSO } = await import('../services/backupService');
       await restoreKeyBackupViaSSO();
       toast.success('Keys restored via TMS Login');
+      setRestoreComplete(true);
       await onComplete();
       resetState();
       onOpenChange(false);
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Restore failed';
-      if (msg.includes('No SSO backup')) {
+      if (msg.includes('Incorrect password')) {
+        toast.error('Incorrect password');
+      } else if (msg.includes('No SSO backup')) {
         toast.error('No TMS Login backup found — enter your PIN or contact support');
       } else {
         toast.error(msg);
@@ -229,6 +243,7 @@ export function KeyBackupDialog({
       } else {
         await restoreKeyBackup(pin);
         toast.success('Keys restored successfully');
+        setRestoreComplete(true);
       }
 
       await onComplete();
@@ -249,7 +264,7 @@ export function KeyBackupDialog({
   const handleOpenChange = (isOpen: boolean) => {
     if (!isOpen) {
       if (disableClose && isBackup) return;
-      if (!isBackup) {
+      if (!isBackup && !restoreComplete) {
         setShowCloseWarning(true);
         return;
       }
@@ -386,23 +401,75 @@ export function KeyBackupDialog({
             /* Steps 2–3: PIN entry (backup or restore) */
             <div className="space-y-2">
               {/* SSO restore: show "Use TMS Login" as primary option */}
-              {showSSORestoreOption && (
+              {showSSORestoreOption && step !== 'sso_verify' && (
                 <div className="space-y-2">
                   <Button
                     type="button"
-                    onClick={handleSSORestore}
+                    onClick={() => setStep('sso_verify')}
                     disabled={loading}
                     className="w-full bg-viber-purple hover:bg-viber-purple-dark text-white"
                   >
-                    {loading ? (
-                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Restoring...</>
-                    ) : (
-                      'Restore with TMS Login'
-                    )}
+                    Restore with TMS Login
                   </Button>
                   <p className="text-xs text-center text-gray-500 dark:text-dark-text-secondary">
                     Your keys are protected by your TMS account.
                   </p>
+                </div>
+              )}
+
+              {/* SSO verify step: password confirmation before restore */}
+              {step === 'sso_verify' && (
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-600 dark:text-dark-text-secondary">
+                    Enter your TMS account password to confirm your identity before restoring your encryption keys.
+                  </p>
+                  <div className="space-y-2">
+                    <Label htmlFor="sso-restore-password">Account Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="sso-restore-password"
+                        type={showSsoRestorePassword ? 'text' : 'password'}
+                        placeholder="Enter your account password"
+                        value={ssoRestorePassword}
+                        onChange={(e) => setSsoRestorePassword(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleSSORestore(); }}
+                        disabled={loading}
+                        className="pr-10"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowSsoRestorePassword(!showSsoRestorePassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                        tabIndex={-1}
+                      >
+                        {showSsoRestorePassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => { setStep(showSSORestoreOption ? 'enter' : 'enter'); setSsoRestorePassword(''); }}
+                      disabled={loading}
+                      className="flex-1"
+                    >
+                      Back
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={handleSSORestore}
+                      disabled={!ssoRestorePassword || loading}
+                      className="flex-1 bg-viber-purple hover:bg-viber-purple-dark text-white"
+                    >
+                      {loading ? (
+                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Restoring...</>
+                      ) : (
+                        'Restore Keys'
+                      )}
+                    </Button>
+                  </div>
                 </div>
               )}
 
@@ -447,7 +514,7 @@ export function KeyBackupDialog({
                   {step === 'enter' && !isBackup && showForgotPinSSOLink && (
                     <button
                       type="button"
-                      onClick={handleSSORestore}
+                      onClick={() => setStep('sso_verify')}
                       disabled={loading}
                       className="text-xs text-viber-purple hover:underline w-full text-left mt-1"
                     >
@@ -472,8 +539,8 @@ export function KeyBackupDialog({
             </div>
           )}
 
-          {/* Actions — hidden when SSO restore is shown (it has its own button above) */}
-          {!showSSORestoreOption && (
+          {/* Actions — hidden when SSO restore or sso_verify is shown (they have their own buttons) */}
+          {!showSSORestoreOption && step !== 'sso_verify' && (
             <div className="flex gap-2">
               {step === 'confirm' && (
                 <Button
