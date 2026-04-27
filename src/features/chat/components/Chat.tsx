@@ -83,6 +83,10 @@ export function Chat({
   // GET /sender-keys + POST /distribute + POST /keys/conversation on every click.
   const syncedGroupsRef = useRef<Set<string>>(new Set());
 
+  // Member count at last group key distribution — used to detect mid-sync additions
+  // and invalidate the distributedGroupKeys TTL cache before re-distributing.
+  const lastMemberCountRef = useRef<number>(0);
+
   // E2EE: Key change detection (backup prompts moved to EncryptionGate)
   const encryptionInitStatus = useEncryptionStore((s) => s.initStatus);
   const identityKeyChanges = useEncryptionStore((s) => s.identityKeyChanges);
@@ -101,9 +105,10 @@ export function Chat({
   // (app-level, fires right after login — Messenger pattern).
 
   // Close mobile drawer when the active conversation changes (Messenger pattern —
-  // tapping a conversation in the sidebar navigates and immediately hides the sidebar)
+  // tapping a conversation in the sidebar navigates and immediately hides the sidebar).
   useEffect(() => {
     setIsMobileDrawerOpen(false);
+    lastMemberCountRef.current = 0;
   }, [conversationId]);
 
   // Mark conversation as read when opening (Messenger-style pattern)
@@ -195,8 +200,13 @@ export function Chat({
 
         // 2. Distribute our own group key to all members.
         // encryptionService.distributeSenderKey is also guarded by distributedGroupKeys
-        // (module-level Set) — double protection against concurrent calls.
+        // (module-level Map) — double protection against concurrent calls.
         try {
+          // New member joined between data-load and this deferred fire — bypass TTL cache.
+          if (memberIds.length > lastMemberCountRef.current && lastMemberCountRef.current > 0) {
+            encryptionService.invalidateGroupKeyDistribution(conversationId);
+          }
+          lastMemberCountRef.current = memberIds.length;
           await encryptionService.distributeSenderKey(conversationId, currentUserId, memberIds);
           log.debug(`[Chat] Distributed group key to ${memberIds.length} members`);
         } catch (err) {
