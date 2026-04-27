@@ -94,8 +94,8 @@ export function KeyBackupDialog({
   const [step, setStep] = useState<Step>(
     mode === 'restore' ? 'enter' : 'verify_password'
   );
-  // Which backup method the user chooses during backup creation
-  const [backupMethod, setBackupMethod] = useState<'pin' | 'sso'>('pin');
+  // Default to the user's current backup method so "Update Backup" pre-selects it
+  const [backupMethod, setBackupMethod] = useState<'pin' | 'sso'>(backupType === 'sso' ? 'sso' : 'pin');
 
   const effectiveMode = mode === 'manage' ? activeTab : mode;
   const isBackup = effectiveMode === 'backup';
@@ -109,9 +109,9 @@ export function KeyBackupDialog({
     setConfirmPin('');
     setShowPin(false);
     setLoading(false);
-    setBackupMethod('pin');
+    setBackupMethod(backupType === 'sso' ? 'sso' : 'pin');
     setStep(isBackup ? 'verify_password' : 'enter');
-  }, [isBackup]);
+  }, [isBackup, backupType]);
 
   const switchTab = (tab: 'backup' | 'restore') => {
     setPassword('');
@@ -120,7 +120,7 @@ export function KeyBackupDialog({
     setConfirmPin('');
     setShowPin(false);
     setLoading(false);
-    setBackupMethod('pin');
+    setBackupMethod(backupType === 'sso' ? 'sso' : 'pin');
     setStep(tab === 'backup' ? 'verify_password' : 'enter');
     setActiveTab(tab);
   };

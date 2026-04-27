@@ -55,6 +55,7 @@ export function AppHeader() {
   const encryptionInitStatus = useEncryptionStore((s) => s.initStatus);
   const hasBackup = useEncryptionStore((s) => s.hasBackup);
   const [showBackupDialog, setShowBackupDialog] = useState(false);
+  const [backupType, setBackupType] = useState<'pin' | 'sso' | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const isE2EEReady = encryptionInitStatus === 'ready' || encryptionInitStatus === 'needs_restore';
 
@@ -313,7 +314,13 @@ export function AppHeader() {
 
               <DropdownMenuItem
                 className="cursor-pointer"
-                onClick={() => setShowBackupDialog(true)}
+                onClick={() => {
+                  setShowBackupDialog(true);
+                  import('@/features/encryption/services/backupService')
+                    .then(({ getBackupStatus }) => getBackupStatus())
+                    .then((s) => setBackupType(s.backup_type ?? null))
+                    .catch(() => {});
+                }}
               >
                 <Key className="w-4 h-4 mr-3" />
                 <span>Encryption Keys</span>
@@ -392,6 +399,7 @@ export function AppHeader() {
         onOpenChange={setShowBackupDialog}
         mode="manage"
         hasExistingBackup={hasBackup === true}
+        backupType={backupType}
         onComplete={async () => {
           // Re-initialize encryption after restore so messages decrypt immediately.
           // Must use reinitializeEncryption (not initialize) — initialize() is a
