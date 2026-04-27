@@ -389,6 +389,23 @@ export function useMessages(
     };
   }, [conversationId, queryClient, limit]);
 
+  // Listen for dm-key-recovered events (dispatched by decryptDirectMessage after successful
+  // session recovery). Clears failed decryption state and re-fetches so other messages from
+  // the same sender that previously failed are retried automatically.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = (e: Event) => {
+      const { conversationId: evtConvId } = (e as CustomEvent<{ conversationId: string; senderId: string }>).detail;
+      if (evtConvId !== conversationId) return;
+      clearConversationFailedDecryptions(conversationId);
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.messages.list(conversationId, { limit }),
+      });
+    };
+    window.addEventListener('dm-key-recovered', handler);
+    return () => window.removeEventListener('dm-key-recovered', handler);
+  }, [conversationId, queryClient, limit]);
+
   // Add message optimistically (for sender's own messages)
   const addOptimisticMessage = useCallback((message: Message) => {
     log.message.info('[addOptimisticMessage] Adding message:', message.id, 'type:', message.type);
