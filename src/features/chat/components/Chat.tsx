@@ -157,8 +157,6 @@ export function Chat({
       import('@/features/encryption').then(async ({ encryptionService }) => {
         if (!encryptionService.isInitialized()) return;
 
-        let groupKeyLoaded = false;
-
         // 1. Fetch existing group keys from the server for all group members.
         try {
           const { apiClient } = await import('@/lib/apiClient');
@@ -188,7 +186,6 @@ export function Chat({
                 nonce: sk.nonce ?? undefined,
                 ephemeral_public_key: sk.ephemeral_public_key ?? undefined,
               });
-              groupKeyLoaded = true;
             }
             log.debug(`[Chat] Loaded group keys from server for ${conversationId}`);
           }
@@ -206,16 +203,14 @@ export function Chat({
           log.warn('[Chat] Failed to distribute group key:', err);
         }
 
-        // 3. Only invalidate the message cache if we actually received new keys.
-        //    Avoid unnecessary re-fetches on every conversation revisit.
-        if (groupKeyLoaded) {
-          const { clearConversationFailedDecryptions } = await import('@/features/messaging/hooks/useMessagesQuery');
-          clearConversationFailedDecryptions(conversationId);
-          queryClient.invalidateQueries({
-            queryKey: [...queryKeys.messages.lists(), conversationId],
-          });
-          log.debug('[Chat] Group key loaded — invalidated message cache for re-decryption');
-        }
+        // 3. Always clear failed decryption state and invalidate the message cache after
+        //    group key sync completes — covers the case where we are the first/only member.
+        const { clearConversationFailedDecryptions } = await import('@/features/messaging/hooks/useMessagesQuery');
+        clearConversationFailedDecryptions(conversationId);
+        queryClient.invalidateQueries({
+          queryKey: [...queryKeys.messages.lists(), conversationId],
+        });
+        log.debug('[Chat] Group key sync complete — invalidated message cache for re-decryption');
       }).catch(() => {});
     };
 

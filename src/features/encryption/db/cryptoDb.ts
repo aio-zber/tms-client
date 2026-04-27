@@ -324,14 +324,18 @@ export async function storePreKeys(preKeys: OneTimePreKey[]): Promise<void> {
  */
 export async function consumePreKey(keyId: number): Promise<OneTimePreKey | null> {
   const db = await getDb();
-  const stored = await db.get(STORES.PREKEY, keyId);
+  const tx = db.transaction(STORES.PREKEY, 'readwrite');
+  const store = tx.objectStore(STORES.PREKEY);
+  const stored = await store.get(keyId);
 
   if (!stored || stored.used === 1) {
+    await tx.done;
     return null;
   }
 
-  // Mark as used
-  await db.put(STORES.PREKEY, { ...stored, used: 1 });
+  // Mark as used — atomic with the read above (same transaction)
+  await store.put({ ...stored, used: 1 });
+  await tx.done;
 
   return {
     keyId: stored.keyId,
