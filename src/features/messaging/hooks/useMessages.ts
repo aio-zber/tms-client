@@ -348,38 +348,45 @@ export function useMessages(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId]); // Only depend on conversationId to prevent running on every message update
 
-  // Listen for group-key-received events (dispatched by handleSenderKeyDistribution above).
-  // When a new group key arrives, clear any failed decryptions for this conversation and
+  // Listen for group-key-received and dm-key-recovered events.
+  // When a new key arrives, clear any failed decryptions for this conversation and
   // invalidate the message cache so the query re-runs and retries decryption.
+  // Deferred 150ms so the sequential batch loop in useMessagesQuery finishes before
+  // invalidation fires — dispatching mid-loop would cancel the in-flight query.
+  // Timer IDs are stored so they can be cancelled if the component unmounts within the delay.
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const handler = (e: Event) => {
-      const { conversationId: evtConvId } = (e as CustomEvent<{ conversationId: string }>).detail;
-      if (evtConvId !== conversationId) return;
-      clearConversationFailedDecryptions(conversationId);
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.messages.list(conversationId, { limit }),
-      });
-    };
-    window.addEventListener('group-key-received', handler);
-    return () => window.removeEventListener('group-key-received', handler);
-  }, [conversationId, queryClient, limit]);
 
-  // Listen for dm-key-recovered events (dispatched by decryptDirectMessage after successful
-  // session recovery). Clears failed decryption state and re-fetches so other messages from
-  // the same sender that previously failed are retried automatically.
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const handler = (e: Event) => {
-      const { conversationId: evtConvId } = (e as CustomEvent<{ conversationId: string; senderId: string }>).detail;
+    const pendingTimers: ReturnType<typeof setTimeout>[] = [];
+
+    const deferredInvalidate = (evtConvId: string) => {
       if (evtConvId !== conversationId) return;
-      clearConversationFailedDecryptions(conversationId);
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.messages.list(conversationId, { limit }),
-      });
+      const t = setTimeout(() => {
+        clearConversationFailedDecryptions(conversationId);
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.messages.list(conversationId, { limit }),
+        });
+      }, 150);
+      pendingTimers.push(t);
     };
-    window.addEventListener('dm-key-recovered', handler);
-    return () => window.removeEventListener('dm-key-recovered', handler);
+
+    const handleGroupKey = (e: Event) => {
+      const { conversationId: evtConvId } = (e as CustomEvent<{ conversationId: string }>).detail;
+      deferredInvalidate(evtConvId);
+    };
+
+    const handleDmKey = (e: Event) => {
+      const { conversationId: evtConvId } = (e as CustomEvent<{ conversationId: string; senderId: string }>).detail;
+      deferredInvalidate(evtConvId);
+    };
+
+    window.addEventListener('group-key-received', handleGroupKey);
+    window.addEventListener('dm-key-recovered', handleDmKey);
+    return () => {
+      window.removeEventListener('group-key-received', handleGroupKey);
+      window.removeEventListener('dm-key-recovered', handleDmKey);
+      pendingTimers.forEach(clearTimeout);
+    };
   }, [conversationId, queryClient, limit]);
 
   // Add message optimistically (for sender's own messages)
